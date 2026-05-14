@@ -14,9 +14,9 @@ Design rules:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import List
 
-from src.config import PipelineConfig, ChunkingStrategy
+from src.config import ChunkingStrategy
 from src.pipeline.interfaces import StageContext, StageOutput
 from src.schemas.chunk import Chunk, ChunkSet, ChunkingDecision
 from src.schemas.document import Article, CanonicalDocument, DocumentProfile
@@ -49,11 +49,11 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
     warnings: List[str] = []
 
     # Choose chunking strategy using the decision tree from the docs
-    strategy = _choose_chunk_strategy(profile, document, cfg)
+    strategy = _choose_chunk_strategy(profile, document)
     decision = ChunkingDecision(
         document_id=ctx.document_id,
         strategy=strategy,
-        secondary_rules=_secondary_rules(profile, document),
+        secondary_rules=_secondary_rules(document),
         fallback_strategy=_fallback_strategy(strategy),
         routing_signals={
             "page_count": profile.page_count,
@@ -81,10 +81,19 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
     # --- Text chunks: group by structural unit (article → group of blocks) ---
     if document.articles:
         for article in document.articles:
-            # Collect body blocks: those explicitly listed + those parented to this article
+            # Collect all clause IDs that belong to this article so body blocks
+            # owned by sub-clauses (Khoản / Điểm) are included in the article chunk.
+            article_clause_ids = {
+                c.clause_id for c in document.clauses
+                if c.parent_article_id == article.article_id
+            }
+
+            # Collect body blocks: heading block + direct article body blocks
+            # + clause heading blocks + clause body blocks (all under this article)
             body_blocks = [
                 b for b in document.blocks
                 if b.parent_structure_id == article.article_id
+                or b.parent_structure_id in article_clause_ids
                 or b.block_id in article.block_ids
             ]
             body_text = "\n\n".join(
@@ -241,7 +250,7 @@ def _get_chunk_language(document: CanonicalDocument) -> str:
 
 
 def _choose_chunk_strategy(
-    profile: DocumentProfile, document: CanonicalDocument, cfg: PipelineConfig
+    profile: DocumentProfile, document: CanonicalDocument
 ) -> str:
     """Implement the chunking decision tree from docs."""
     structure_score = 0.8 if document.has_structure() else 0.3
@@ -261,7 +270,7 @@ def _choose_chunk_strategy(
     return ChunkingStrategy.SEMANTIC
 
 
-def _secondary_rules(profile: DocumentProfile, document: CanonicalDocument) -> List[str]:
+def _secondary_rules(document: CanonicalDocument) -> List[str]:
     rules = []
     if document.tables:
         rules.append("enforce_table_header_preservation")

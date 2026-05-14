@@ -611,6 +611,17 @@ def _detect_hierarchy(
                 block.parent_structure_id = clause_id
                 continue
 
+            # ---- Non-structural block: inherit innermost active context ----
+            # Paragraphs, list items, and other body content that do not match
+            # any structural heading are assigned to the innermost active scope
+            # so the chunker can gather full article/clause body text.
+            if current_clause_id:
+                block.parent_structure_id = current_clause_id
+            elif current_article_id:
+                block.parent_structure_id = current_article_id
+            elif current_section_id:
+                block.parent_structure_id = current_section_id
+
     return sections, articles, clauses
 
 
