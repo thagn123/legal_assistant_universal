@@ -1,0 +1,42 @@
+# Legal Multimodal GraphRAG System — Python Dependencies
+#
+# Core (always required)
+pydantic>=2.0.0
+
+# PDF extraction (local-first)
+pdfminer.six>=20221105
+
+# DOCX extraction (.docx files — modern Word format)
+python-docx>=0.8.11
+
+# DOC extraction (.doc files — legacy Word format)
+# docx2txt handles both .doc and .docx as plain text (no table topology)
+docx2txt>=0.8
+# Alternative: install antiword on the OS for better .doc fidelity
+#   Windows: https://www.winfield.demon.nl/  (or via chocolatey: choco install antiword)
+#   macOS:   brew install antiword
+#   Linux:   sudo apt install antiword
+
+# HTML extraction
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# OCR (required for image and scanned PDF inputs)
+# pytesseract requires Tesseract to be installed separately:
+#   Windows: https://github.com/UB-Mannheim/tesseract/wiki
+#             → During install, tick "Vietnamese" and "English" language packs
+#   macOS:   brew install tesseract tesseract-lang
+#   Linux:   sudo apt install tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Optional: PDF page rendering for layout analysis
+# pdf2image>=1.16.0
+# poppler-utils must also be installed on the OS
+
+# Optional: AI-assisted repair (not used by default)
+# openai>=1.0.0
+# anthropic>=0.20.0
+
+# Development / testing
+pytest>=7.4.0

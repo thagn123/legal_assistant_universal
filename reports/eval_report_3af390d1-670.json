@@ -1,0 +1,463 @@
+{
+  "run_id": "3af390d1-6701-4fe5-b77f-88495839cafc",
+  "processing_version": "0.1.0",
+  "schema_version": "1.0",
+  "started_at": "2026-05-13T04:33:03.288074+00:00",
+  "finished_at": "2026-05-13T04:33:03.502413+00:00",
+  "total_duration_seconds": 0.21426730000166572,
+  "config_summary": {
+    "input_path": "samples",
+    "output_path": "reports",
+    "enable_ocr": true,
+    "enable_ai_repair": false,
+    "enable_graph_building": true,
+    "enable_retrieval_smoke_test": true,
+    "strict_accuracy_mode": false,
+    "processing_version": "0.1.0"
+  },
+  "documents_processed": 2,
+  "documents_passed": 2,
+  "documents_warned": 0,
+  "documents_failed": 0,
+  "document_results": [
+    {
+      "document_id": "doc_edd4c13282a800eb",
+      "source_filename": "sample_contract.html",
+      "file_type": "html",
+      "extraction_strategy": "simple_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.05289459999949031,
+          "summary": "Loaded 'sample_contract.html' (type=html, size=5,983 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "sample_contract.html",
+            "file_type": "html",
+            "file_size_bytes": 5983,
+            "source_hash": "d9661593c49027541633eb2dad46f8fe61b136945b27d375b3048ae06962f88f"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 0.0013311000002431683,
+          "summary": "Strategy: simple_local | pages=1 | tables=True",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "simple_local",
+            "page_count": 1,
+            "text_layer_coverage": 1.0,
+            "is_long_document": false,
+            "has_tables": true,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "pass",
+          "duration_seconds": 0.13698549999935494,
+          "summary": "Extracted 44 blocks, 1 tables from 1 pages",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 44,
+            "raw_table_count": 1,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.0032393000001320615,
+          "summary": "Structured 44 blocks, 1 tables, 6 sections, 14 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 44,
+            "table_count": 1,
+            "image_count": 0,
+            "section_count": 6,
+            "article_count": 14,
+            "clause_count": 0,
+            "structure_detected": true,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "pass",
+          "duration_seconds": 0.0003511000013531884,
+          "summary": "0 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.00031630000012228265,
+          "summary": "15 chunks (0 degraded) using strategy=structural",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 15,
+            "text_chunks": 14,
+            "table_chunks": 1,
+            "degraded_chunks": 0,
+            "strategy": "structural"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.0008420000012847595,
+          "summary": "37 nodes, 36 edges created",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 37,
+            "total_edges": 36,
+            "nodes_by_type": {
+              "Document": 1,
+              "Section": 6,
+              "Article": 14,
+              "Table": 1,
+              "Chunk": 15
+            },
+            "edges_by_type": {
+              "CONTAINS": 20,
+              "HAS_TABLE": 1,
+              "DERIVED_TO_CHUNK": 15
+            },
+            "structural_edges": 36
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 9.219999992637895e-05,
+          "summary": "Tested 7 queries — 5 hit, 2 missed (hit rate 71%, avg 4.6 chunks/query)",
+          "metrics": {},
+          "warnings": [
+            "No results for query: 'clause'",
+            "No results for query: 'section'"
+          ],
+          "errors": [],
+          "output_summary": {
+            "queries_tested": 7,
+            "queries_with_results": 5,
+            "queries_failed": [
+              "clause",
+              "section"
+            ],
+            "avg_result_count": 4.6,
+            "hit_rate": 0.714
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 1,
+        "extracted_page_count": 1,
+        "block_count": 44,
+        "block_coverage": 1.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 1,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 6,
+        "article_count": 14,
+        "clause_count": 0,
+        "structure_detected": true,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 15,
+        "text_chunks": 14,
+        "table_chunks": 1,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 34.7,
+        "strategy_used": "structural",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 37,
+        "total_edges": 36,
+        "nodes_by_type": {
+          "Document": 1,
+          "Section": 6,
+          "Article": 14,
+          "Table": 1,
+          "Chunk": 15
+        },
+        "edges_by_type": {
+          "CONTAINS": 20,
+          "HAS_TABLE": 1,
+          "DERIVED_TO_CHUNK": 15
+        },
+        "structural_edges": 36,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 7,
+        "queries_with_results": 5,
+        "avg_result_count": 4.6,
+        "queries_failed": [
+          "clause",
+          "section"
+        ]
+      },
+      "overall_status": "pass",
+      "critical_failures": [],
+      "all_warnings": [
+        "No results for query: 'clause'",
+        "No results for query: 'section'"
+      ]
+    },
+    {
+      "document_id": "doc_9db3b5049432ef95",
+      "source_filename": "sample_hop_dong_viet.html",
+      "file_type": "html",
+      "extraction_strategy": "simple_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.00032660000033502,
+          "summary": "Loaded 'sample_hop_dong_viet.html' (type=html, size=7,492 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "sample_hop_dong_viet.html",
+            "file_type": "html",
+            "file_size_bytes": 7492,
+            "source_hash": "052d6cd91bc9ffe8d822b0629b123cf2d98a02331904c1042c1594d922b74a3d"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 0.0005459000003611436,
+          "summary": "Strategy: simple_local | pages=1 | tables=True",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "simple_local",
+            "page_count": 1,
+            "text_layer_coverage": 1.0,
+            "is_long_document": false,
+            "has_tables": true,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "pass",
+          "duration_seconds": 0.0019135000002279412,
+          "summary": "Extracted 51 blocks, 1 tables from 1 pages",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 51,
+            "raw_table_count": 1,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.0014913000013621058,
+          "summary": "Structured 51 blocks, 1 tables, 6 sections, 14 articles, 9 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 51,
+            "table_count": 1,
+            "image_count": 0,
+            "section_count": 6,
+            "article_count": 14,
+            "clause_count": 9,
+            "structure_detected": true,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "pass",
+          "duration_seconds": 0.00026049999905808363,
+          "summary": "0 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.0005288999982440146,
+          "summary": "15 chunks (0 degraded) using strategy=structural",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 15,
+            "text_chunks": 14,
+            "table_chunks": 1,
+            "degraded_chunks": 0,
+            "strategy": "structural"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.0005776999987574527,
+          "summary": "37 nodes, 36 edges created",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 37,
+            "total_edges": 36,
+            "nodes_by_type": {
+              "Document": 1,
+              "Section": 6,
+              "Article": 14,
+              "Table": 1,
+              "Chunk": 15
+            },
+            "edges_by_type": {
+              "CONTAINS": 20,
+              "HAS_TABLE": 1,
+              "DERIVED_TO_CHUNK": 15
+            },
+            "structural_edges": 36
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 0.00010740000107034575,
+          "summary": "Tested 8 queries — 6 hit, 2 missed (hit rate 75%, avg 5.0 chunks/query)",
+          "metrics": {},
+          "warnings": [
+            "No results for query: 'bên'",
+            "No results for query: 'mục'"
+          ],
+          "errors": [],
+          "output_summary": {
+            "queries_tested": 8,
+            "queries_with_results": 6,
+            "queries_failed": [
+              "bên",
+              "mục"
+            ],
+            "avg_result_count": 5.0,
+            "hit_rate": 0.75
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 1,
+        "extracted_page_count": 1,
+        "block_count": 51,
+        "block_coverage": 1.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 1,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 6,
+        "article_count": 14,
+        "clause_count": 9,
+        "structure_detected": true,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 15,
+        "text_chunks": 14,
+        "table_chunks": 1,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 33.3,
+        "strategy_used": "structural",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 37,
+        "total_edges": 36,
+        "nodes_by_type": {
+          "Document": 1,
+          "Section": 6,
+          "Article": 14,
+          "Table": 1,
+          "Chunk": 15
+        },
+        "edges_by_type": {
+          "CONTAINS": 20,
+          "HAS_TABLE": 1,
+          "DERIVED_TO_CHUNK": 15
+        },
+        "structural_edges": 36,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 8,
+        "queries_with_results": 6,
+        "avg_result_count": 5.0,
+        "queries_failed": [
+          "bên",
+          "mục"
+        ]
+      },
+      "overall_status": "pass",
+      "critical_failures": [],
+      "all_warnings": [
+        "No results for query: 'bên'",
+        "No results for query: 'mục'"
+      ]
+    }
+  ],
+  "overall_status": "pass",
+  "critical_failures": [],
+  "key_warnings": [
+    "No results for query: 'section'",
+    "No results for query: 'mục'",
+    "No results for query: 'bên'",
+    "No results for query: 'clause'"
+  ],
+  "recommendations": []
+}
