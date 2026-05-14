@@ -17,16 +17,13 @@ from typing import List, Optional
 
 from src.config import PipelineConfig
 from src.pipeline.interfaces import StageContext, StageOutput, timed_run
-from src.pipeline.stages import (
-    stage_input_loading,
-    stage_document_profiling,
-    stage_extraction,
-    stage_canonical_structuring,
-    stage_cleaning_validation,
-    stage_chunking,
-    stage_graph_building,
-    stage_retrieval_smoke_test,
-)
+from src.pipeline.profiler import stage_input_loading, stage_document_profiling
+from src.pipeline.extractor import stage_extraction
+from src.pipeline.structurer import stage_canonical_structuring
+from src.pipeline.cleaner import stage_cleaning_validation
+from src.pipeline.chunker import stage_chunking
+from src.pipeline.graph_builder import stage_graph_building
+from src.pipeline.retrieval_stage import stage_retrieval_smoke_test
 from src.schemas.document import CanonicalDocument
 from src.schemas.evaluation import (
     ChunkMetrics,
