@@ -18,7 +18,8 @@ The system is an evidence-grounded legal intelligence platform. It accepts legal
 10. `05-actions/action-engine.md`
 11. `06-quality/hallucination-safety-observability.md`
 12. `07-implementation/implementation-roadmap.md`
-13. `07-implementation/ai-build-prompt.md`
+13. `07-implementation/development-pipeline.md`
+14. `07-implementation/ai-build-prompt.md`
 
 ## Documentation Roles
 | Area | Role |
@@ -51,4 +52,3 @@ When documents conflict, prefer this order:
 2. This numbered architecture handbook
 3. Older module-level docs
 4. Session logs such as `MULTILINGUAL_UPGRADE_LOG.md`
-
