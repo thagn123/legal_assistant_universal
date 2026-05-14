@@ -19,7 +19,8 @@ The system is an evidence-grounded legal intelligence platform. It accepts legal
 11. `06-quality/hallucination-safety-observability.md`
 12. `07-implementation/implementation-roadmap.md`
 13. `07-implementation/development-pipeline.md`
-14. `07-implementation/ai-build-prompt.md`
+14. `07-implementation/phase-agent-prompt.md`
+15. `07-implementation/ai-build-prompt.md`
 
 ## Documentation Roles
 | Area | Role |
