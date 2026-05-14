@@ -245,7 +245,8 @@ class RetrievalEngine:
         Scoring factors:
         - Match type weight: canonical_ref (1.0) > alias_keyword (0.75) > keyword (0.5)
         - Chunk confidence penalty for degraded chunks
-        - Term density bonus: how many query terms appear in the chunk
+        - Term frequency: how many times query terms appear (not just whether they appear)
+        - Length penalty: shorter chunks with a match score higher than giant catch-all chunks
         """
         base_scores = {
             "canonical_ref": 1.0,
@@ -262,11 +263,27 @@ class RetrievalEngine:
         # Apply chunk's own confidence
         score *= max(chunk.confidence, 0.3)
 
-        # Bonus for term density
         content_lower = chunk.content.lower()
-        hits = sum(1 for t in query_terms if t and t in content_lower)
-        density_bonus = min(hits / max(len(query_terms), 1), 1.0) * 0.2
-        score = min(score + density_bonus, 1.0)
+        effective_terms = [t for t in query_terms if t and len(t) >= 2]
+
+        # Term frequency bonus: count total occurrences, not just presence.
+        # Capped at 3 occurrences per term to avoid gaming by repetition.
+        if effective_terms:
+            tf_total = sum(
+                min(content_lower.count(t), 3)
+                for t in effective_terms
+            )
+            tf_bonus = min(tf_total / (len(effective_terms) * 3), 1.0) * 0.25
+            score = min(score + tf_bonus, 1.0)
+
+        # Length penalty: a very large chunk that matches by accident should score
+        # lower than a targeted small chunk. Penalty kicks in above 500 tokens.
+        token_estimate = len(chunk.content) // 4
+        if token_estimate > 500:
+            # Logarithmic penalty: 0 at 500 tokens, ~0.15 at 50,000 tokens
+            import math
+            penalty = min(math.log10(token_estimate / 500) * 0.075, 0.15)
+            score = max(score - penalty, 0.0)
 
         return round(score, 4)
 

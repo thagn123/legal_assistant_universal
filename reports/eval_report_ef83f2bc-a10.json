@@ -1,0 +1,549 @@
+{
+  "run_id": "ef83f2bc-a103-4037-a84e-fb4a9da1ef91",
+  "processing_version": "0.1.0",
+  "schema_version": "1.0",
+  "started_at": "2026-05-14T03:04:28.123961+00:00",
+  "finished_at": "2026-05-14T03:04:43.102910+00:00",
+  "total_duration_seconds": 14.978694099999984,
+  "config_summary": {
+    "input_path": "raw_data",
+    "output_path": "reports",
+    "enable_ocr": true,
+    "enable_ai_repair": false,
+    "enable_graph_building": true,
+    "enable_retrieval_smoke_test": true,
+    "strict_accuracy_mode": false,
+    "processing_version": "0.1.0"
+  },
+  "documents_processed": 2,
+  "documents_passed": 0,
+  "documents_warned": 2,
+  "documents_failed": 0,
+  "document_results": [
+    {
+      "document_id": "doc_6004e35ceb4c0814",
+      "source_filename": "106_2025_QH15_628717.doc",
+      "file_type": "doc",
+      "extraction_strategy": "long_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.04466479999996409,
+          "summary": "Loaded '106_2025_QH15_628717.doc' (type=doc, size=499,712 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "106_2025_QH15_628717.doc",
+            "file_type": "doc",
+            "file_size_bytes": 499712,
+            "source_hash": "244dc66d37fe80c06d1916f4de4cab76995adfe237576816de169ff630361dfc"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 4.439893600000005,
+          "summary": "Strategy: long_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "long_local",
+            "page_count": 0,
+            "text_layer_coverage": 1.0,
+            "is_long_document": true,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 4.371808999999985,
+          "summary": "Extracted 1274 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 1274,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.03365920000010192,
+          "summary": "Structured 1274 blocks, 0 tables, 13 sections, 116 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 1274,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 13,
+            "article_count": 116,
+            "clause_count": 0,
+            "structure_detected": true,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "warning",
+          "duration_seconds": 0.00955300000009629,
+          "summary": "9 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0074 duplicates doc_6004e35ceb4c0814__p0001_r000_b0054",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0082 duplicates doc_6004e35ceb4c0814__p0001_r000_b0069",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0118 duplicates doc_6004e35ceb4c0814__p0001_r000_b0110",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0143 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0146 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0150 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0767 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0849 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+            "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b1064 duplicates doc_6004e35ceb4c0814__p0001_r000_b0826"
+          ],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 9,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.012962000000015905,
+          "summary": "116 chunks (0 degraded) using strategy=long_local_structural",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 116,
+            "text_chunks": 116,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "long_local_structural"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.013035500000114553,
+          "summary": "246 nodes, 3849 edges (3604 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 246,
+            "total_edges": 3849,
+            "alias_edges": 3604,
+            "nodes_by_type": {
+              "Document": 1,
+              "Section": 13,
+              "Article": 116,
+              "Chunk": 116
+            },
+            "edges_by_type": {
+              "CONTAINS": 129,
+              "DERIVED_TO_CHUNK": 116,
+              "ALIAS_OF": 3604
+            },
+            "structural_edges": 245
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 0.0048206999999820255,
+          "summary": "Tested 8 queries (vi) — 7 hit, 1 missed (hit rate 88%, avg 12.4 chunks/query) | Cross-lang: 100% (3 queries)",
+          "metrics": {},
+          "warnings": [
+            "No results for query: 'bên'"
+          ],
+          "errors": [],
+          "output_summary": {
+            "doc_language": "vi",
+            "queries_tested": 8,
+            "queries_with_results": 7,
+            "queries_failed": [
+              "bên"
+            ],
+            "avg_result_count": 12.4,
+            "hit_rate": 0.875,
+            "cross_lang_queries_tested": 3,
+            "cross_lang_hit_rate": 1.0
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 1,
+        "block_count": 1274,
+        "block_coverage": 1.0,
+        "degraded_block_count": 9,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 13,
+        "article_count": 116,
+        "clause_count": 0,
+        "structure_detected": true,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 116,
+        "text_chunks": 116,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 53.4,
+        "strategy_used": "long_local_structural",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 246,
+        "total_edges": 3849,
+        "nodes_by_type": {
+          "Document": 1,
+          "Section": 13,
+          "Article": 116,
+          "Chunk": 116
+        },
+        "edges_by_type": {
+          "CONTAINS": 129,
+          "DERIVED_TO_CHUNK": 116,
+          "ALIAS_OF": 3604
+        },
+        "structural_edges": 245,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 8,
+        "queries_with_results": 7,
+        "avg_result_count": 12.4,
+        "queries_failed": [
+          "bên"
+        ],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "vi",
+        "language_confidence": 1.0,
+        "jurisdiction": "VN",
+        "canonical_refs_generated": 236,
+        "chunks_with_canonical_refs": 116,
+        "chunks_with_language_field": 116,
+        "alias_edges_added": 3604,
+        "cross_lang_queries_tested": 3,
+        "cross_lang_queries_hit": 3,
+        "cross_lang_hit_rate": 1.0
+      },
+      "overall_status": "warning",
+      "critical_failures": [],
+      "all_warnings": [
+        "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support.",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0074 duplicates doc_6004e35ceb4c0814__p0001_r000_b0054",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0082 duplicates doc_6004e35ceb4c0814__p0001_r000_b0069",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0118 duplicates doc_6004e35ceb4c0814__p0001_r000_b0110",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0143 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0146 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0150 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0767 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0849 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+        "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b1064 duplicates doc_6004e35ceb4c0814__p0001_r000_b0826",
+        "No results for query: 'bên'"
+      ]
+    },
+    {
+      "document_id": "doc_aefcb4588f232b77",
+      "source_filename": "45_2019_QH14_333670.doc",
+      "file_type": "doc",
+      "extraction_strategy": "long_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.0005210000001625303,
+          "summary": "Loaded '45_2019_QH14_333670.doc' (type=doc, size=482,816 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "45_2019_QH14_333670.doc",
+            "file_type": "doc",
+            "file_size_bytes": 482816,
+            "source_hash": "15fa64ab3f16c643fe77e65725f1ce414dc7b289f0869f550e524ff554e0630d"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 0.7179526999998416,
+          "summary": "Strategy: long_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "long_local",
+            "page_count": 0,
+            "text_layer_coverage": 1.0,
+            "is_long_document": true,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 5.212813800000049,
+          "summary": "Extracted 1347 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 1347,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.03857190000007904,
+          "summary": "Structured 1347 blocks, 0 tables, 41 sections, 220 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 1347,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 41,
+            "article_count": 220,
+            "clause_count": 0,
+            "structure_detected": true,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "warning",
+          "duration_seconds": 0.008715899999970134,
+          "summary": "11 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0255 duplicates doc_aefcb4588f232b77__p0001_r000_b0232",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0963 duplicates doc_aefcb4588f232b77__p0001_r000_b0956",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1159 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1182 duplicates doc_aefcb4588f232b77__p0001_r000_b1158",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1183 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1328 duplicates doc_aefcb4588f232b77__p0001_r000_b1116",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1329 duplicates doc_aefcb4588f232b77__p0001_r000_b1117",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1330 duplicates doc_aefcb4588f232b77__p0001_r000_b1118",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1331 duplicates doc_aefcb4588f232b77__p0001_r000_b1119",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1332 duplicates doc_aefcb4588f232b77__p0001_r000_b1120",
+            "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1333 duplicates doc_aefcb4588f232b77__p0001_r000_b1121"
+          ],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 11,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.026543100000026243,
+          "summary": "220 chunks (0 degraded) using strategy=long_local_structural",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 220,
+            "text_chunks": 220,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "long_local_structural"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.02068909999979951,
+          "summary": "482 nodes, 6527 edges (6046 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 482,
+            "total_edges": 6527,
+            "alias_edges": 6046,
+            "nodes_by_type": {
+              "Document": 1,
+              "Section": 41,
+              "Article": 220,
+              "Chunk": 220
+            },
+            "edges_by_type": {
+              "CONTAINS": 261,
+              "DERIVED_TO_CHUNK": 220,
+              "ALIAS_OF": 6046
+            },
+            "structural_edges": 481
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 0.009001699999998891,
+          "summary": "Tested 8 queries (vi) — 7 hit, 1 missed (hit rate 88%, avg 12.6 chunks/query) | Cross-lang: 100% (3 queries)",
+          "metrics": {},
+          "warnings": [
+            "No results for query: 'khoản'"
+          ],
+          "errors": [],
+          "output_summary": {
+            "doc_language": "vi",
+            "queries_tested": 8,
+            "queries_with_results": 7,
+            "queries_failed": [
+              "khoản"
+            ],
+            "avg_result_count": 12.6,
+            "hit_rate": 0.875,
+            "cross_lang_queries_tested": 3,
+            "cross_lang_hit_rate": 1.0
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 1,
+        "block_count": 1347,
+        "block_coverage": 1.0,
+        "degraded_block_count": 11,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 41,
+        "article_count": 220,
+        "clause_count": 0,
+        "structure_detected": true,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 220,
+        "text_chunks": 220,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 51.8,
+        "strategy_used": "long_local_structural",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 482,
+        "total_edges": 6527,
+        "nodes_by_type": {
+          "Document": 1,
+          "Section": 41,
+          "Article": 220,
+          "Chunk": 220
+        },
+        "edges_by_type": {
+          "CONTAINS": 261,
+          "DERIVED_TO_CHUNK": 220,
+          "ALIAS_OF": 6046
+        },
+        "structural_edges": 481,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 8,
+        "queries_with_results": 7,
+        "avg_result_count": 12.6,
+        "queries_failed": [
+          "khoản"
+        ],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "vi",
+        "language_confidence": 1.0,
+        "jurisdiction": "VN",
+        "canonical_refs_generated": 443,
+        "chunks_with_canonical_refs": 220,
+        "chunks_with_language_field": 220,
+        "alias_edges_added": 6046,
+        "cross_lang_queries_tested": 3,
+        "cross_lang_queries_hit": 3,
+        "cross_lang_hit_rate": 1.0
+      },
+      "overall_status": "warning",
+      "critical_failures": [],
+      "all_warnings": [
+        "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support.",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0255 duplicates doc_aefcb4588f232b77__p0001_r000_b0232",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0963 duplicates doc_aefcb4588f232b77__p0001_r000_b0956",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1159 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1182 duplicates doc_aefcb4588f232b77__p0001_r000_b1158",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1183 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1328 duplicates doc_aefcb4588f232b77__p0001_r000_b1116",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1329 duplicates doc_aefcb4588f232b77__p0001_r000_b1117",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1330 duplicates doc_aefcb4588f232b77__p0001_r000_b1118",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1331 duplicates doc_aefcb4588f232b77__p0001_r000_b1119",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1332 duplicates doc_aefcb4588f232b77__p0001_r000_b1120",
+        "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1333 duplicates doc_aefcb4588f232b77__p0001_r000_b1121",
+        "No results for query: 'khoản'"
+      ]
+    }
+  ],
+  "overall_status": "warning",
+  "critical_failures": [],
+  "key_warnings": [
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0150 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1183 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1329 duplicates doc_aefcb4588f232b77__p0001_r000_b1117",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0849 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0767 duplicates doc_6004e35ceb4c0814__p0001_r000_b0660",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1330 duplicates doc_aefcb4588f232b77__p0001_r000_b1118",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0143 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+    "No results for query: 'khoản'",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1182 duplicates doc_aefcb4588f232b77__p0001_r000_b1158",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0146 duplicates doc_6004e35ceb4c0814__p0001_r000_b0134",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0118 duplicates doc_6004e35ceb4c0814__p0001_r000_b0110",
+    "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support.",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1332 duplicates doc_aefcb4588f232b77__p0001_r000_b1120",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0963 duplicates doc_aefcb4588f232b77__p0001_r000_b0956",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1159 duplicates doc_aefcb4588f232b77__p0001_r000_b1135",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0074 duplicates doc_6004e35ceb4c0814__p0001_r000_b0054",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b0255 duplicates doc_aefcb4588f232b77__p0001_r000_b0232",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1333 duplicates doc_aefcb4588f232b77__p0001_r000_b1121",
+    "Duplicate block detected: block_id=doc_6004e35ceb4c0814__p0001_r000_b0082 duplicates doc_6004e35ceb4c0814__p0001_r000_b0069",
+    "Duplicate block detected: block_id=doc_aefcb4588f232b77__p0001_r000_b1331 duplicates doc_aefcb4588f232b77__p0001_r000_b1119"
+  ],
+  "recommendations": []
+}

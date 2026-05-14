@@ -10,12 +10,18 @@ pdfminer.six>=20221105
 python-docx>=0.8.11
 
 # DOC extraction (.doc files — legacy Word format)
-# docx2txt handles both .doc and .docx as plain text (no table topology)
+# docx2txt handles XML-based .doc files as plain text (no table topology).
+# True OLE .doc files (pre-2007 Word binary format) require one of:
+#   Option A — pywin32 + MS Word (Windows only, most reliable):
+#     pip install pywin32
+#   Option B — LibreOffice headless (cross-platform):
+#     install LibreOffice and ensure `soffice` is on PATH
+#   Option C — antiword CLI (Linux/macOS only):
+#     macOS:  brew install antiword
+#     Linux:  sudo apt install antiword
+# The pipeline tries all options in order; first success wins.
 docx2txt>=0.8
-# Alternative: install antiword on the OS for better .doc fidelity
-#   Windows: https://www.winfield.demon.nl/  (or via chocolatey: choco install antiword)
-#   macOS:   brew install antiword
-#   Linux:   sudo apt install antiword
+# pywin32>=306  # uncomment to enable Word COM automation on Windows
 
 # HTML extraction
 beautifulsoup4>=4.12.0

@@ -272,7 +272,7 @@ def _profile_docx(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docum
 def _profile_doc(path: Path, cfg: PipelineConfig, warnings: List[str]) -> DocumentProfile:
     """
     Profile a legacy .doc file.
-    Tries docx2txt first (pure Python), then falls back to antiword CLI.
+    Uses _read_doc_text which tries win32com → LibreOffice → docx2txt → antiword → python-docx.
     """
     profile = DocumentProfile(file_type="doc")
     text = _read_doc_text(path, warnings)
@@ -294,12 +294,64 @@ def _profile_doc(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docume
 def _read_doc_text(path: Path, warnings: List[str]) -> str:
     """
     Extract plain text from a legacy .doc file.
-    Priority: docx2txt → antiword CLI → empty string with warning.
+
+    Priority order (first success wins):
+    1. win32com — Word COM automation (Windows + MS Word; most reliable for OLE .doc)
+    2. LibreOffice — headless CLI convert to text (cross-platform)
+    3. docx2txt   — pure Python; works on XML-based .doc saved by newer Word; fails on OLE
+    4. antiword   — Linux/macOS CLI
+    5. python-docx — last resort; only works if file is secretly OOXML
+
+    docx2txt uses ZIP/XML parsing and silently returns empty on true OLE .doc files,
+    so win32com and LibreOffice are tried first on systems where they are available.
     """
-    # Attempt 1: docx2txt (works on both .doc and .docx in many cases)
+    import subprocess
+    import tempfile
+
+    abs_path = str(path.resolve())
+
+    # Attempt 1: win32com Word COM automation (Windows only, requires pywin32 + MS Word)
+    try:
+        import win32com.client
+        import pythoncom
+        pythoncom.CoInitialize()
+        word = win32com.client.Dispatch("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = False
+        doc = word.Documents.Open(abs_path, ReadOnly=True)
+        text = doc.Content.Text
+        doc.Close(False)
+        word.Quit()
+        pythoncom.CoUninitialize()
+        if text and text.strip():
+            return text
+    except ImportError:
+        pass  # pywin32 not installed
+    except Exception:
+        pass  # COM error or Word not available
+
+    # Attempt 2: LibreOffice headless CLI (soffice) — converts to .txt in a temp dir
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            result = subprocess.run(
+                ["soffice", "--headless", "--convert-to", "txt:Text", "--outdir", tmp_dir, abs_path],
+                capture_output=True, timeout=60,
+            )
+            if result.returncode == 0:
+                txt_file = Path(tmp_dir) / (path.stem + ".txt")
+                if txt_file.exists():
+                    text = txt_file.read_text(encoding="utf-8", errors="replace")
+                    if text.strip():
+                        return text
+    except FileNotFoundError:
+        pass  # soffice not installed
+    except Exception:
+        pass
+
+    # Attempt 3: docx2txt (pure Python; works on XML-based .doc, silently empty on OLE)
     try:
         import docx2txt
-        text = docx2txt.process(str(path))
+        text = docx2txt.process(abs_path)
         if text and text.strip():
             return text
     except ImportError:
@@ -307,11 +359,10 @@ def _read_doc_text(path: Path, warnings: List[str]) -> str:
     except Exception:
         pass
 
-    # Attempt 2: antiword (command-line tool, must be installed on the OS)
+    # Attempt 4: antiword CLI (Linux/macOS)
     try:
-        import subprocess
         result = subprocess.run(
-            ["antiword", str(path)],
+            ["antiword", abs_path],
             capture_output=True, text=True, timeout=30,
             encoding="utf-8", errors="replace",
         )
@@ -322,10 +373,10 @@ def _read_doc_text(path: Path, warnings: List[str]) -> str:
     except Exception:
         pass
 
-    # Attempt 3: python-docx (occasionally opens .doc if saved as OOXML)
+    # Attempt 5: python-docx (only succeeds if .doc is secretly OOXML)
     try:
         import docx
-        doc = docx.Document(str(path))
+        doc = docx.Document(abs_path)
         text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
         if text.strip():
             return text
@@ -334,7 +385,9 @@ def _read_doc_text(path: Path, warnings: List[str]) -> str:
 
     warnings.append(
         f"Could not extract text from '{path.name}'. "
-        "Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support."
+        "For .doc support on Windows: install pywin32 (`pip install pywin32`) with MS Word, "
+        "or install LibreOffice and ensure `soffice` is on PATH. "
+        "Alternatively convert the file to .docx before processing."
     )
     return ""
 
@@ -559,12 +612,28 @@ def _extract_docx(
                 })
         for tbl_idx, tbl in enumerate(doc.tables):
             rows = []
-            for row in tbl.rows:
-                rows.append([cell.text.strip() for cell in row.cells])
+            header_row_index: Optional[int] = None
+            for row_idx, row in enumerate(tbl.rows):
+                cells = [cell.text.strip() for cell in row.cells]
+                rows.append(cells)
+                # Detect header row: first row whose cells are all bold or use a heading style
+                if header_row_index is None and row_idx == 0 and cells:
+                    try:
+                        first_cell = row.cells[0]
+                        is_bold = any(
+                            run.bold
+                            for para in first_cell.paragraphs
+                            for run in para.runs
+                        )
+                        if is_bold:
+                            header_row_index = 0
+                    except Exception:
+                        pass
             tables.append({
                 "page_index": 1,
                 "table_index": tbl_idx,
                 "rows": rows,
+                "header_row_index": header_row_index,
                 "source": "python-docx",
             })
     except ImportError:
@@ -590,9 +659,25 @@ def _extract_doc(
     if not text:
         return blocks, tables
 
-    # Split into paragraphs on blank lines or line breaks
-    paragraphs = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
-    for idx, para in enumerate(paragraphs):
+    # Normalize line endings: win32com returns \r as paragraph separators;
+    # LibreOffice may return \r\n. Normalize to \n before splitting.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Split on single newlines so each legal heading (Điều, Khoản, Chương…)
+    # becomes its own block. _detect_block_type() classifies them as "heading"
+    # or "list_item", enabling _detect_hierarchy() to build Article/Section objects.
+    raw_lines = [p.strip() for p in text.split("\n") if p.strip()]
+
+    # Deduplicate short repeated lines (headers/footers repeated on each page).
+    # Long lines (≥ 80 chars) are kept as-is and left to cleaning_validation to flag.
+    seen_short: Dict[str, int] = {}  # normalized_text → count
+    for idx, para in enumerate(raw_lines):
+        normalized = re.sub(r"\s+", " ", para.lower())
+        if len(normalized) < 80:
+            count = seen_short.get(normalized, 0) + 1
+            seen_short[normalized] = count
+            if count > 1:
+                continue  # skip repeated short header/footer
         blocks.append({
             "page_index": 1,
             "element_index": idx,
@@ -768,15 +853,25 @@ def stage_canonical_structuring(ctx: StageContext) -> StageOutput:
         rows_raw = rt.get("rows", [])
         page_id = T.make_page_id(ctx.document_id, page_index)
 
+        header_row_index = rt.get("header_row_index")
         cells: List[TableCell] = []
         for r_idx, row in enumerate(rows_raw):
+            is_header = (header_row_index is not None and r_idx == header_row_index)
             for c_idx, cell_text in enumerate(row):
-                cells.append(TableCell(row=r_idx, col=c_idx, text=cell_text, raw_text=cell_text))
+                cells.append(TableCell(
+                    row=r_idx, col=c_idx,
+                    text=cell_text, raw_text=cell_text,
+                    is_header=is_header,
+                ))
 
-        # Simple markdown projection for retrieval
+        # Markdown projection: bold header row if detected
         md_lines = []
-        for row in rows_raw:
-            md_lines.append("| " + " | ".join(str(c) for c in row) + " |")
+        for r_idx, row in enumerate(rows_raw):
+            row_str = " | ".join(str(c) for c in row)
+            md_lines.append(f"| {row_str} |")
+            if header_row_index is not None and r_idx == header_row_index:
+                sep = " | ".join("---" for _ in row)
+                md_lines.append(f"| {sep} |")
         projection = "\n".join(md_lines)
 
         tables.append(Table(
@@ -1056,6 +1151,7 @@ def _detect_hierarchy(blocks: List[Block], document_id: str):
 
     current_section_id: Optional[str] = None
     current_article_id: Optional[str] = None
+    current_clause_id: Optional[str] = None   # tracks last Khoản so Điểm can nest under it
 
     # ----------------------------------------------------------------
     # Compiled patterns — Vietnamese
@@ -1157,6 +1253,7 @@ def _detect_hierarchy(blocks: List[Block], document_id: str):
                     confidence=Confidence(overall=0.90, structure=0.90),
                 ))
                 current_article_id = article_id
+                current_clause_id = None          # reset clause context on new Điều
                 block.parent_structure_id = article_id
                 block.block_type = "heading"
                 continue
@@ -1165,21 +1262,35 @@ def _detect_hierarchy(blocks: List[Block], document_id: str):
             m_khoan = re_vi_khoan.match(text)
             m_diem = re_vi_diem.match(text)
             if m_khoan or m_diem:
-                m = m_khoan or m_diem
                 clause_id = T.make_clause_id(document_id, cls_idx)
                 cls_idx += 1
-                kind = "paragraph" if m_khoan else "point"
-                number = m.group(2)
-                clauses.append(Clause(
-                    clause_id=clause_id,
-                    label=text[:120],
-                    number=number,
-                    clause_kind=kind,
-                    parent_article_id=current_article_id,
-                    block_ids=[block.block_id],
-                    page_refs=[block.page_id],
-                    confidence=Confidence(overall=0.85, structure=0.85),
-                ))
+                if m_khoan:
+                    # Khoản (paragraph): child of current Điều
+                    clauses.append(Clause(
+                        clause_id=clause_id,
+                        label=text[:120],
+                        number=m_khoan.group(2),
+                        clause_kind="paragraph",
+                        parent_article_id=current_article_id,
+                        parent_clause_id=None,
+                        block_ids=[block.block_id],
+                        page_refs=[block.page_id],
+                        confidence=Confidence(overall=0.85, structure=0.85),
+                    ))
+                    current_clause_id = clause_id   # track so Điểm can nest under it
+                else:
+                    # Điểm (point): child of current Khoản if one exists, else child of Điều
+                    clauses.append(Clause(
+                        clause_id=clause_id,
+                        label=text[:120],
+                        number=m_diem.group(2),
+                        clause_kind="point",
+                        parent_article_id=current_article_id,
+                        parent_clause_id=current_clause_id,
+                        block_ids=[block.block_id],
+                        page_refs=[block.page_id],
+                        confidence=Confidence(overall=0.82, structure=0.82),
+                    ))
                 block.parent_structure_id = clause_id
                 continue
 

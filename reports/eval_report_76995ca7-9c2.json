@@ -1,0 +1,458 @@
+{
+  "run_id": "76995ca7-9c20-42c1-942d-41c402086141",
+  "processing_version": "0.1.0",
+  "schema_version": "1.0",
+  "started_at": "2026-05-14T02:53:37.915629+00:00",
+  "finished_at": "2026-05-14T02:53:52.630982+00:00",
+  "total_duration_seconds": 14.71536889999993,
+  "config_summary": {
+    "input_path": "raw_data",
+    "output_path": "reports",
+    "enable_ocr": true,
+    "enable_ai_repair": false,
+    "enable_graph_building": true,
+    "enable_retrieval_smoke_test": true,
+    "strict_accuracy_mode": false,
+    "processing_version": "0.1.0"
+  },
+  "documents_processed": 2,
+  "documents_passed": 0,
+  "documents_warned": 2,
+  "documents_failed": 0,
+  "document_results": [
+    {
+      "document_id": "doc_6004e35ceb4c0814",
+      "source_filename": "106_2025_QH15_628717.doc",
+      "file_type": "doc",
+      "extraction_strategy": "long_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.049151499999993575,
+          "summary": "Loaded '106_2025_QH15_628717.doc' (type=doc, size=499,712 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "106_2025_QH15_628717.doc",
+            "file_type": "doc",
+            "file_size_bytes": 499712,
+            "source_hash": "244dc66d37fe80c06d1916f4de4cab76995adfe237576816de169ff630361dfc"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 5.322609400000033,
+          "summary": "Strategy: long_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "long_local",
+            "page_count": 0,
+            "text_layer_coverage": 1.0,
+            "is_long_document": true,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 2.974024399999962,
+          "summary": "Extracted 1 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 1,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.011072100000092178,
+          "summary": "Structured 1 blocks, 0 tables, 0 sections, 0 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 1,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 0,
+            "article_count": 0,
+            "clause_count": 0,
+            "structure_detected": false,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "pass",
+          "duration_seconds": 0.009554400000070018,
+          "summary": "0 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.02863600000000588,
+          "summary": "1 chunks (0 degraded) using strategy=semantic",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 1,
+            "text_chunks": 1,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "semantic"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.00019210000004932226,
+          "summary": "2 nodes, 1 edges (0 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 2,
+            "total_edges": 1,
+            "alias_edges": 0,
+            "nodes_by_type": {
+              "Document": 1,
+              "Chunk": 1
+            },
+            "edges_by_type": {
+              "DERIVED_TO_CHUNK": 1
+            },
+            "structural_edges": 1
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 0.023507799999947565,
+          "summary": "Tested 8 queries (vi) — 8 hit, 0 missed (hit rate 100%, avg 1.0 chunks/query)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "doc_language": "vi",
+            "queries_tested": 8,
+            "queries_with_results": 8,
+            "queries_failed": [],
+            "avg_result_count": 1.0,
+            "hit_rate": 1.0,
+            "cross_lang_queries_tested": 0,
+            "cross_lang_hit_rate": 0.0
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 1,
+        "block_count": 1,
+        "block_coverage": 1.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 0,
+        "article_count": 0,
+        "clause_count": 0,
+        "structure_detected": false,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 1,
+        "text_chunks": 1,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 54949.0,
+        "strategy_used": "semantic",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 2,
+        "total_edges": 1,
+        "nodes_by_type": {
+          "Document": 1,
+          "Chunk": 1
+        },
+        "edges_by_type": {
+          "DERIVED_TO_CHUNK": 1
+        },
+        "structural_edges": 1,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 8,
+        "queries_with_results": 8,
+        "avg_result_count": 1.0,
+        "queries_failed": [],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "vi",
+        "language_confidence": 1.0,
+        "jurisdiction": "VN",
+        "canonical_refs_generated": 146,
+        "chunks_with_canonical_refs": 1,
+        "chunks_with_language_field": 1,
+        "alias_edges_added": 0,
+        "cross_lang_queries_tested": 0,
+        "cross_lang_queries_hit": 0,
+        "cross_lang_hit_rate": 0.0
+      },
+      "overall_status": "warning",
+      "critical_failures": [],
+      "all_warnings": [
+        "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+      ]
+    },
+    {
+      "document_id": "doc_aefcb4588f232b77",
+      "source_filename": "45_2019_QH14_333670.doc",
+      "file_type": "doc",
+      "extraction_strategy": "long_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.0007322000000158368,
+          "summary": "Loaded '45_2019_QH14_333670.doc' (type=doc, size=482,816 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "45_2019_QH14_333670.doc",
+            "file_type": "doc",
+            "file_size_bytes": 482816,
+            "source_hash": "15fa64ab3f16c643fe77e65725f1ce414dc7b289f0869f550e524ff554e0630d"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "pass",
+          "duration_seconds": 3.0927516000000423,
+          "summary": "Strategy: long_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "long_local",
+            "page_count": 0,
+            "text_layer_coverage": 1.0,
+            "is_long_document": true,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 3.1293541000000005,
+          "summary": "Extracted 1 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 1,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.007814999999936845,
+          "summary": "Structured 1 blocks, 0 tables, 0 sections, 0 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 1,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 0,
+            "article_count": 0,
+            "clause_count": 0,
+            "structure_detected": false,
+            "avg_confidence": 1.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "pass",
+          "duration_seconds": 0.008936099999914404,
+          "summary": "0 warnings, 0 issues. Coverage: 1.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "coverage_score": 1.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.02370959999996103,
+          "summary": "1 chunks (0 degraded) using strategy=semantic",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 1,
+            "text_chunks": 1,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "semantic"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.00035370000000511936,
+          "summary": "2 nodes, 1 edges (0 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 2,
+            "total_edges": 1,
+            "alias_edges": 0,
+            "nodes_by_type": {
+              "Document": 1,
+              "Chunk": 1
+            },
+            "edges_by_type": {
+              "DERIVED_TO_CHUNK": 1
+            },
+            "structural_edges": 1
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "pass",
+          "duration_seconds": 0.020269099999950413,
+          "summary": "Tested 8 queries (vi) — 8 hit, 0 missed (hit rate 100%, avg 1.0 chunks/query)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "doc_language": "vi",
+            "queries_tested": 8,
+            "queries_with_results": 8,
+            "queries_failed": [],
+            "avg_result_count": 1.0,
+            "hit_rate": 1.0,
+            "cross_lang_queries_tested": 0,
+            "cross_lang_hit_rate": 0.0
+          }
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 1,
+        "block_count": 1,
+        "block_coverage": 1.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 0,
+        "article_count": 0,
+        "clause_count": 0,
+        "structure_detected": false,
+        "missing_content_warnings": [],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 1,
+        "text_chunks": 1,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 47320.0,
+        "strategy_used": "semantic",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 2,
+        "total_edges": 1,
+        "nodes_by_type": {
+          "Document": 1,
+          "Chunk": 1
+        },
+        "edges_by_type": {
+          "DERIVED_TO_CHUNK": 1
+        },
+        "structural_edges": 1,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 8,
+        "queries_with_results": 8,
+        "avg_result_count": 1.0,
+        "queries_failed": [],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "vi",
+        "language_confidence": 1.0,
+        "jurisdiction": "VN",
+        "canonical_refs_generated": 261,
+        "chunks_with_canonical_refs": 1,
+        "chunks_with_language_field": 1,
+        "alias_edges_added": 0,
+        "cross_lang_queries_tested": 0,
+        "cross_lang_queries_hit": 0,
+        "cross_lang_hit_rate": 0.0
+      },
+      "overall_status": "warning",
+      "critical_failures": [],
+      "all_warnings": [
+        "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+      ]
+    }
+  ],
+  "overall_status": "warning",
+  "critical_failures": [],
+  "key_warnings": [
+    "'.doc' format: table topology cannot be reliably preserved with text extraction. Convert to .docx for full table support."
+  ],
+  "recommendations": []
+}

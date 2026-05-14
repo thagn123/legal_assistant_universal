@@ -89,18 +89,22 @@ def _compatible_for_alias(n1: GraphNode, n2: GraphNode) -> bool:
     Return True if two nodes may be aliased.
 
     Nodes can be aliased if:
-      - They have the same node_type (Article-Article, Clause-Clause, etc.)
-      - Or one of them is a Chunk derived from the other (covered by DERIVED_TO_CHUNK)
+      - They have the same structural node_type (Article-Article, Section-Section, etc.)
       - They are NOT the same node
+      - Neither is a Chunk (chunks are linked via DERIVED_TO_CHUNK, not ALIAS_OF)
+
+    NOTE: Chunk exclusion must be checked BEFORE the same-type check, otherwise
+    two Chunk nodes would pass the same-type check and be incorrectly aliased.
     """
     if n1.node_id == n2.node_id:
+        return False
+    # Chunk nodes must not be aliased — their canonical_refs include all
+    # structure path + content mention refs, creating O(n²) spurious edges.
+    if "Chunk" in (n1.node_type, n2.node_type):
         return False
     # Same structural type → safe to alias
     if n1.node_type == n2.node_type:
         return True
-    # Chunk nodes should not be aliased to structural nodes here
-    if "Chunk" in (n1.node_type, n2.node_type):
-        return False
     return False
 
 

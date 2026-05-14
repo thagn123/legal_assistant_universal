@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python src/run_pipeline_eval.py)",
+      "Bash(python -m src.run_pipeline_eval)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m src.run_pipeline_eval)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m src.run_pipeline_eval --input raw_data)",
+      "Bash(xargs wc:*)",
+      "Bash(ls -t \"c:\\\\Users\\\\Admin\\\\OneDrive\\\\Máy tính\\\\Universal Legal Knowledge Assistant\\\\reports\\\\eval_report_\"*.md)",
+      "Bash(xargs grep:*)",
+      "Bash(ls reports/eval_report_*.md)",
+      "Bash(sort -t_ -k4)",
+      "Bash(PYTHONIOENCODING=utf-8 grep -l \"106_2025_QH15\" reports/eval_report_*.md)",
+      "Bash(python -c ':*)"
+    ]
+  }
+}
