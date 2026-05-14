@@ -1,0 +1,470 @@
+{
+  "run_id": "8ea20b10-3e49-40b6-8e43-b9eb7009a984",
+  "processing_version": "0.1.0",
+  "schema_version": "1.0",
+  "started_at": "2026-05-14T02:48:09.684729+00:00",
+  "finished_at": "2026-05-14T02:48:10.284567+00:00",
+  "total_duration_seconds": 0.6003438000000187,
+  "config_summary": {
+    "input_path": "raw_data",
+    "output_path": "reports",
+    "enable_ocr": true,
+    "enable_ai_repair": false,
+    "enable_graph_building": true,
+    "enable_retrieval_smoke_test": true,
+    "strict_accuracy_mode": false,
+    "processing_version": "0.1.0"
+  },
+  "documents_processed": 2,
+  "documents_passed": 0,
+  "documents_warned": 0,
+  "documents_failed": 2,
+  "document_results": [
+    {
+      "document_id": "doc_6004e35ceb4c0814",
+      "source_filename": "106_2025_QH15_628717.doc",
+      "file_type": "doc",
+      "extraction_strategy": "simple_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.07974130000002333,
+          "summary": "Loaded '106_2025_QH15_628717.doc' (type=doc, size=499,712 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "106_2025_QH15_628717.doc",
+            "file_type": "doc",
+            "file_size_bytes": 499712,
+            "source_hash": "244dc66d37fe80c06d1916f4de4cab76995adfe237576816de169ff630361dfc"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "warning",
+          "duration_seconds": 0.4938727999999628,
+          "summary": "Strategy: simple_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [
+            "Could not extract text from '106_2025_QH15_628717.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+            ".doc file produced no text. File may be corrupt or binary-only."
+          ],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "simple_local",
+            "page_count": 0,
+            "text_layer_coverage": 0.0,
+            "is_long_document": false,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 0.001996599999984028,
+          "summary": "Extracted 0 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "Could not extract text from '106_2025_QH15_628717.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 0,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.0014388000000735701,
+          "summary": "Structured 0 blocks, 0 tables, 0 sections, 0 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 0,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 0,
+            "article_count": 0,
+            "clause_count": 0,
+            "structure_detected": false,
+            "avg_confidence": 0.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "fail",
+          "duration_seconds": 8.040000000164582e-05,
+          "summary": "0 warnings, 1 issues. Coverage: 0.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [
+            "No blocks extracted. Document may be empty, encrypted, or unsupported."
+          ],
+          "output_summary": {
+            "coverage_score": 0.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.00046279999992293597,
+          "summary": "0 chunks (0 degraded) using strategy=semantic",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 0,
+            "text_chunks": 0,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "semantic"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 0.00018379999994522223,
+          "summary": "1 nodes, 0 edges (0 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 1,
+            "total_edges": 0,
+            "alias_edges": 0,
+            "nodes_by_type": {
+              "Document": 1
+            },
+            "edges_by_type": {},
+            "structural_edges": 0
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "warning",
+          "duration_seconds": 1.2399999945955642e-05,
+          "summary": "No chunks available for smoke test.",
+          "metrics": {},
+          "warnings": [
+            "chunk_set is empty; no retrieval test possible"
+          ],
+          "errors": [],
+          "output_summary": {}
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 0,
+        "block_count": 0,
+        "block_coverage": 0.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 0,
+        "article_count": 0,
+        "clause_count": 0,
+        "structure_detected": false,
+        "missing_content_warnings": [
+          "No blocks extracted. Document may be empty, encrypted, or unsupported."
+        ],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 0,
+        "text_chunks": 0,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 0.0,
+        "strategy_used": "semantic",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 1,
+        "total_edges": 0,
+        "nodes_by_type": {
+          "Document": 1
+        },
+        "edges_by_type": {},
+        "structural_edges": 0,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 0,
+        "queries_with_results": 0,
+        "avg_result_count": 0.0,
+        "queries_failed": [],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "en",
+        "language_confidence": 0.0,
+        "jurisdiction": null,
+        "canonical_refs_generated": 0,
+        "chunks_with_canonical_refs": 0,
+        "chunks_with_language_field": 0,
+        "alias_edges_added": 0,
+        "cross_lang_queries_tested": 0,
+        "cross_lang_queries_hit": 0,
+        "cross_lang_hit_rate": 0.0
+      },
+      "overall_status": "fail",
+      "critical_failures": [
+        "No blocks extracted. Document may be empty, encrypted, or unsupported.",
+        "No blocks extracted — document may be empty or unsupported."
+      ],
+      "all_warnings": [
+        "Could not extract text from '106_2025_QH15_628717.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+        ".doc file produced no text. File may be corrupt or binary-only.",
+        "Could not extract text from '106_2025_QH15_628717.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+        "chunk_set is empty; no retrieval test possible"
+      ]
+    },
+    {
+      "document_id": "doc_aefcb4588f232b77",
+      "source_filename": "45_2019_QH14_333670.doc",
+      "file_type": "doc",
+      "extraction_strategy": "simple_local",
+      "stage_results": [
+        {
+          "stage": "input_loading",
+          "status": "pass",
+          "duration_seconds": 0.005714799999964271,
+          "summary": "Loaded '45_2019_QH14_333670.doc' (type=doc, size=482,816 bytes)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "filename": "45_2019_QH14_333670.doc",
+            "file_type": "doc",
+            "file_size_bytes": 482816,
+            "source_hash": "15fa64ab3f16c643fe77e65725f1ce414dc7b289f0869f550e524ff554e0630d"
+          }
+        },
+        {
+          "stage": "document_profiling",
+          "status": "warning",
+          "duration_seconds": 0.0016593999999940934,
+          "summary": "Strategy: simple_local | pages=0 | tables=False",
+          "metrics": {},
+          "warnings": [
+            "Could not extract text from '45_2019_QH14_333670.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+            ".doc file produced no text. File may be corrupt or binary-only."
+          ],
+          "errors": [],
+          "output_summary": {
+            "extraction_strategy": "simple_local",
+            "page_count": 0,
+            "text_layer_coverage": 0.0,
+            "is_long_document": false,
+            "has_tables": false,
+            "has_images": false
+          }
+        },
+        {
+          "stage": "extraction",
+          "status": "warning",
+          "duration_seconds": 0.001316299999984949,
+          "summary": "Extracted 0 blocks, 0 tables from 1 pages",
+          "metrics": {},
+          "warnings": [
+            "Could not extract text from '45_2019_QH14_333670.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support."
+          ],
+          "errors": [],
+          "output_summary": {
+            "raw_block_count": 0,
+            "raw_table_count": 0,
+            "raw_image_count": 0
+          }
+        },
+        {
+          "stage": "canonical_structuring",
+          "status": "pass",
+          "duration_seconds": 0.00020659999995586986,
+          "summary": "Structured 0 blocks, 0 tables, 0 sections, 0 articles, 0 clauses",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "block_count": 0,
+            "table_count": 0,
+            "image_count": 0,
+            "section_count": 0,
+            "article_count": 0,
+            "clause_count": 0,
+            "structure_detected": false,
+            "avg_confidence": 0.0
+          }
+        },
+        {
+          "stage": "cleaning_validation",
+          "status": "fail",
+          "duration_seconds": 5.080000005364127e-05,
+          "summary": "0 warnings, 1 issues. Coverage: 0.00",
+          "metrics": {},
+          "warnings": [],
+          "errors": [
+            "No blocks extracted. Document may be empty, encrypted, or unsupported."
+          ],
+          "output_summary": {
+            "coverage_score": 0.0,
+            "degraded_blocks": 0,
+            "low_confidence_blocks": 0
+          }
+        },
+        {
+          "stage": "chunking",
+          "status": "pass",
+          "duration_seconds": 0.00013109999997595878,
+          "summary": "0 chunks (0 degraded) using strategy=semantic",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_chunks": 0,
+            "text_chunks": 0,
+            "table_chunks": 0,
+            "degraded_chunks": 0,
+            "strategy": "semantic"
+          }
+        },
+        {
+          "stage": "graph_building",
+          "status": "pass",
+          "duration_seconds": 7.760000005418988e-05,
+          "summary": "1 nodes, 0 edges (0 ALIAS_OF)",
+          "metrics": {},
+          "warnings": [],
+          "errors": [],
+          "output_summary": {
+            "total_nodes": 1,
+            "total_edges": 0,
+            "alias_edges": 0,
+            "nodes_by_type": {
+              "Document": 1
+            },
+            "edges_by_type": {},
+            "structural_edges": 0
+          }
+        },
+        {
+          "stage": "retrieval_smoke_test",
+          "status": "warning",
+          "duration_seconds": 3.999999989900971e-06,
+          "summary": "No chunks available for smoke test.",
+          "metrics": {},
+          "warnings": [
+            "chunk_set is empty; no retrieval test possible"
+          ],
+          "errors": [],
+          "output_summary": {}
+        }
+      ],
+      "extraction_metrics": {
+        "source_page_count": 0,
+        "extracted_page_count": 0,
+        "block_count": 0,
+        "block_coverage": 0.0,
+        "degraded_block_count": 0,
+        "low_confidence_block_count": 0,
+        "table_count": 0,
+        "image_count": 0,
+        "ocr_applied_page_count": 0,
+        "avg_ocr_confidence": null,
+        "min_ocr_confidence": null,
+        "section_count": 0,
+        "article_count": 0,
+        "clause_count": 0,
+        "structure_detected": false,
+        "missing_content_warnings": [
+          "No blocks extracted. Document may be empty, encrypted, or unsupported."
+        ],
+        "hallucination_risk_warnings": []
+      },
+      "chunk_metrics": {
+        "total_chunks": 0,
+        "text_chunks": 0,
+        "table_chunks": 0,
+        "image_chunks": 0,
+        "degraded_chunks": 0,
+        "avg_token_estimate": 0.0,
+        "strategy_used": "semantic",
+        "forbidden_splits_detected": []
+      },
+      "graph_metrics": {
+        "total_nodes": 1,
+        "total_edges": 0,
+        "nodes_by_type": {
+          "Document": 1
+        },
+        "edges_by_type": {},
+        "structural_edges": 0,
+        "unresolved_citations": 0,
+        "low_confidence_edges": 0,
+        "orphan_nodes": 0
+      },
+      "retrieval_smoke": {
+        "queries_tested": 0,
+        "queries_with_results": 0,
+        "avg_result_count": 0.0,
+        "queries_failed": [],
+        "multilingual": null
+      },
+      "multilingual_metrics": {
+        "primary_language": "en",
+        "language_confidence": 0.0,
+        "jurisdiction": null,
+        "canonical_refs_generated": 0,
+        "chunks_with_canonical_refs": 0,
+        "chunks_with_language_field": 0,
+        "alias_edges_added": 0,
+        "cross_lang_queries_tested": 0,
+        "cross_lang_queries_hit": 0,
+        "cross_lang_hit_rate": 0.0
+      },
+      "overall_status": "fail",
+      "critical_failures": [
+        "No blocks extracted. Document may be empty, encrypted, or unsupported.",
+        "No blocks extracted — document may be empty or unsupported."
+      ],
+      "all_warnings": [
+        "Could not extract text from '45_2019_QH14_333670.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+        ".doc file produced no text. File may be corrupt or binary-only.",
+        "Could not extract text from '45_2019_QH14_333670.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+        "chunk_set is empty; no retrieval test possible"
+      ]
+    }
+  ],
+  "overall_status": "fail",
+  "critical_failures": [
+    "No blocks extracted. Document may be empty, encrypted, or unsupported.",
+    "No blocks extracted — document may be empty or unsupported.",
+    "No blocks extracted. Document may be empty, encrypted, or unsupported.",
+    "No blocks extracted — document may be empty or unsupported."
+  ],
+  "key_warnings": [
+    "chunk_set is empty; no retrieval test possible",
+    "Could not extract text from '106_2025_QH15_628717.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+    "Could not extract text from '45_2019_QH14_333670.doc'. Install docx2txt (`pip install docx2txt`) or antiword (OS package) for .doc support.",
+    ".doc file produced no text. File may be corrupt or binary-only."
+  ],
+  "recommendations": [
+    "Install extraction libraries: pip install pdfminer.six python-docx beautifulsoup4",
+    "For OCR support: pip install pytesseract Pillow",
+    "Some documents failed. Check logs in the output/logs/ directory."
+  ]
+}
