@@ -39,6 +39,14 @@ from __future__ import annotations
 import sys
 import time
 import uuid
+
+# Ensure stdout/stderr handle full UTF-8 on Windows (Vietnamese text + emoji in reports).
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+if sys.stderr.encoding and sys.stderr.encoding.lower() not in ("utf-8", "utf8"):
+    import io
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 from pathlib import Path
 from typing import List, Optional
 

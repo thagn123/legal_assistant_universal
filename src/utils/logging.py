@@ -51,7 +51,8 @@ def _build_event(
     trace_id: str,
     module: str,
     stage: str,
-    status: str,
+    stage_status: str,
+    severity: str,
     document_id: str = "",
     query_id: str = "",
     parent_event_id: str = "",
@@ -63,7 +64,18 @@ def _build_event(
     error: Optional[str] = None,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build a structured log event dict matching the LogEvent schema from the docs."""
+    """
+    Build a structured log event dict.
+
+    Fields:
+        stage_status — pipeline outcome: pass | fail | warning | skipped | info | error
+        severity     — Python log level:  debug | info | warning | error
+
+    These are separate concepts: a stage can produce a "warning" outcome (stage_status)
+    while still being logged at "warning" severity, or a stage marked "pass" is logged
+    at "info" severity. Keeping them as distinct fields lets downstream consumers filter
+    by either dimension independently.
+    """
     event: Dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
         "trace_id": trace_id,
@@ -72,7 +84,8 @@ def _build_event(
         "query_id": query_id,
         "module": module,
         "stage": stage,
-        "status": status,
+        "stage_status": stage_status,
+        "severity": severity,
         "timestamp": _now_iso(),
         "reason_codes": reason_codes or [],
         "input_refs": input_refs or [],
@@ -133,19 +146,19 @@ class PipelineLogger:
     # ------------------------------------------------------------------
 
     def _emit(self, level: str, stage: str, message: str, **kwargs: Any) -> None:
+        severity = _SEVERITY_MAP.get(level.lower(), "info")
         event = _build_event(
             trace_id=self.trace_id,
             module=self.module,
             stage=stage,
-            status=level,           # event status = stage outcome (pass/fail/warning/…)
+            stage_status=level,     # pipeline outcome: pass/fail/warning/skipped/…
+            severity=severity,      # python log level: info/warning/error/debug
             document_id=self.document_id,
             **kwargs,
         )
         event["message"] = message
         self._events.append(event)
 
-        # Map stage outcome to Python log severity so failures are visible at ERROR level.
-        severity = _SEVERITY_MAP.get(level.lower(), "info")
         log_fn = getattr(self._logger, severity, self._logger.info)
         log_fn(
             f"[{stage}] {message} | doc={self.document_id or '-'} | trace={self.trace_id[:8]}"

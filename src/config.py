@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +40,38 @@ GRAPH_EDGE_CONFIDENCE_THRESHOLD: float = 0.60
 
 # minimum confidence for a chunk to be eligible for authoritative answering
 CHUNK_AUTHORITY_THRESHOLD: float = 0.65
+
+# ---------------------------------------------------------------------------
+# Strategy name contracts
+# These are the ONLY valid strategy names. Update here and in docs together.
+# ---------------------------------------------------------------------------
+
+
+class ExtractionStrategy:
+    """Valid extraction strategy identifiers (document profiling → extraction routing)."""
+    SIMPLE_LOCAL = "simple_local"
+    LONG_LOCAL = "long_local"
+    HYBRID_REGION_PRECISION = "hybrid_region_precision"
+    SCAN_RECOVERY = "scan_recovery"
+
+    ALL = frozenset([SIMPLE_LOCAL, LONG_LOCAL, HYBRID_REGION_PRECISION, SCAN_RECOVERY])
+
+
+class ChunkingStrategy:
+    """Valid chunking strategy identifiers (chunking decision tree)."""
+    STRUCTURAL = "structural"
+    LONG_LOCAL_STRUCTURAL = "long_local_structural"
+    LEGAL_AWARE = "legal_aware"
+    SEMANTIC = "semantic"
+    TABLE_AWARE = "table_aware"
+    MIXED_GROUP = "mixed_group"
+    CONSERVATIVE_FALLBACK = "conservative_fallback"
+
+    ALL = frozenset([
+        STRUCTURAL, LONG_LOCAL_STRUCTURAL, LEGAL_AWARE,
+        SEMANTIC, TABLE_AWARE, MIXED_GROUP, CONSERVATIVE_FALLBACK,
+    ])
+
 
 # processing version used for provenance lineage
 PROCESSING_VERSION: str = "0.1.0"

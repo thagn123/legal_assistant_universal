@@ -153,3 +153,11 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+# Pipeline generated outputs — not source artifacts
+reports/logs/
+reports/eval_report_*.json
+reports/eval_report_*.md
+
+# Claude Code
+.claude/settings.local.json

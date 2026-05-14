@@ -27,14 +27,13 @@ File format support:
 
 from __future__ import annotations
 
-import hashlib
 import mimetypes
 import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.config import PipelineConfig
+from src.config import PipelineConfig, ExtractionStrategy, ChunkingStrategy
 from src.pipeline.interfaces import StageContext, StageOutput
 from src.schemas.chunk import Chunk, ChunkSet, ChunkingDecision
 from src.schemas.document import (
@@ -169,10 +168,10 @@ def stage_document_profiling(ctx: StageContext) -> StageOutput:
             profile = _profile_image(path, cfg, warnings)
         else:
             warnings.append(f"Cannot profile unknown file type '{file_type}'; using defaults.")
-            profile.extraction_strategy = "simple_local"
+            profile.extraction_strategy = ExtractionStrategy.SIMPLE_LOCAL
     except Exception as exc:
         warnings.append(f"Profiling error: {exc}. Using conservative defaults.")
-        profile.extraction_strategy = "simple_local"
+        profile.extraction_strategy = ExtractionStrategy.SIMPLE_LOCAL
 
     ctx.put("profile", profile)
     ctx.logger.decision(
@@ -239,7 +238,7 @@ def _profile_pdf(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docume
         warnings.append("pdfminer not installed; using minimal PDF profiling.")
         profile.page_count = 1
         profile.text_layer_coverage = 0.5
-        profile.extraction_strategy = "simple_local"
+        profile.extraction_strategy = ExtractionStrategy.SIMPLE_LOCAL
         return profile
 
     # Route extraction strategy
@@ -265,7 +264,10 @@ def _profile_docx(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docum
         warnings.append("python-docx not installed; using fallback DOCX profiling.")
         profile.text_layer_coverage = 1.0
 
-    profile.extraction_strategy = "simple_local" if not profile.is_long_document else "long_local"
+    profile.extraction_strategy = (
+        ExtractionStrategy.SIMPLE_LOCAL if not profile.is_long_document
+        else ExtractionStrategy.LONG_LOCAL
+    )
     return profile
 
 
@@ -287,7 +289,10 @@ def _profile_doc(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docume
     else:
         warnings.append(".doc file produced no text. File may be corrupt or binary-only.")
         profile.text_layer_coverage = 0.0
-    profile.extraction_strategy = "simple_local" if not profile.is_long_document else "long_local"
+    profile.extraction_strategy = (
+        ExtractionStrategy.SIMPLE_LOCAL if not profile.is_long_document
+        else ExtractionStrategy.LONG_LOCAL
+    )
     return profile
 
 
@@ -409,7 +414,7 @@ def _profile_html(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docum
     except Exception as exc:
         warnings.append(f"HTML read error: {exc}")
         profile.page_count = 1
-    profile.extraction_strategy = "simple_local"
+    profile.extraction_strategy = ExtractionStrategy.SIMPLE_LOCAL
     return profile
 
 
@@ -420,7 +425,7 @@ def _profile_image(path: Path, cfg: PipelineConfig, warnings: List[str]) -> Docu
     profile.image_density = 1.0
     if not cfg.enable_ocr:
         warnings.append("Image file detected but OCR is disabled; text extraction will be empty.")
-    profile.extraction_strategy = "scan_recovery"
+    profile.extraction_strategy = ExtractionStrategy.SCAN_RECOVERY
     profile.page_count = 1
     return profile
 
@@ -496,14 +501,17 @@ def _choose_strategy(profile: DocumentProfile, cfg: PipelineConfig) -> str:
     Routing logic from docs/parsing/document-intelligence-pipeline.md decision tree.
     """
     if profile.file_type in ("docx", "html"):
-        return "simple_local" if not profile.is_long_document else "long_local"
+        return (
+            ExtractionStrategy.SIMPLE_LOCAL if not profile.is_long_document
+            else ExtractionStrategy.LONG_LOCAL
+        )
     if profile.text_layer_coverage >= cfg.strong_text_layer_threshold:
         if profile.is_long_document:
-            return "long_local"
-        return "simple_local"
+            return ExtractionStrategy.LONG_LOCAL
+        return ExtractionStrategy.SIMPLE_LOCAL
     if profile.text_layer_coverage < cfg.weak_text_layer_threshold:
-        return "scan_recovery"
-    return "hybrid_region_precision"
+        return ExtractionStrategy.SCAN_RECOVERY
+    return ExtractionStrategy.HYBRID_REGION_PRECISION
 
 
 # ---------------------------------------------------------------------------
@@ -1706,16 +1714,19 @@ def _choose_chunk_strategy(
     """Implement the chunking decision tree from docs."""
     structure_score = 0.8 if document.has_structure() else 0.3
     if structure_score >= 0.7 and profile.table_density <= 0.2 and profile.image_density <= 0.2:
-        return "long_local_structural" if profile.is_long_document else "structural"
+        return (
+            ChunkingStrategy.LONG_LOCAL_STRUCTURAL if profile.is_long_document
+            else ChunkingStrategy.STRUCTURAL
+        )
     if structure_score >= 0.5 and profile.is_long_document:
-        return "legal_aware"
+        return ChunkingStrategy.LEGAL_AWARE
     if profile.table_density >= 0.4 and profile.layout_complexity_score <= 0.5:
-        return "table_aware"
+        return ChunkingStrategy.TABLE_AWARE
     if profile.image_density >= 0.3 or (profile.scan_quality_score < 0.5):
-        return "conservative_fallback"
+        return ChunkingStrategy.CONSERVATIVE_FALLBACK
     if profile.layout_complexity_score >= 0.7:
-        return "mixed_group"
-    return "semantic"
+        return ChunkingStrategy.MIXED_GROUP
+    return ChunkingStrategy.SEMANTIC
 
 
 def _secondary_rules(profile: DocumentProfile, document: CanonicalDocument) -> List[str]:
@@ -1729,15 +1740,15 @@ def _secondary_rules(profile: DocumentProfile, document: CanonicalDocument) -> L
 
 def _fallback_strategy(strategy: str) -> str:
     fallback_map = {
-        "structural": "legal_aware",
-        "long_local_structural": "legal_aware",
-        "legal_aware": "semantic",
-        "table_aware": "mixed_group",
-        "mixed_group": "conservative_fallback",
-        "semantic": "conservative_fallback",
-        "conservative_fallback": "conservative_fallback",
+        ChunkingStrategy.STRUCTURAL:          ChunkingStrategy.LEGAL_AWARE,
+        ChunkingStrategy.LONG_LOCAL_STRUCTURAL: ChunkingStrategy.LEGAL_AWARE,
+        ChunkingStrategy.LEGAL_AWARE:         ChunkingStrategy.SEMANTIC,
+        ChunkingStrategy.TABLE_AWARE:         ChunkingStrategy.MIXED_GROUP,
+        ChunkingStrategy.MIXED_GROUP:         ChunkingStrategy.CONSERVATIVE_FALLBACK,
+        ChunkingStrategy.SEMANTIC:            ChunkingStrategy.CONSERVATIVE_FALLBACK,
+        ChunkingStrategy.CONSERVATIVE_FALLBACK: ChunkingStrategy.CONSERVATIVE_FALLBACK,
     }
-    return fallback_map.get(strategy, "conservative_fallback")
+    return fallback_map.get(strategy, ChunkingStrategy.CONSERVATIVE_FALLBACK)
 
 
 def _build_path(article: Article, document: CanonicalDocument) -> List[str]:
