@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite DB and uploaded files across container restarts
+      - lka_data:/data
+    environment:
+      PIPELINE_INPUT: /data/uploads
+      PIPELINE_OUTPUT: /data/reports
+      LOG_LEVEL: INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  lka_data:
+    driver: local

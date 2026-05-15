@@ -44,5 +44,10 @@ Pillow>=10.0.0
 # openai>=1.0.0
 # anthropic>=0.20.0
 
+# Phase 10: Product Runtime API
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+httpx>=0.24.0          # required by FastAPI TestClient
+
 # Development / testing
 pytest>=7.4.0
