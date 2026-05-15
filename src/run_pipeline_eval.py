@@ -258,6 +258,31 @@ def run_pipeline(config: PipelineConfig) -> PipelineEvalReport:
                 print(f"  ⚠️ {w}")
         print()
 
+    # Cross-document ALIAS_OF enrichment — runs after all documents are processed.
+    # Finds Section/Article nodes across documents that share the same canonical_ref
+    # (e.g. "article_1" from the English doc and the Vietnamese doc) and adds
+    # symmetric ALIAS_OF edges to each graph, then patches the metrics.
+    if len(orchestrator.document_graphs) > 1:
+        from src.graphrag.legal_ontology import add_cross_document_alias_edges
+        alias_counts = add_cross_document_alias_edges(orchestrator.document_graphs)
+        # Patch multilingual_metrics.alias_edges_added and graph_metrics.total_edges
+        # for each document result whose graph received new edges.
+        doc_id_to_result = {r.document_id: r for r in doc_results}
+        for doc_id, added in alias_counts.items():
+            if added == 0:
+                continue
+            result = doc_id_to_result.get(doc_id)
+            if result is None:
+                continue
+            if result.multilingual_metrics is not None:
+                result.multilingual_metrics.alias_edges_added += added
+            if result.graph_metrics is not None:
+                result.graph_metrics.total_edges += added
+                result.graph_metrics.edges_by_type = dict(result.graph_metrics.edges_by_type)
+                result.graph_metrics.edges_by_type["ALIAS_OF"] = (
+                    result.graph_metrics.edges_by_type.get("ALIAS_OF", 0) + added
+                )
+
     # Aggregate
     passed = sum(1 for d in doc_results if d.overall_status == STATUS_PASS)
     warned = sum(1 for d in doc_results if d.overall_status == STATUS_WARNING)

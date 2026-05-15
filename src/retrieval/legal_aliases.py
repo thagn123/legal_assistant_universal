@@ -231,15 +231,27 @@ def expand_query_terms(surface_terms: list[str]) -> Set[str]:
     Given a list of surface query terms, return the expanded set including
     all multilingual aliases for each recognized term.
 
-    Unknown terms are returned unchanged.
+    Unknown terms are returned unchanged, subject to these filters:
+    - Empty strings are skipped.
+    - Pure numeric strings ("1", "23") are skipped: they appear in nearly every
+      chunk and inflate alias hit counts without adding retrieval precision.
+      Numeric context is already encoded in the canonical ref ID (e.g. "article_1").
+    - Single-character tokens are skipped.
 
     Example:
         expand_query_terms(["Điều", "payment"])
-        → {"Điều", "điều", "article", "art.", "art", "payment", "thanh toán", "phí", ...}
+        → {"điều", "article", "art.", "art", "payment", "thanh toán", "phí", ...}
+
+        expand_query_terms(["article_1", "article", "1"])
+        → {"article_1", "article", "điều", "art.", "art", "articles"}
+        # "1" is filtered — its role is already captured by "article_1"
     """
     expanded: Set[str] = set()
     for term in surface_terms:
         term_lower = term.strip().lower()
+        # Skip empty, single-char, and pure-numeric tokens — too broad to be useful
+        if not term_lower or len(term_lower) < 2 or term_lower.isdigit():
+            continue
         canonical = canonical_term(term_lower)
         if canonical:
             expanded.update(all_aliases_for_canonical(canonical))

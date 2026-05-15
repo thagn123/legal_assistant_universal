@@ -81,20 +81,7 @@ def stage_retrieval_smoke_test(ctx: StageContext) -> StageOutput:
     primary_queries: List[str] = list(ctx.config.smoke_test_queries)  # copy, not reference
 
     if not primary_queries:
-        if doc_lang == "vi":
-            primary_queries = [
-                "điều", "khoản", "hợp đồng", "bên", "nghĩa vụ",
-                "thanh toán", "chương", "mục",
-            ]
-        elif doc_lang == "mixed":
-            primary_queries = [
-                "điều", "article", "khoản", "clause", "hợp đồng", "agreement",
-            ]
-        else:  # English default
-            primary_queries = [
-                "article", "clause", "agreement", "obligation", "payment",
-                "chapter", "section",
-            ]
+        primary_queries = _build_adaptive_queries(doc_lang, document)
 
     # ----------------------------------------------------------------
     # Step 3: Build cross-language queries (opposite language)
@@ -206,3 +193,56 @@ def _keyword_search(query: str, chunk_set: ChunkSet) -> List[Chunk]:
     """Simple case-insensitive keyword search over chunk content. Used as fallback."""
     query_lower = query.lower()
     return [c for c in chunk_set.chunks if query_lower in c.content.lower()]
+
+
+def _build_adaptive_queries(doc_lang: str, document: CanonicalDocument) -> List[str]:
+    """
+    Build smoke-test queries based on the document's actual structure.
+
+    Only includes structural-level terms (chương/chapter, mục/section, etc.) when
+    that level actually appears in the document's section labels. This prevents
+    false-positive warnings for levels the document simply does not use.
+    Body-content terms (điều/article, khoản/clause, payment keywords, etc.) are
+    included whenever the corresponding structure objects exist.
+    """
+    queries: List[str] = []
+
+    if doc_lang == "vi":
+        if document and document.articles:
+            queries.extend(["điều", "hợp đồng", "bên", "nghĩa vụ", "thanh toán"])
+        if document and document.clauses:
+            queries.append("khoản")
+        # Only add section-level structural terms if that level is present in labels
+        if document and document.sections:
+            labels = [s.label.lower() for s in document.sections if s.label]
+            if any("chương" in l for l in labels):
+                queries.append("chương")
+            if any("mục" in l and "chương" not in l for l in labels):
+                queries.append("mục")
+            if any("phần" in l for l in labels):
+                queries.append("phần")
+
+    elif doc_lang == "mixed":
+        queries.extend(["điều", "article", "hợp đồng", "agreement"])
+        if document and document.clauses:
+            queries.extend(["khoản", "clause"])
+
+    else:  # English default
+        if document and document.articles:
+            queries.extend(["article", "agreement", "obligation", "payment"])
+        if document and document.clauses:
+            queries.append("clause")
+        if document and document.sections:
+            labels = [s.label.lower() for s in document.sections if s.label]
+            if any("chapter" in l for l in labels):
+                queries.append("chapter")
+            if any("section" in l and "chapter" not in l for l in labels):
+                queries.append("section")
+            if any("part" in l for l in labels):
+                queries.append("part")
+
+    # Fallback: if no structure detected, use a safe minimal set
+    if not queries:
+        queries = ["article", "clause"] if doc_lang == "en" else ["điều", "khoản"]
+
+    return queries

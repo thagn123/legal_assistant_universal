@@ -28,7 +28,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from src.schemas.graph import (
     GraphEdge,
@@ -36,7 +36,7 @@ from src.schemas.graph import (
     GraphSubgraph,
     EDGE_TYPES,
 )
-from src.utils.trace import make_edge_id, now_iso
+from src.utils.trace import make_edge_id
 
 # ALIAS_OF is added to EDGE_TYPES in graph.py — guarded here for safety
 _ALIAS_OF = "ALIAS_OF"
@@ -236,3 +236,92 @@ def add_alias_edges(graph: GraphSubgraph) -> GraphSubgraph:
     Returns the enriched graph.
     """
     return OntologyEnricher().enrich(graph)
+
+
+def add_cross_document_alias_edges(graphs: List[GraphSubgraph]) -> Dict[str, int]:
+    """
+    Add ALIAS_OF edges between nodes from DIFFERENT documents that share a canonical_ref.
+
+    This is the cross-document enrichment pass. It runs after all documents have
+    been individually processed and their graphs built. It finds Section/Article/Clause
+    nodes across documents that share the same canonical_ref (e.g., "article_1" from an
+    English doc and "article_1" from a Vietnamese doc) and links them with symmetric
+    ALIAS_OF edges, one edge stored in each document's GraphSubgraph.
+
+    Args:
+        graphs: List of GraphSubgraph objects (one per document).
+
+    Returns:
+        Dict mapping document_id → count of ALIAS_OF edges added to that graph.
+        Returns empty dict if fewer than 2 graphs are provided.
+    """
+    if len(graphs) < 2:
+        return {}
+
+    if _ALIAS_OF not in EDGE_TYPES:
+        return {}
+
+    # Build cross-graph index: canonical_ref → list of (node, graph_index)
+    ref_index: Dict[str, List[Tuple[GraphNode, int]]] = {}
+    for g_idx, graph in enumerate(graphs):
+        for node in graph.nodes:
+            if node.node_type == "Chunk":
+                continue
+            for ref in _get_canonical_refs(node):
+                ref_index.setdefault(ref, []).append((node, g_idx))
+
+    # Pre-build existing ALIAS_OF pair sets per graph to avoid duplicates
+    existing: List[Set[Tuple[str, str]]] = [
+        {(e.from_node_id, e.to_node_id) for e in g.edges if e.edge_type == _ALIAS_OF}
+        for g in graphs
+    ]
+
+    counts: Dict[str, int] = {g.document_id: 0 for g in graphs}
+
+    for canonical_ref, entries in ref_index.items():
+        if len(entries) < 2:
+            continue
+        for i in range(len(entries)):
+            for j in range(i + 1, len(entries)):
+                n1, g1_idx = entries[i]
+                n2, g2_idx = entries[j]
+
+                if g1_idx == g2_idx:
+                    continue  # same document — handled by intra-doc OntologyEnricher
+                if not _compatible_for_alias(n1, n2):
+                    continue
+
+                pair_fwd = (n1.node_id, n2.node_id)
+                pair_rev = (n2.node_id, n1.node_id)
+
+                # Forward edge lives in g1
+                if pair_fwd not in existing[g1_idx]:
+                    edge = GraphEdge(
+                        edge_id=make_edge_id(n1.node_id, _ALIAS_OF, n2.node_id),
+                        edge_type=_ALIAS_OF,
+                        from_node_id=n1.node_id,
+                        to_node_id=n2.node_id,
+                        confidence=0.95,
+                        provenance=f"cross_doc:{canonical_ref}",
+                        method="cross_document_canonical_ref",
+                    )
+                    graphs[g1_idx].edges = list(graphs[g1_idx].edges) + [edge]
+                    existing[g1_idx].add(pair_fwd)
+                    counts[graphs[g1_idx].document_id] += 1
+
+                # Reverse edge lives in g2
+                if pair_rev not in existing[g2_idx]:
+                    edge = GraphEdge(
+                        edge_id=make_edge_id(n2.node_id, _ALIAS_OF, n1.node_id),
+                        edge_type=_ALIAS_OF,
+                        from_node_id=n2.node_id,
+                        to_node_id=n1.node_id,
+                        confidence=0.95,
+                        provenance=f"cross_doc:{canonical_ref}",
+                        method="cross_document_canonical_ref",
+                    )
+                    graphs[g2_idx].edges = list(graphs[g2_idx].edges) + [edge]
+                    existing[g2_idx].add(pair_rev)
+                    counts[graphs[g2_idx].document_id] += 1
+
+    return counts

@@ -41,6 +41,9 @@ GRAPH_EDGE_CONFIDENCE_THRESHOLD: float = 0.60
 # minimum confidence for a chunk to be eligible for authoritative answering
 CHUNK_AUTHORITY_THRESHOLD: float = 0.65
 
+# maximum token estimate per chunk before clause-level splitting is applied
+CHUNK_MAX_TOKENS: int = 1024
+
 # ---------------------------------------------------------------------------
 # Strategy name contracts
 # These are the ONLY valid strategy names. Update here and in docs together.
@@ -123,6 +126,7 @@ class PipelineConfig:
     extraction_confidence_threshold: float = EXTRACTION_CONFIDENCE_THRESHOLD
     graph_edge_confidence_threshold: float = GRAPH_EDGE_CONFIDENCE_THRESHOLD
     chunk_authority_threshold: float = CHUNK_AUTHORITY_THRESHOLD
+    chunk_max_tokens: int = CHUNK_MAX_TOKENS
 
     # ------------------------------------------------------------------
     # Processing metadata

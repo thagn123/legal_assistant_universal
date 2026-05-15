@@ -54,6 +54,7 @@ class PipelineOrchestrator:
 
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
+        self.document_graphs: List = []  # GraphSubgraph per doc — used for cross-doc ALIAS_OF
 
     def run(self, source_path: Path, trace_id: Optional[str] = None) -> DocumentEvalResult:
         """
@@ -153,6 +154,10 @@ class PipelineOrchestrator:
         if not fatal_failure:
             out = timed_run("graph_building", stage_graph_building, ctx)
             stage_results.append(out.to_stage_result())
+            # Accumulate graph for cross-document ALIAS_OF enrichment (run_pipeline_eval.py)
+            _graph = ctx.get("graph")
+            if _graph is not None:
+                self.document_graphs.append(_graph)
 
         # ----------------------------------------------------------------
         # Stage 8: Retrieval smoke test

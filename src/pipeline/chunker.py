@@ -6,20 +6,26 @@ docs/chunking/chunking-strategies.md.
 
 Design rules:
 - Legal structure (articles, clauses) is never split at the wrong boundary.
-- Tables produce one chunk per table (never merged into text).
+- Article number and title are NEVER separated across chunk boundaries.
+- When an article exceeds chunk_max_tokens AND has clauses, it is split by
+  clause with the article heading carried into each sub-chunk as context.
+- Tables produce one chunk per table, linked to their parent article via
+  sibling_chunk_ids / parent_chunk_id.
+- Images with readable OCR text produce evidence chunks.
 - Chunks include hierarchy path in content so keyword searches on
   structure terms always hit ("điều", "chương", "article", etc.).
 - Language metadata is derived from the document's formal language detection.
+- A validation pass after generation flags empty chunks as degraded.
 """
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from src.config import ChunkingStrategy
 from src.pipeline.interfaces import StageContext, StageOutput
 from src.schemas.chunk import Chunk, ChunkSet, ChunkingDecision
-from src.schemas.document import Article, CanonicalDocument, DocumentProfile
+from src.schemas.document import Article, CanonicalDocument, Clause, DocumentProfile
 from src.schemas.evaluation import STATUS_FAIL, STATUS_PASS, STATUS_WARNING
 from src.utils import trace as T
 from src.retrieval.canonical_references import canonical_refs_for_chunk
@@ -34,6 +40,12 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
     """
     Apply chunking strategy from docs/chunking/chunking-strategies.md.
     Preserves legal structure: articles and clauses are never split at the wrong boundary.
+
+    Phase 5 additions:
+    - Token-limit enforcement: articles > chunk_max_tokens are split by clause.
+    - Table sibling linking: table chunks carry parent_chunk_id pointing to their article.
+    - Image evidence chunks for images with OCR text.
+    - Validation pass: empty chunks are flagged as degraded.
     """
     document: CanonicalDocument = ctx.get("document")
     if document is None:
@@ -74,26 +86,33 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
         reason=f"pages={profile.page_count}, long={profile.is_long_document}, tables={profile.has_tables}",
     )
 
-    # Build chunks
+    chunk_lang = _get_chunk_language(document)
     chunks: List[Chunk] = []
     chunk_idx = 0
 
-    # --- Text chunks: group by structural unit (article → group of blocks) ---
+    # Build clause lookup: article_id → list of Clause objects (ordered)
+    article_clauses: Dict[str, List[Clause]] = {}
+    for clause in document.clauses:
+        if clause.parent_article_id:
+            article_clauses.setdefault(clause.parent_article_id, []).append(clause)
+
+    # Track which table_ids have been assigned a parent_chunk_id so the table
+    # chunk loop can set it correctly.
+    table_parent_map: Dict[str, str] = {}  # table_id → parent article chunk_id
+
+    # ----------------------------------------------------------------
+    # Text chunks: group by structural unit (article → clause → blocks)
+    # ----------------------------------------------------------------
     if document.articles:
         for article in document.articles:
-            # Collect all clause IDs that belong to this article so body blocks
-            # owned by sub-clauses (Khoản / Điểm) are included in the article chunk.
-            article_clause_ids = {
-                c.clause_id for c in document.clauses
-                if c.parent_article_id == article.article_id
-            }
+            clauses_for_article = article_clauses.get(article.article_id, [])
+            clause_ids_for_article = {c.clause_id for c in clauses_for_article}
 
-            # Collect body blocks: heading block + direct article body blocks
-            # + clause heading blocks + clause body blocks (all under this article)
+            # Collect all blocks that belong to this article (direct or via sub-clauses)
             body_blocks = [
                 b for b in document.blocks
                 if b.parent_structure_id == article.article_id
-                or b.parent_structure_id in article_clause_ids
+                or b.parent_structure_id in clause_ids_for_article
                 or b.block_id in article.block_ids
             ]
             body_text = "\n\n".join(
@@ -102,40 +121,162 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
                 if (b.clean_text or b.raw_text)
             )
             structure_path = _build_path(article, document)
-
-            # Chunk content: include structure path as context header so keyword
-            # searches on hierarchy terms ("điều", "chương", "article", etc.) always hit.
             path_header = " › ".join(structure_path)
-            content = f"{path_header}\n\n## {article.label}\n\n{body_text}" if body_text \
+            content = (
+                f"{path_header}\n\n## {article.label}\n\n{body_text}"
+                if body_text
                 else f"{path_header}\n\n## {article.label}"
-
-            # Multilingual: canonical refs and language metadata
+            )
+            token_est = len(content) // 4
             chunk_canonical_refs = canonical_refs_for_chunk(structure_path, content)
-            chunk_lang = _get_chunk_language(document)
             hierarchy_path_str = " › ".join(structure_path)
 
-            chunk = Chunk(
-                chunk_id=T.make_chunk_id(ctx.document_id, chunk_idx),
-                document_id=ctx.document_id,
-                chunk_type="text",
-                content_format="markdown",
-                content=content,
-                structure_path=structure_path,
-                page_refs=article.page_refs,
-                block_refs=[b.block_id for b in body_blocks] or article.block_ids,
-                citations=article.citations,
-                token_estimate=len(content) // 4,
-                confidence=article.confidence.overall,
-                degraded=article.confidence.degraded,
-                jurisdiction=document.metadata.jurisdiction,
-                version_label=document.metadata.version_label or "",
-                document_type=document.metadata.document_type,
-                language=chunk_lang,
-                canonical_refs=chunk_canonical_refs,
-                hierarchy_path=hierarchy_path_str,
-            )
-            chunks.append(chunk)
-            chunk_idx += 1
+            if token_est <= cfg.chunk_max_tokens or not clauses_for_article:
+                # ---- Single-chunk article (normal case) ----
+                article_chunk_id = T.make_chunk_id(ctx.document_id, chunk_idx)
+                chunk = Chunk(
+                    chunk_id=article_chunk_id,
+                    document_id=ctx.document_id,
+                    chunk_type="text",
+                    content_format="markdown",
+                    content=content,
+                    structure_path=structure_path,
+                    page_refs=article.page_refs,
+                    block_refs=[b.block_id for b in body_blocks] or article.block_ids,
+                    citations=article.citations,
+                    token_estimate=token_est,
+                    confidence=article.confidence.overall,
+                    degraded=article.confidence.degraded,
+                    jurisdiction=document.metadata.jurisdiction,
+                    version_label=document.metadata.version_label or "",
+                    document_type=document.metadata.document_type,
+                    language=chunk_lang,
+                    canonical_refs=chunk_canonical_refs,
+                    hierarchy_path=hierarchy_path_str,
+                )
+                if token_est > cfg.chunk_max_tokens:
+                    # Oversized but no clauses — flag it, don't fail
+                    chunk.degraded_reasons.append("exceeds_token_limit_no_clauses")
+                    warnings.append(
+                        f"Article '{article.label}' exceeds token limit "
+                        f"({token_est} tokens) but has no clauses to split on."
+                    )
+                # Record this chunk_id for table linking
+                for tid in article.table_ids:
+                    table_parent_map[tid] = article_chunk_id
+                chunks.append(chunk)
+                chunk_idx += 1
+
+            else:
+                # ---- Multi-chunk article: split by clause ----
+                # Parent chunk: article heading + intro blocks (not owned by any clause)
+                intro_blocks = [
+                    b for b in body_blocks
+                    if b.parent_structure_id == article.article_id
+                    or b.block_id in article.block_ids
+                ]
+                intro_text = "\n\n".join(
+                    (b.clean_text or b.raw_text)
+                    for b in intro_blocks
+                    if (b.clean_text or b.raw_text)
+                )
+                parent_content = (
+                    f"{path_header}\n\n## {article.label}\n\n{intro_text}"
+                    if intro_text
+                    else f"{path_header}\n\n## {article.label}"
+                )
+                parent_chunk_id = T.make_chunk_id(ctx.document_id, chunk_idx)
+                chunk_idx += 1
+
+                # Build clause sub-chunks first to collect their IDs
+                clause_chunks: List[Chunk] = []
+                for clause in clauses_for_article:
+                    clause_block_ids = set(clause.block_ids)
+                    # Include blocks owned directly by this clause or parented to it
+                    child_clause_ids = set(clause.child_clause_ids)
+                    clause_blocks = [
+                        b for b in document.blocks
+                        if b.block_id in clause_block_ids
+                        or b.parent_structure_id == clause.clause_id
+                        or b.parent_structure_id in child_clause_ids
+                    ]
+                    clause_text = "\n\n".join(
+                        (b.clean_text or b.raw_text)
+                        for b in clause_blocks
+                        if (b.clean_text or b.raw_text)
+                    )
+                    if not clause_text:
+                        continue
+                    clause_structure_path = structure_path + [clause.label or clause.clause_id]
+                    clause_path_header = " › ".join(clause_structure_path)
+                    # Carry article heading as context prefix (hierarchy carryover)
+                    clause_content = (
+                        f"{clause_path_header}\n\n"
+                        f"[{article.label}]\n\n"
+                        f"{clause_text}"
+                    )
+                    clause_refs = canonical_refs_for_chunk(clause_structure_path, clause_content)
+                    clause_chunk_id = T.make_chunk_id(ctx.document_id, chunk_idx)
+                    clause_chunk = Chunk(
+                        chunk_id=clause_chunk_id,
+                        document_id=ctx.document_id,
+                        chunk_type="text",
+                        content_format="markdown",
+                        content=clause_content,
+                        structure_path=clause_structure_path,
+                        parent_chunk_id=parent_chunk_id,
+                        page_refs=clause.page_refs,
+                        block_refs=[b.block_id for b in clause_blocks],
+                        citations=clause.citations,
+                        token_estimate=len(clause_content) // 4,
+                        confidence=clause.confidence.overall,
+                        degraded=clause.confidence.degraded,
+                        jurisdiction=document.metadata.jurisdiction,
+                        version_label=document.metadata.version_label or "",
+                        document_type=document.metadata.document_type,
+                        language=chunk_lang,
+                        canonical_refs=clause_refs,
+                        hierarchy_path=" › ".join(clause_structure_path),
+                    )
+                    clause_chunks.append(clause_chunk)
+                    chunk_idx += 1
+
+                clause_chunk_ids = [c.chunk_id for c in clause_chunks]
+
+                parent_chunk = Chunk(
+                    chunk_id=parent_chunk_id,
+                    document_id=ctx.document_id,
+                    chunk_type="text",
+                    content_format="markdown",
+                    content=parent_content,
+                    structure_path=structure_path,
+                    sibling_chunk_ids=clause_chunk_ids,
+                    page_refs=article.page_refs,
+                    block_refs=[b.block_id for b in intro_blocks] or article.block_ids,
+                    citations=article.citations,
+                    token_estimate=len(parent_content) // 4,
+                    confidence=article.confidence.overall,
+                    degraded=article.confidence.degraded,
+                    jurisdiction=document.metadata.jurisdiction,
+                    version_label=document.metadata.version_label or "",
+                    document_type=document.metadata.document_type,
+                    language=chunk_lang,
+                    canonical_refs=chunk_canonical_refs,
+                    hierarchy_path=hierarchy_path_str,
+                )
+                # Record for table linking
+                for tid in article.table_ids:
+                    table_parent_map[tid] = parent_chunk_id
+
+                chunks.append(parent_chunk)
+                chunks.extend(clause_chunks)
+
+                ctx.logger.info(
+                    f"Split article '{article.label}' ({token_est} tokens) into "
+                    f"1 heading + {len(clause_chunks)} clause chunks",
+                    stage="chunking",
+                )
+
     else:
         # No detected hierarchy: chunk by paragraph groups (fallback)
         CHUNK_BLOCK_SIZE = 10 if not profile.is_long_document else 20
@@ -150,7 +291,6 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
             )
             avg_conf = sum(b.confidence.overall for b in group) / len(group)
             chunk_canonical_refs = canonical_refs_for_chunk([], content)
-            chunk_lang = _get_chunk_language(document)
 
             chunk = Chunk(
                 chunk_id=T.make_chunk_id(ctx.document_id, chunk_idx),
@@ -174,19 +314,23 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
             chunks.append(chunk)
             chunk_idx += 1
 
-    # --- Table chunks: one chunk per table ---
+    # ----------------------------------------------------------------
+    # Table chunks: one chunk per table, linked to parent article
+    # ----------------------------------------------------------------
     for table in document.tables:
         content = table.projection_text or table.markdown or "[table]"
         chunk_canonical_refs = canonical_refs_for_chunk([], content)
-        chunk_lang = _get_chunk_language(document)
+        parent_id = table_parent_map.get(table.table_id)
 
+        table_chunk_id = T.make_chunk_id(ctx.document_id, chunk_idx)
         chunk = Chunk(
-            chunk_id=T.make_chunk_id(ctx.document_id, chunk_idx),
+            chunk_id=table_chunk_id,
             document_id=ctx.document_id,
             chunk_type="table",
             content_format="markdown",
             content=content,
             structure_path=[],
+            parent_chunk_id=parent_id,
             page_refs=table.page_refs,
             table_refs=[table.table_id],
             token_estimate=len(content) // 4,
@@ -199,8 +343,57 @@ def stage_chunking(ctx: StageContext) -> StageOutput:
             canonical_refs=chunk_canonical_refs,
             hierarchy_path="",
         )
+        # Backfill sibling reference on parent article chunk
+        if parent_id:
+            for pc in chunks:
+                if pc.chunk_id == parent_id:
+                    pc.sibling_chunk_ids = list(pc.sibling_chunk_ids) + [table_chunk_id]
+                    break
         chunks.append(chunk)
         chunk_idx += 1
+
+    # ----------------------------------------------------------------
+    # Image evidence chunks: for images with readable OCR text
+    # ----------------------------------------------------------------
+    for image in document.images:
+        ocr_text = image.clean_ocr_text or image.raw_ocr_text
+        if not ocr_text:
+            continue  # Skip images with no textual content
+        content = f"[Image: {image.image_class or 'visual'}]\n\n{ocr_text}"
+        chunk_canonical_refs = canonical_refs_for_chunk([], content)
+
+        chunk = Chunk(
+            chunk_id=T.make_chunk_id(ctx.document_id, chunk_idx),
+            document_id=ctx.document_id,
+            chunk_type="image",
+            content_format="markdown",
+            content=content,
+            structure_path=[],
+            page_refs=[image.page_id] if image.page_id else [],
+            image_refs=[image.image_id],
+            token_estimate=len(content) // 4,
+            confidence=image.confidence.overall,
+            degraded=image.confidence.degraded or (image.evidence_status == "unreadable"),
+            jurisdiction=document.metadata.jurisdiction,
+            version_label=document.metadata.version_label or "",
+            document_type=document.metadata.document_type,
+            language=chunk_lang,
+            canonical_refs=chunk_canonical_refs,
+            hierarchy_path="",
+        )
+        chunks.append(chunk)
+        chunk_idx += 1
+
+    # ----------------------------------------------------------------
+    # Validation pass: flag and warn about empty chunks
+    # ----------------------------------------------------------------
+    for chunk in chunks:
+        if not chunk.content or not chunk.content.strip():
+            chunk.degraded = True
+            chunk.degraded_reasons = list(chunk.degraded_reasons) + ["empty_content"]
+            warnings.append(
+                f"Empty chunk detected: {chunk.chunk_id} (type={chunk.chunk_type})"
+            )
 
     degraded_count = sum(1 for c in chunks if c.degraded)
     chunk_set = ChunkSet(

@@ -265,35 +265,33 @@ def refs_from_structure_path(path: List[str]) -> List[str]:
 
 def canonical_refs_for_chunk(
     structure_path: List[str],
-    content: str,
+    _content: str,
 ) -> List[str]:
     """
-    Build the full set of canonical references for a chunk.
+    Build the canonical references that identify a chunk's OWN structural position.
 
-    Combines:
-    1. Refs derived from the structure path
-    2. Refs extracted from the chunk content text
+    Only refs derived from the structure_path are included. Content-text refs
+    (articles/clauses mentioned inside the chunk body) are intentionally excluded:
+    they represent citations, not the chunk's identity.
+
+    Mixing identity refs with citation refs causes the canonical index to map
+    many chunks to the same ref, inflating retrieval hit counts and making
+    cross-language hit rate meaningless.
 
     Args:
-        structure_path: list of structure label strings for this chunk
-        content:        chunk content text
+        structure_path: list of structure label strings for this chunk's position
+                        in the document hierarchy (e.g. ["Chương I", "Điều 5"])
+        _content:       reserved — not used for canonical ref extraction (kept
+                        for API stability; future phases may use it for citation lookup)
 
     Returns:
-        Deduplicated list of canonical IDs.
+        Deduplicated list of canonical IDs derived from structure_path only.
     """
-    from src.retrieval.query_normalizer import extract_refs
-
     refs: List[str] = []
     seen: Set[str] = set()
 
-    # From structure path
+    # Only use structure-path refs — these are the chunk's OWN canonical identity
     for ref in refs_from_structure_path(structure_path):
-        if ref not in seen:
-            refs.append(ref)
-            seen.add(ref)
-
-    # From content text
-    for ref in extract_refs(content):
         if ref not in seen:
             refs.append(ref)
             seen.add(ref)

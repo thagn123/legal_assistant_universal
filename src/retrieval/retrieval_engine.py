@@ -38,11 +38,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from src.schemas.chunk import Chunk, ChunkSet
 from src.retrieval.query_normalizer import normalize_query, query_to_search_terms, extract_refs
-from src.retrieval.legal_aliases import expand_query_terms, canonical_term
+from src.retrieval.legal_aliases import expand_query_terms
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +168,18 @@ class RetrievalEngine:
         """
         Pass 2: Search chunk content for any expanded alias term.
         Returns list of (chunk, matched_term).
+
+        Min-length guard: terms shorter than 2 characters are skipped — they
+        match too broadly (e.g. "1", "a") and inflate hit counts.
         """
         results: List[tuple[Chunk, str]] = []
         seen_ids: set[str] = set()
         for chunk in self.chunk_set.chunks:
             content_lower = chunk.content.lower()
             for term in expanded_terms:
-                if term and term in content_lower:
+                if not term or len(term) < 2:
+                    continue
+                if term in content_lower:
                     if chunk.chunk_id not in seen_ids:
                         results.append((chunk, term))
                         seen_ids.add(chunk.chunk_id)
@@ -236,7 +241,7 @@ class RetrievalEngine:
         self,
         chunk: Chunk,
         match_type: str,
-        matched_signal: str,
+        _matched_signal: str,
         query_terms: List[str],
     ) -> float:
         """
