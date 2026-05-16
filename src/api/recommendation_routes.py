@@ -405,12 +405,12 @@ def recommend_checklists(
 # ---------------------------------------------------------------------------
 
 
-@interact_router.post("/log", status_code=204)
+@interact_router.post("/log", status_code=200)
 def log_interaction(
     body: InteractionLogRequest,
     request: Request,
     user_id: str = Depends(require_user),
-) -> None:
+) -> dict:
     """
     Log a user interaction to power collaborative filtering recommendations.
 
@@ -424,6 +424,7 @@ def log_interaction(
         context=body.context,
         chunk_id=body.chunk_id,
     )
+    return {"logged": True}
 
 
 # ---------------------------------------------------------------------------
