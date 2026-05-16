@@ -110,6 +110,23 @@ CREATE TABLE IF NOT EXISTS audit_log (
     output_hash TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS file_uploads (
+    doc_id    TEXT PRIMARY KEY,
+    file_path TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    doc_id         TEXT PRIMARY KEY,
+    chunk_set_json TEXT NOT NULL,
+    created_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graphs (
+    doc_id     TEXT PRIMARY KEY,
+    graph_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -378,6 +395,69 @@ class StorageLayer:
             )
             self._conn.commit()
         return record
+
+    # ------------------------------------------------------------------
+    # File uploads (path registry)
+    # ------------------------------------------------------------------
+
+    def save_file_path(self, doc_id: str, file_path: str) -> None:
+        """Register the on-disk path for an uploaded document."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO file_uploads(doc_id, file_path) VALUES (?,?)",
+                (doc_id, file_path),
+            )
+            self._conn.commit()
+
+    def get_file_path(self, doc_id: str) -> Optional[str]:
+        """Return the on-disk path for a document, or None if not registered."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT file_path FROM file_uploads WHERE doc_id=?", (doc_id,)
+            ).fetchone()
+        return row["file_path"] if row else None
+
+    # ------------------------------------------------------------------
+    # Chunk sets (post-pipeline artifacts)
+    # ------------------------------------------------------------------
+
+    def save_chunk_set(self, doc_id: str, chunk_set_json: str) -> None:
+        """Persist the serialised ChunkSet for a document."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO chunks(doc_id, chunk_set_json, created_at) VALUES (?,?,?)",
+                (doc_id, chunk_set_json, _now()),
+            )
+            self._conn.commit()
+
+    def load_chunk_set_json(self, doc_id: str) -> Optional[str]:
+        """Return the raw JSON string of a document's ChunkSet, or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT chunk_set_json FROM chunks WHERE doc_id=?", (doc_id,)
+            ).fetchone()
+        return row["chunk_set_json"] if row else None
+
+    # ------------------------------------------------------------------
+    # Graphs (post-pipeline artifacts)
+    # ------------------------------------------------------------------
+
+    def save_graph(self, doc_id: str, graph_json: str) -> None:
+        """Persist the serialised GraphSubgraph for a document."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO graphs(doc_id, graph_json, created_at) VALUES (?,?,?)",
+                (doc_id, graph_json, _now()),
+            )
+            self._conn.commit()
+
+    def load_graph_json(self, doc_id: str) -> Optional[str]:
+        """Return the raw JSON string of a document's GraphSubgraph, or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT graph_json FROM graphs WHERE doc_id=?", (doc_id,)
+            ).fetchone()
+        return row["graph_json"] if row else None
 
     def close(self) -> None:
         """Close the underlying SQLite connection (required on Windows before deleting the file)."""

@@ -55,6 +55,9 @@ class PipelineOrchestrator:
     def __init__(self, config: PipelineConfig) -> None:
         self.config = config
         self.document_graphs: List = []  # GraphSubgraph per doc — used for cross-doc ALIAS_OF
+        # Artifacts from the most recent run() call — used by the job processor
+        self.last_chunk_set = None   # ChunkSet | None
+        self.last_graph = None       # GraphSubgraph | None
 
     def run(self, source_path: Path, trace_id: Optional[str] = None) -> DocumentEvalResult:
         """
@@ -158,6 +161,9 @@ class PipelineOrchestrator:
             _graph = ctx.get("graph")
             if _graph is not None:
                 self.document_graphs.append(_graph)
+            # Expose for job processor
+            self.last_graph = _graph
+            self.last_chunk_set = ctx.get("chunk_set")
 
         # ----------------------------------------------------------------
         # Stage 8: Retrieval smoke test

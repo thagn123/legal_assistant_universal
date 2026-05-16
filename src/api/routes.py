@@ -14,10 +14,13 @@ Routes:
 
 from __future__ import annotations
 
+import base64
 import uuid
+from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 
 from src.actions.action_engine import ActionEngine
 from src.actions.action_schema import ActionRequest as EngineActionRequest
@@ -43,6 +46,29 @@ router = APIRouter()
 
 _action_engine = ActionEngine()
 _reasoning_engine = ReasoningEngine()
+
+
+# ---------------------------------------------------------------------------
+# Auth registration
+# ---------------------------------------------------------------------------
+
+
+class RegisterRequest(BaseModel):
+    pass  # user_id is auto-assigned; caller receives the API key
+
+
+class RegisterResponse(BaseModel):
+    user_id: str
+    api_key: str
+
+
+@router.post("/auth/register", response_model=RegisterResponse, status_code=201)
+def register(request: Request) -> RegisterResponse:
+    """Create a new user and return a fresh API key."""
+    storage: StorageLayer = get_storage(request)
+    api_key = str(uuid.uuid4())
+    record = storage.create_user(api_key)
+    return RegisterResponse(user_id=record.user_id, api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -76,18 +102,28 @@ def _get_bundles(
     request: Request,
     user_id: str,
     document_ids: List[str],
+    query: str = "",
+    query_id: str = "",
 ) -> List[EvidenceBundle]:
     """
     Build evidence bundles for a query or action.
 
-    If app.state.bundle_provider is set (injected in tests), delegate to it.
-    Otherwise returns a stub empty bundle — real pipeline integration
-    (loading indexed chunks, running retrieval) is a post-Phase-10 concern.
+    Priority:
+    1. app.state.bundle_provider — injected in tests for deterministic results.
+    2. app.state.index_store     — real retrieval over stored chunks/graph.
+    3. Fallback empty bundle     — when no index is configured.
     """
     provider = getattr(request.app.state, "bundle_provider", None)
     if provider is not None:
         return provider(user_id, document_ids)
-    qid = "q_" + str(uuid.uuid4())[:8]
+
+    index_store = getattr(request.app.state, "index_store", None)
+    if index_store is not None:
+        qid = query_id or ("q_" + str(uuid.uuid4())[:8])
+        storage: StorageLayer = get_storage(request)
+        return index_store.get_bundles(storage, user_id, document_ids, query, qid)
+
+    qid = query_id or ("q_" + str(uuid.uuid4())[:8])
     return [empty_bundle(qid, "Document index not yet built for this document space.")]
 
 
@@ -109,6 +145,33 @@ def upload_document(
     storage: StorageLayer = get_storage(request)
     runner: JobRunner = get_runner(request)
     doc = storage.create_document(user_id, body.filename, dict(body.metadata))
+
+    # ── Resolve file location ───────────────────────────────────────────
+    if body.file_path:
+        # Convenience shortcut: caller supplies a local filesystem path
+        resolved = Path(body.file_path)
+        if not resolved.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"file_path does not exist on the server: {body.file_path}",
+            )
+        storage.save_file_path(doc.doc_id, str(resolved.resolve()))
+
+    elif body.content_base64:
+        # Decode base64 bytes and write to data/uploads/{doc_id}/
+        try:
+            content = base64.b64decode(body.content_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="content_base64 is not valid base64.")
+        upload_dir = Path("data/uploads") / doc.doc_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        dest = upload_dir / body.filename
+        dest.write_bytes(content)
+        storage.save_file_path(doc.doc_id, str(dest.resolve()))
+
+    # If neither is provided, the job will fail when the processor tries to find the file.
+    # This allows metadata-only registration where the file arrives later.
+
     job = runner.submit(user_id, doc.doc_id)
     return UploadResponse(doc_id=doc.doc_id, job_id=job.job_id)
 
@@ -178,8 +241,8 @@ def run_query(
     request: Request,
     user_id: str = Depends(require_user),
 ) -> QueryResponse:
-    bundles = _get_bundles(request, user_id, body.document_ids)
     query_id = body.query_id or ("q_" + str(uuid.uuid4())[:8])
+    bundles = _get_bundles(request, user_id, body.document_ids, query=body.query, query_id=query_id)
     primary = bundles[0] if bundles else empty_bundle(query_id, "No documents.")
     result = _reasoning_engine.reason(body.query, primary, query_id=query_id)
 
@@ -222,7 +285,7 @@ def run_action(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    bundles = _get_bundles(request, user_id, body.document_ids)
+    bundles = _get_bundles(request, user_id, body.document_ids, query=body.query, query_id=request_id)
     result = _action_engine.execute(engine_req, bundles)
     audit_record = audit.log_action_result(user_id, result)
 

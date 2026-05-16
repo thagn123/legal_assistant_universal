@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field
 
 class UploadRequest(BaseModel):
     filename: str
-    content_base64: str = ""
+    content_base64: str = ""   # base64-encoded file bytes (for API uploads)
+    file_path: str = ""        # local filesystem path shortcut (e.g. raw_data/doc.doc)
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 
