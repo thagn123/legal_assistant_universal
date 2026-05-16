@@ -161,3 +161,6 @@ reports/eval_report_*.md
 
 # Claude Code
 .claude/settings.local.json
+
+# Runtime data (SQLite DB and WAL files)
+data/
