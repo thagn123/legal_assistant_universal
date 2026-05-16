@@ -20,7 +20,10 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+
+load_dotenv()  # reads .env from project root (no-op if absent)
 
 from src.api.recommendation_routes import agent_router, behavior_router, intelligence_router, interact_router, rec_router
 from src.api.routes import router
@@ -112,6 +115,17 @@ def create_app(
                 "Recommendation endpoints will return 503. "
                 "Start MongoDB with: docker compose up -d"
             )
+
+    # ── Health endpoint ───────────────────────────────────────────────────────
+    @app.get("/health", tags=["system"])
+    def health() -> dict:
+        """Liveness probe — returns service status and MongoDB connectivity."""
+        mongo_ok = mongo_ping()
+        return {
+            "status": "ok",
+            "mongodb": "connected" if mongo_ok else "unavailable",
+            "version": app.version,
+        }
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(router)

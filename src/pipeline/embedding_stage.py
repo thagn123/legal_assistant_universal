@@ -14,7 +14,7 @@ Public API:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,18 @@ def _get_model():
                 "sentence-transformers not installed. "
                 "Run: pip install sentence-transformers  "
                 "Vector search will fall back to keyword search."
+            )
+            _model = None
+        except Exception as exc:
+            # Catches torch/triton version mismatches (e.g. triton AttrsDescriptor error)
+            # The system falls back to keyword-only search gracefully.
+            logger.warning(
+                "Embedding model failed to load (%s: %s). "
+                "Tip: run `pip install torch --index-url https://download.pytorch.org/whl/cpu` "
+                "to install a CPU-only torch that avoids triton conflicts. "
+                "Vector search will fall back to keyword search.",
+                type(exc).__name__,
+                str(exc)[:120],
             )
             _model = None
     return _model

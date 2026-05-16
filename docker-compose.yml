@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ── MongoDB Atlas Local ──────────────────────────────────────────────────────
   # Supports $vectorSearch natively (same API as Atlas Cloud).
@@ -34,15 +32,17 @@ services:
         condition: service_healthy
     volumes:
       - lka_data:/data
+    env_file:
+      - .env
     environment:
+      MONGO_URI: "mongodb://mongodb:27017/?directConnection=true"
+      MONGO_DB: "legal_knowledge_assistant"
       PIPELINE_INPUT: /data/uploads
       PIPELINE_OUTPUT: /data/reports
       LOG_LEVEL: INFO
-      MONGO_URI: "mongodb://mongodb:27017/?directConnection=true"
-      MONGO_DB: "legal_knowledge_assistant"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
