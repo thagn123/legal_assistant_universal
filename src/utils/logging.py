@@ -133,7 +133,11 @@ class PipelineLogger:
         # Standard Python logger (human-readable console output)
         self._logger = logging.getLogger(f"legal_graphrag.{module}")
         if not self._logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
+            # Use errors='backslashreplace' so Vietnamese chars don't crash
+            # on Windows consoles with cp1252 encoding
+            stream = open(sys.stdout.fileno(), mode="w", encoding="utf-8",
+                          errors="backslashreplace", closefd=False, buffering=1)
+            handler = logging.StreamHandler(stream)
             handler.setFormatter(
                 logging.Formatter("[%(levelname)s] %(name)s — %(message)s")
             )

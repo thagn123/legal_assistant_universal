@@ -8,7 +8,7 @@ echo ============================================================
 echo.
 
 :: ── Check Docker Desktop is running ─────────────────────────────────────────
-docker info >nul 2>&1
+docker --context desktop-linux info >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Docker Desktop is not running.
     echo         Please start Docker Desktop from the Start Menu,
@@ -21,7 +21,7 @@ echo [OK] Docker Desktop is running.
 
 :: ── Start MongoDB ────────────────────────────────────────────────────────────
 echo [..] Starting MongoDB...
-docker compose up -d mongodb
+docker --context desktop-linux compose up -d mongodb
 if errorlevel 1 (
     echo [ERROR] Failed to start MongoDB container.
     pause
@@ -33,7 +33,7 @@ echo [..] Waiting for MongoDB to be ready (up to 60s)...
 set /a tries=0
 :waitloop
 set /a tries+=1
-docker inspect --format="{{.State.Health.Status}}" lka_mongodb 2>nul | findstr /i "healthy" >nul
+docker --context desktop-linux inspect --format="{{.State.Health.Status}}" lka_mongodb 2>nul | findstr /i "healthy" >nul
 if not errorlevel 1 goto mongo_ready
 if !tries! GEQ 12 (
     echo [WARN] MongoDB health check timed out — continuing anyway.
@@ -58,6 +58,7 @@ echo.
 echo      Press Ctrl+C to stop.
 echo.
 
+set PYTHONUTF8=1
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 endlocal
