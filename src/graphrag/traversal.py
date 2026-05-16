@@ -140,7 +140,13 @@ _EDGE_WEIGHTS: Dict[str, float] = {
     "EXCEPTED_BY":       0.65,
     "ENFORCED_BY":       0.60,
     "MENTIONS":          0.50,
-    "AMENDS":            0.75,
+    "AMENDS":            0.85,
+    # Legal amendment, override, and conflict edges
+    "OVERRIDES":         0.92,
+    "INVALIDATES":       0.90,
+    "CONFLICTS_WITH":    0.88,
+    "REQUIRES":          0.82,
+    "DEPENDS_ON":        0.78,
     # Alias (cross-language)
     "ALIAS_OF":          0.70,
     # Default

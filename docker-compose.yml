@@ -1,17 +1,45 @@
 version: "3.9"
 
 services:
+  # ── MongoDB Atlas Local ──────────────────────────────────────────────────────
+  # Supports $vectorSearch natively (same API as Atlas Cloud).
+  # Run:  docker compose up -d
+  # Stop: docker compose down
+  mongodb:
+    image: mongodb/mongodb-atlas-local:latest
+    container_name: lka_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      DO_NOT_TRACK: "1"
+    healthcheck:
+      test: >
+        echo 'db.runCommand("ping").ok'
+        | mongosh localhost:27017/test --quiet
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Legal Knowledge Assistant API ────────────────────────────────────────────
   api:
     build: .
     ports:
       - "8000:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
     volumes:
-      # Persist SQLite DB and uploaded files across container restarts
       - lka_data:/data
     environment:
       PIPELINE_INPUT: /data/uploads
       PIPELINE_OUTPUT: /data/reports
       LOG_LEVEL: INFO
+      MONGO_URI: "mongodb://mongodb:27017/?directConnection=true"
+      MONGO_DB: "legal_knowledge_assistant"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
@@ -22,3 +50,5 @@ services:
 volumes:
   lka_data:
     driver: local
+  mongodb_data:
+    name: lka_mongodb_data

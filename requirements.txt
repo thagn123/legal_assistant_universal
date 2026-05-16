@@ -40,14 +40,18 @@ Pillow>=10.0.0
 # pdf2image>=1.16.0
 # poppler-utils must also be installed on the OS
 
-# Optional: AI-assisted repair (not used by default)
-# openai>=1.0.0
-# anthropic>=0.20.0
+# AI/LLM integration (tool calling, legal synthesis)
+openai>=1.0.0
 
 # Phase 10: Product Runtime API
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 httpx>=0.24.0          # required by FastAPI TestClient
+
+# Phase 11: MongoDB Vector Search + Recommendation Engine
+pymongo>=4.6.0                          # MongoDB driver (sync)
+sentence-transformers>=2.7.0            # Multilingual embeddings (paraphrase-multilingual-MiniLM-L12-v2)
+numpy>=1.24.0                           # Required by sentence-transformers
 
 # Development / testing
 pytest>=7.4.0

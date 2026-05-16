@@ -67,6 +67,11 @@ EDGE_TYPES = frozenset([
     "SUPPORTS",          # evidence -> claim
     "CONTRADICTS",       # node -> node (requires explicit evidence)
     "AMENDS",            # source unit -> target source unit
+    "OVERRIDES",         # newer rule overrides older rule
+    "INVALIDATES",       # ruling/amendment invalidates a prior rule
+    "CONFLICTS_WITH",    # two rules in direct conflict
+    "REQUIRES",          # rule/clause requires another rule to be satisfied first
+    "DEPENDS_ON",        # logical dependency between nodes
     "ALIAS_OF",          # multilingual: node A is the cross-language alias of node B
 ])
 
@@ -76,6 +81,7 @@ CITATION_EDGES = frozenset(["CITES", "RESOLVES_TO", "REFERS_TO"])
 SEMANTIC_EDGES = frozenset([
     "MENTIONS", "DEFINES", "APPLIES_TO", "IMPOSES", "QUALIFIED_BY",
     "EXCEPTED_BY", "ENFORCED_BY", "SUPPORTS", "CONTRADICTS", "AMENDS",
+    "OVERRIDES", "INVALIDATES", "CONFLICTS_WITH", "REQUIRES", "DEPENDS_ON",
 ])
 ALIAS_EDGES = frozenset(["ALIAS_OF"])
 
