@@ -13,7 +13,7 @@ import {
   X,
   Scale
 } from 'lucide-react';
-import { apiFetch, TemplateRecommendation } from '../lib/api';
+import { apiFetch, TemplateRecommendation, logInteraction } from '../lib/api';
 import { cn } from '../lib/api';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ import { cn } from '../lib/api';
 
 function TemplatePreviewModal({ tpl, onClose }: { tpl: TemplateRecommendation; onClose: () => void }) {
   const downloadTemplate = () => {
+    logInteraction({ action_type: 'download', context: { contract_type: tpl.contract_type, industry: tpl.industry, template_id: tpl.id } });
     const lines = [
       `MẪU HỢP ĐỒNG: ${tpl.name.toUpperCase()}`,
       `Ngành nghề: ${tpl.industry}`,
@@ -145,6 +146,7 @@ export function Templates() {
   useEffect(() => { fetchTemplates(); }, []);
 
   const downloadTemplate = (tpl: TemplateRecommendation) => {
+    logInteraction({ action_type: 'download', context: { contract_type: tpl.contract_type, industry: tpl.industry, template_id: tpl.id } });
     const lines = [
       `MẪU HỢP ĐỒNG: ${tpl.name.toUpperCase()}`,
       `Ngành nghề: ${tpl.industry} · ${tpl.contract_type}`,

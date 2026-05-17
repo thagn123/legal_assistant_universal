@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CheckSquare,
   Printer,
@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   Lock
 } from 'lucide-react';
-import { apiFetch, Checklist } from '../lib/api';
+import { apiFetch, Checklist, getChecklistProgress, saveChecklistProgress, logInteraction } from '../lib/api';
 import { cn } from '../lib/api';
 
 export function Checklists() {
@@ -24,6 +24,7 @@ export function Checklists() {
   const [isLoading, setIsLoading] = useState(false);
   // checked items: key = `${checklistId}:${categoryIdx}:${itemIdx}`
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const fetchChecklists = async () => {
     setIsLoading(true);
@@ -32,8 +33,19 @@ export function Checklists() {
         method: 'POST',
         body: JSON.stringify({ business_type: businessType, transaction_type: transactionType })
       });
-      setChecklists(Array.isArray(data) ? data : []);
-      setChecked(new Set()); // reset checked when list changes
+      const cls = Array.isArray(data) ? data : [];
+      setChecklists(cls);
+      logInteraction({ action_type: 'view', context: { business_type: businessType, transaction_type: transactionType } });
+
+      // Load persisted progress for each checklist
+      const initialChecked = new Set<string>();
+      await Promise.all(cls.map(async (cl) => {
+        try {
+          const prog = await getChecklistProgress(cl.id);
+          prog.checked_items.forEach(k => initialChecked.add(k));
+        } catch { /* ignore if no progress saved yet */ }
+      }));
+      setChecked(initialChecked);
     } catch (e) {
       console.error(e);
     } finally {
@@ -47,6 +59,15 @@ export function Checklists() {
     setChecked(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
+
+      // Debounce save for the affected checklist
+      const checklistId = key.split(':')[0];
+      if (saveTimers.current[checklistId]) clearTimeout(saveTimers.current[checklistId]);
+      saveTimers.current[checklistId] = setTimeout(() => {
+        const checkedForList = [...next].filter(k => k.startsWith(checklistId + ':'));
+        saveChecklistProgress(checklistId, checkedForList).catch(() => {});
+      }, 800);
+
       return next;
     });
   };

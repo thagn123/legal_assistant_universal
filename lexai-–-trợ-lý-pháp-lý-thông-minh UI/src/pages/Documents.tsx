@@ -9,7 +9,7 @@ import {
   Download, X, Upload, Loader2, CheckCircle2,
   ExternalLink, AlertCircle
 } from 'lucide-react';
-import { apiFetch, DocRecommendation, CaseRecommendation, LAW_TYPE_LABELS, getUserId } from '../lib/api';
+import { apiFetch, DocRecommendation, CaseRecommendation, LAW_TYPE_LABELS, getUserId, getDocumentContent, downloadDocument, DocumentContent, logInteraction } from '../lib/api';
 import { LawTypeBadge, ScoreBadge, InteractionButtons } from '../components/ui/Shared';
 import { cn, API_BASE } from '../lib/api';
 
@@ -29,15 +29,31 @@ interface UserDoc {
 // ---------------------------------------------------------------------------
 
 function DocDetailModal({ doc, onClose }: { doc: DocRecommendation; onClose: () => void }) {
-  const downloadContent = () => {
-    const text = `Tài liệu: ${doc.id}\nLĩnh vực: ${LAW_TYPE_LABELS[doc.law_type] || doc.law_type}\nMức độ phù hợp: ${(doc.final_score * 100).toFixed(1)}%\n\nNội dung:\n${doc.snippet}\n\nLý do đề xuất: ${doc.reason}`;
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lexai_${doc.id.slice(0, 16)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const [activeTab, setActiveTab] = useState<'rec' | 'content'>('rec');
+  const [content, setContent] = useState<DocumentContent | null>(null);
+  const [contentLoading, setContentLoading] = useState(false);
+
+  const loadContent = async () => {
+    if (content) return;
+    setContentLoading(true);
+    try {
+      const data = await getDocumentContent(doc.id);
+      setContent(data);
+    } catch {
+      setContent({ doc_id: doc.id, filename: '', status: '', chunk_count: 0, law_type: '', extracted_text: 'Không thể tải nội dung tài liệu.' });
+    } finally {
+      setContentLoading(false);
+    }
+  };
+
+  const handleTabChange = (tab: 'rec' | 'content') => {
+    setActiveTab(tab);
+    if (tab === 'content') loadContent();
+  };
+
+  const handleDownload = () => {
+    logInteraction({ action_type: 'download', doc_id: doc.id });
+    downloadDocument(doc.id);
   };
 
   return (
@@ -55,51 +71,90 @@ function DocDetailModal({ doc, onClose }: { doc: DocRecommendation; onClose: () 
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-white/10 bg-white/3">
+          <button
+            onClick={() => handleTabChange('rec')}
+            className={cn("px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all", activeTab === 'rec' ? 'text-legal-gold border-b-2 border-legal-gold' : 'text-slate-500 hover:text-white')}
+          >
+            Đề xuất
+          </button>
+          <button
+            onClick={() => handleTabChange('content')}
+            className={cn("px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all", activeTab === 'content' ? 'text-legal-gold border-b-2 border-legal-gold' : 'text-slate-500 hover:text-white')}
+          >
+            Nội dung văn bản
+          </button>
+        </div>
+
         {/* Content */}
-        <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">ID tài liệu</p>
-            <p className="text-xs font-mono text-slate-400 break-all">{doc.id}</p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nội dung trích xuất</p>
-            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
-              <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{doc.snippet}</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Lý do đề xuất</p>
-            <p className="text-xs text-slate-400 italic">"{doc.reason}"</p>
-          </div>
-
-          {/* Score breakdown */}
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cơ cấu điểm số</p>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(doc.scores).map(([key, val]) => (
-                <div key={key} className="p-3 bg-white/5 rounded-lg border border-white/10">
-                  <p className="text-[9px] text-slate-500 uppercase mb-2">{key}</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-legal-gold/70 rounded-full" style={{ width: `${val * 100}%` }} />
+        <div className="p-6 max-h-[60vh] overflow-y-auto">
+          {activeTab === 'rec' && (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">ID tài liệu</p>
+                <p className="text-xs font-mono text-slate-400 break-all">{doc.id}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nội dung trích xuất</p>
+                <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                  <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{doc.snippet}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Lý do đề xuất</p>
+                <p className="text-xs text-slate-400 italic">"{doc.reason}"</p>
+              </div>
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cơ cấu điểm số</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(doc.scores).map(([key, val]) => (
+                    <div key={key} className="p-3 bg-white/5 rounded-lg border border-white/10">
+                      <p className="text-[9px] text-slate-500 uppercase mb-2">{key}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-legal-gold/70 rounded-full" style={{ width: `${val * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-300">{(val * 100).toFixed(0)}%</span>
+                      </div>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-300">{(val * 100).toFixed(0)}%</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'content' && (
+            <div>
+              {contentLoading ? (
+                <div className="flex items-center justify-center py-12 gap-3 text-slate-400">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span className="text-sm">Đang tải nội dung...</span>
+                </div>
+              ) : content ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                    <span>{content.chunk_count} đoạn văn bản</span>
+                    <span>{content.law_type && (LAW_TYPE_LABELS[content.law_type] || content.law_type)}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-4 max-h-[45vh] overflow-y-auto">
+                    <pre className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">
+                      {content.extracted_text || 'Nội dung văn bản chưa được xử lý.'}
+                    </pre>
                   </div>
                 </div>
-              ))}
+              ) : null}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-4 bg-white/5 border-t border-white/10 flex justify-end gap-3">
           <button
-            onClick={downloadContent}
+            onClick={handleDownload}
             className="flex items-center gap-2 px-4 py-2 bg-legal-gold text-legal-navy rounded-xl text-xs font-bold hover:scale-105 transition-all"
           >
-            <Download size={14} /> Tải xuống
+            <Download size={14} /> Tải file gốc
           </button>
           <button
             onClick={onClose}
@@ -195,9 +250,18 @@ function UserDocUpload() {
                   <p className="text-[10px] text-slate-500">{new Date(doc.created_at).toLocaleDateString('vi-VN')}</p>
                 </div>
               </div>
-              <span className={cn("text-[10px] font-bold uppercase", statusColor(doc.status))}>
-                {doc.status === 'complete' ? '✓ Xong' : doc.status === 'failed' ? '✗ Lỗi' : '⏳ Đang xử lý'}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={cn("text-[10px] font-bold uppercase", statusColor(doc.status))}>
+                  {doc.status === 'complete' ? '✓ Xong' : doc.status === 'failed' ? '✗ Lỗi' : '⏳ Xử lý'}
+                </span>
+                <button
+                  onClick={() => { logInteraction({ action_type: 'download', doc_id: doc.doc_id }); downloadDocument(doc.doc_id); }}
+                  className="p-1.5 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-lg transition-all"
+                  title="Tải file gốc"
+                >
+                  <Download size={13} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -340,7 +404,7 @@ export function Documents() {
                 <p className="text-[10px] text-slate-500 italic mb-4 line-clamp-1">"{doc.reason}"</p>
                 <div className="flex items-center justify-between">
                   <button
-                    onClick={() => setDetailDoc(doc)}
+                    onClick={() => { logInteraction({ action_type: 'view', doc_id: doc.id }); setDetailDoc(doc); }}
                     className="text-xs font-bold text-legal-gold hover:underline flex items-center gap-1"
                   >
                     Chi tiết <ExternalLink size={10} />

@@ -4,13 +4,13 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Search, 
-  ChevronRight, 
-  Info, 
-  AlertTriangle, 
-  Scale, 
-  CheckCircle2, 
+import {
+  Search,
+  ChevronRight,
+  Info,
+  AlertTriangle,
+  Scale,
+  CheckCircle2,
   ChevronDown,
   Download,
   Save,
@@ -20,10 +20,13 @@ import {
   Zap,
   Wrench,
   User,
-  History
+  History,
+  Paperclip,
+  X as XIcon,
+  BrainCircuit,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning } from '../lib/api';
+import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace } from '../lib/api';
 import { LawTypeBadge, InteractionButtons } from '../components/ui/Shared';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { cn } from '../lib/api';
@@ -98,6 +101,9 @@ export function Analyze() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [history, setHistory] = useState<ChatTurn[]>([]);
   const [analyzeError, setAnalyzeError] = useState('');
+  const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Sessions persisted in localStorage
@@ -157,6 +163,7 @@ export function Analyze() {
       clearInterval(stageInterval);
       setCurrentStage(7);
       setSessionId(data.session_id);
+      logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
       const newTurns: ChatTurn[] = [userMessage, { role: 'assistant', result: data }];
       setHistory(prev => [...prev, { role: 'assistant', result: data }]);
@@ -180,6 +187,25 @@ export function Analyze() {
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
       setIsAnalyzing(false);
       setCurrentStage(0);
+    }
+  };
+
+  const handleFileAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!sessionId) {
+      setAnalyzeError('Vui lòng gửi ít nhất một câu hỏi trước khi đính kèm tài liệu.');
+      return;
+    }
+    setEvidenceUploading(true);
+    try {
+      const result = await uploadEvidence(sessionId, file);
+      setEvidenceChip({ filename: result.filename, evidenceId: result.evidence_id });
+    } catch (err: any) {
+      setAnalyzeError(err.message || 'Không thể tải tài liệu lên.');
+    } finally {
+      setEvidenceUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -385,8 +411,19 @@ export function Analyze() {
              </div>
           </div>
 
+          {/* Evidence chip */}
+          {evidenceChip && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-legal-gold/10 border border-legal-gold/20 rounded-xl w-fit">
+              <Paperclip size={12} className="text-legal-gold" />
+              <span className="text-[11px] text-legal-gold font-medium">{evidenceChip.filename}</span>
+              <button onClick={() => setEvidenceChip(null)} className="text-slate-500 hover:text-white ml-1">
+                <XIcon size={12} />
+              </button>
+            </div>
+          )}
+
           <div className="relative group">
-            <textarea 
+            <textarea
               value={situation}
               onChange={(e) => setSituation(e.target.value)}
               onKeyDown={(e) => {
@@ -396,22 +433,100 @@ export function Analyze() {
                 }
               }}
               placeholder="Nhập câu hỏi hoặc tình huống pháp lý..."
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-16 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-28 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
               rows={2}
             />
-            <button 
-              onClick={handleAnalyze}
-              disabled={isAnalyzing || !situation.trim()}
-              className="absolute right-4 bottom-4 w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
-            >
-              <Send size={20} />
-            </button>
+            <div className="absolute right-4 bottom-4 flex items-center gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isAnalyzing || evidenceUploading}
+                title="Đính kèm tài liệu bổ sung"
+                className="w-9 h-9 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all"
+              >
+                {evidenceUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+              </button>
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzing || !situation.trim()}
+                className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.doc,.txt"
+              className="hidden"
+              onChange={handleFileAttach}
+            />
           </div>
         </div>
       </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TracePanel — reasoning trace accordion (Phase 14)
+// ---------------------------------------------------------------------------
+
+function TracePanel({ traceId }: { traceId: string }) {
+  const [trace, setTrace] = useState<ReasoningTrace | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleToggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !trace && !loading) {
+      setLoading(true);
+      const data = await getTrace(traceId);
+      setTrace(data);
+      setLoading(false);
+    }
+  };
+
+  const stageColor = (s: any) => {
+    if (s.error) return 'border-red-500/30 bg-red-500/5';
+    if (s.warnings?.length) return 'border-yellow-500/30 bg-yellow-500/5';
+    return 'border-green-500/20 bg-green-500/5';
+  };
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-4">
+      <button
+        onClick={handleToggle}
+        className="flex items-center gap-2 text-slate-500 hover:text-legal-gold transition-colors text-[11px] font-bold uppercase tracking-wider"
+      >
+        {loading ? <Loader2 size={13} className="animate-spin" /> : <BrainCircuit size={13} />}
+        Xem lý luận AI
+        <ChevronDown size={12} className={cn("transition-transform", open ? "rotate-180" : "")} />
+      </button>
+
+      {open && trace && (
+        <div className="mt-3 space-y-2 animate-in fade-in duration-200">
+          {trace.stages.map((s, i) => (
+            <div key={i} className={`border rounded-xl p-3 ${stageColor(s)}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider">{s.stage_name}</span>
+                <span className="text-[9px] font-mono text-slate-500">{s.duration_ms?.toFixed(0) ?? '—'}ms</span>
+              </div>
+              {s.output_summary && <p className="text-[11px] text-slate-400 leading-snug">{s.output_summary}</p>}
+              {s.warnings?.length > 0 && (
+                <p className="text-[10px] text-yellow-400 mt-1">⚠ {s.warnings.join('; ')}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {open && !trace && !loading && (
+        <p className="mt-2 text-[11px] text-slate-500 italic">Không tìm thấy dữ liệu lý luận.</p>
+      )}
     </div>
   );
 }
@@ -615,6 +730,9 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
             </div>
           </details>
         )}
+
+        {/* Reasoning trace */}
+        {result.trace_id && <TracePanel traceId={result.trace_id} />}
       </div>
     </div>
   );

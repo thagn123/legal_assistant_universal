@@ -1095,6 +1095,45 @@ class RoleRecommendResponse(BaseModel):
     quick_links: List[QuickLinkOut]
 
 
+# ---------------------------------------------------------------------------
+# Checklist Progress  (GET/POST /recommendations/checklists/{id}/progress)
+# ---------------------------------------------------------------------------
+
+
+class ChecklistProgressRequest(BaseModel):
+    checked_items: List[str]
+
+
+class ChecklistProgressResponse(BaseModel):
+    checklist_id: str
+    checked_items: List[str]
+
+
+@rec_router.get("/checklists/{checklist_id}/progress", response_model=ChecklistProgressResponse)
+def get_checklist_progress(
+    checklist_id: str,
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> ChecklistProgressResponse:
+    """Return the saved checked items for a user's checklist."""
+    vs = _get_vector_storage(request)
+    checked = vs.get_checklist_progress(user_id, checklist_id)
+    return ChecklistProgressResponse(checklist_id=checklist_id, checked_items=checked)
+
+
+@rec_router.post("/checklists/{checklist_id}/progress", response_model=ChecklistProgressResponse)
+def save_checklist_progress(
+    checklist_id: str,
+    body: ChecklistProgressRequest,
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> ChecklistProgressResponse:
+    """Persist the checked items for a user's checklist."""
+    vs = _get_vector_storage(request)
+    vs.save_checklist_progress(user_id, checklist_id, body.checked_items)
+    return ChecklistProgressResponse(checklist_id=checklist_id, checked_items=body.checked_items)
+
+
 @rec_router.post("/by-role", response_model=RoleRecommendResponse)
 def recommend_by_role(
     body: RoleRequest,

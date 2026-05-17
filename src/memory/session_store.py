@@ -254,6 +254,27 @@ class SessionStore:
             logger.warning("get_user_sessions failed: %s", exc)
             return []
 
+    # ── Evidence attachment ───────────────────────────────────────────────────
+
+    def append_evidence(self, session_id: str, evidence: Dict[str, Any]) -> None:
+        """Append an evidence snippet to session.evidence_texts (max 10 kept)."""
+        try:
+            self.sessions.update_one(
+                {"session_id": session_id},
+                {
+                    "$push": {
+                        "evidence_texts": {
+                            "$each": [evidence],
+                            "$slice": -10,
+                        }
+                    },
+                    "$set": {"last_active": _now()},
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("append_evidence failed: %s", exc)
+
     # ── Context cache ─────────────────────────────────────────────────────────
 
     def cache_retrieval_context(

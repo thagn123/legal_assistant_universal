@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: lexai-backend
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Set these in the Render dashboard (Environment tab) — do NOT hardcode
+      - key: MONGO_URI
+        sync: false          # MongoDB Atlas connection string
+      - key: OPENAI_API_KEY
+        sync: false          # Optional — system falls back to deterministic if absent
+      - key: ADMIN_API_KEY
+        sync: false          # Admin panel key (e.g. a strong random string)
+
+      # Static config
+      - key: MONGO_DB
+        value: legal_knowledge_assistant
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_MAX_TOKENS
+        value: "2048"
+      - key: PIPELINE_INPUT
+        value: /data/uploads
+      - key: PIPELINE_OUTPUT
+        value: /data/reports
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ENABLE_OCR
+        value: "true"
+      - key: ENABLE_GRAPH
+        value: "true"
+      - key: PYTHONUTF8
+        value: "1"

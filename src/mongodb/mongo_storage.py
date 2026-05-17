@@ -62,9 +62,10 @@ class VectorStorage:
         self.templates = db["templates"]
         self.risks = db["risks"]
         self.checklists = db["checklists"]
-        self.legal_cases = db["legal_cases"]          # NEW: similar case retrieval
-        self.contract_clauses = db["contract_clauses"]  # NEW: clause analysis cache
-        self.user_profiles = db["user_profiles"]         # user aggregate embeddings for user-user CF
+        self.legal_cases = db["legal_cases"]
+        self.contract_clauses = db["contract_clauses"]
+        self.user_profiles = db["user_profiles"]
+        self.checklist_progress = db["user_checklist_progress"]
 
     # ── Chunk vectors ────────────────────────────────────────────────────────
 
@@ -95,6 +96,49 @@ class VectorStorage:
             },
             upsert=True,
         )
+
+    def get_chunks_by_document(
+        self,
+        doc_id: str,
+        user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return all chunks for a document ordered by position (embedding excluded)."""
+        query: Dict[str, Any] = {"doc_id": doc_id}
+        if user_id:
+            query["$or"] = [{"user_id": user_id}, {"is_global": True}]
+        try:
+            return list(
+                self.chunks.find(query, {"_id": 0, "embedding": 0})
+                .sort("position", 1)
+                .limit(500)
+            )
+        except Exception as exc:
+            logger.warning("get_chunks_by_document failed for doc_id=%s: %s", doc_id, exc)
+            return []
+
+    def get_checklist_progress(self, user_id: str, checklist_id: str) -> List[str]:
+        """Return the list of checked item labels for a user's checklist."""
+        try:
+            doc = self.checklist_progress.find_one(
+                {"user_id": user_id, "checklist_id": checklist_id}, {"_id": 0}
+            )
+            return doc.get("checked_items", []) if doc else []
+        except Exception as exc:
+            logger.warning("get_checklist_progress failed: %s", exc)
+            return []
+
+    def save_checklist_progress(
+        self, user_id: str, checklist_id: str, checked_items: List[str]
+    ) -> None:
+        """Upsert the checked items for a user's checklist."""
+        try:
+            self.checklist_progress.update_one(
+                {"user_id": user_id, "checklist_id": checklist_id},
+                {"$set": {"checked_items": checked_items, "updated_at": _now()}},
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("save_checklist_progress failed: %s", exc)
 
     def delete_chunks_by_doc(self, doc_id: str) -> int:
         """Remove all chunks for a document. Returns count deleted."""

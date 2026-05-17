@@ -14,13 +14,14 @@ import {
   ShieldCheck,
   TrendingUp
 } from 'lucide-react';
-import { apiFetch, RiskAssessment } from '../lib/api';
+import { apiFetch, RiskAssessment, logInteraction } from '../lib/api';
 
 export function Risks() {
   const [activeTab, setActiveTab] = useState<'situation' | 'history'>('situation');
   const [situation, setSituation] = useState('');
   const [risks, setRisks] = useState<RiskAssessment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<'all' | 'cao' | 'trung_binh' | 'thap'>('all');
 
   const fetchRisks = async (useHistory: boolean = false) => {
     setIsLoading(true);
@@ -29,13 +30,19 @@ export function Risks() {
         method: 'POST',
         body: JSON.stringify({ situation, use_history: useHistory })
       });
-      setRisks(Array.isArray(data) ? data : []);
+      const result = Array.isArray(data) ? data : [];
+      setRisks(result);
+      if (result.length > 0) {
+        logInteraction({ action_type: 'view', context: { situation_snippet: situation.slice(0, 100) } });
+      }
     } catch (e) {
       console.error(e);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const filteredRisks = severityFilter === 'all' ? risks : risks.filter(r => r.severity === severityFilter);
 
   useEffect(() => {
     if (activeTab === 'history') {
@@ -98,18 +105,33 @@ export function Risks() {
 
       {/* RISK GRID */}
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
              <ShieldAlert className="text-legal-gold" size={18} />
              Phân tích rủi ro pháp lý
+             {risks.length > 0 && <span className="text-[10px] text-slate-600 normal-case tracking-normal font-normal">({filteredRisks.length}/{risks.length})</span>}
            </h3>
-           {isLoading && <span className="text-[10px] text-legal-gold animate-pulse font-bold uppercase tracking-widest">Đang tải biểu mẫu dữ liệu...</span>}
+           <div className="flex items-center gap-3">
+             {isLoading && <span className="text-[10px] text-legal-gold animate-pulse font-bold uppercase tracking-widest">Đang tải...</span>}
+             {risks.length > 0 && (
+               <select
+                 value={severityFilter}
+                 onChange={(e) => setSeverityFilter(e.target.value as typeof severityFilter)}
+                 className="bg-legal-navy/50 border border-white/10 rounded-lg px-3 py-1.5 text-[11px] font-bold text-slate-300 focus:border-legal-gold transition-all"
+               >
+                 <option value="all">Tất cả mức độ</option>
+                 <option value="cao">Nguy cấp</option>
+                 <option value="trung_binh">Cảnh báo</option>
+                 <option value="thap">Ổn định</option>
+               </select>
+             )}
+           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
            {isLoading ? (
              Array(3).fill(0).map((_, i) => <div key={i} className="glass-card aspect-square animate-skeleton" />)
-           ) : risks.map((risk) => (
+           ) : filteredRisks.map((risk) => (
              <div 
                key={risk.id} 
                className={`glass-card p-8 space-y-6 border-t-4 transition-all hover:scale-[1.02] ${
@@ -165,7 +187,7 @@ export function Risks() {
            ))}
         </div>
 
-        {risks.length === 0 && !isLoading && (
+        {filteredRisks.length === 0 && !isLoading && (
           <div className="py-20 flex flex-col items-center opacity-30 text-center space-y-4">
              <ShieldCheck size={64} className="text-slate-500" />
              <p className="text-sm font-bold text-slate-500">Chưa phát hiện rủi ro nào. Tuyệt vời!</p>

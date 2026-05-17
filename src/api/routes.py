@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.actions.action_engine import ActionEngine
@@ -402,6 +403,154 @@ def run_action(
 # ---------------------------------------------------------------------------
 # Audit trail
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Document content viewer & download (Phase 14)
+# ---------------------------------------------------------------------------
+
+
+def _get_vs(request: Request):
+    """Return VectorStorage from app.state, or None if MongoDB not available."""
+    return getattr(request.app.state, "vector_storage", None)
+
+
+@router.get("/documents/{doc_id}/content")
+def get_document_content(
+    doc_id: str,
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> dict:
+    """Return extracted text (chunks) for an uploaded document."""
+    storage: StorageLayer = get_storage(request)
+    doc = storage.get_document(user_id, doc_id)
+    if doc is None:
+        # fall back to global doc lookup
+        doc = storage.get_document_by_id(doc_id)
+        if doc is None or not doc.is_global:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+    vs = _get_vs(request)
+    chunks: list = []
+    if vs is not None:
+        chunks = vs.get_chunks_by_document(doc_id, user_id)
+
+    extracted_text = "\n\n---\n\n".join(c.get("content", "") for c in chunks)
+    law_type = chunks[0].get("law_type", "") if chunks else ""
+
+    return {
+        "doc_id": doc_id,
+        "filename": doc.filename,
+        "status": doc.status,
+        "chunk_count": len(chunks),
+        "law_type": law_type,
+        "extracted_text": extracted_text,
+    }
+
+
+@router.get("/documents/{doc_id}/download")
+def download_document(
+    doc_id: str,
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> FileResponse:
+    """Serve the original uploaded file for download."""
+    storage: StorageLayer = get_storage(request)
+    doc = storage.get_document(user_id, doc_id)
+    if doc is None:
+        doc = storage.get_document_by_id(doc_id)
+        if doc is None or not doc.is_global:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+    file_path = storage.get_file_path(doc_id)
+    if file_path is None or not Path(file_path).exists():
+        raise HTTPException(status_code=404, detail="File not found on disk.")
+
+    return FileResponse(
+        path=file_path,
+        filename=doc.filename,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session evidence upload (Phase 14)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sessions/{session_id}/evidence")
+async def upload_session_evidence(
+    session_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_user),
+) -> dict:
+    """
+    Upload additional evidence (PDF/DOCX/TXT) into an existing analysis session.
+    Extracted text is appended to the session context so the next /intelligence/analyze
+    call sees it without the user having to paste content manually.
+    """
+    import os
+    import tempfile
+    import uuid as _uuid
+
+    filename = file.filename or "evidence"
+    suffix = Path(filename).suffix.lower()
+    content = await file.read()
+
+    if suffix not in {".pdf", ".docx", ".doc", ".txt"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Use PDF, DOCX, DOC, or TXT.",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    extracted = ""
+    try:
+        if suffix == ".txt":
+            extracted = content.decode("utf-8", errors="replace")
+        elif suffix == ".docx":
+            import docx as python_docx
+            doc = python_docx.Document(tmp_path)
+            extracted = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        elif suffix == ".pdf":
+            from pdfminer.high_level import extract_text as _pdf_extract
+            extracted = _pdf_extract(tmp_path) or ""
+        elif suffix == ".doc":
+            import docx2txt
+            extracted = docx2txt.process(tmp_path) or ""
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not extract text: {exc}")
+    finally:
+        os.unlink(tmp_path)
+
+    snippet = extracted[:2000].strip()
+    evidence_id = "ev_" + str(_uuid.uuid4())[:8]
+
+    # Persist into MongoDB session so orchestrator picks it up on next query
+    try:
+        from src.memory.session_store import SessionStore
+        SessionStore().append_evidence(session_id, {
+            "evidence_id": evidence_id,
+            "filename": filename,
+            "snippet": snippet,
+            "char_count": len(extracted),
+        })
+    except Exception:
+        pass  # best-effort; don't fail the upload if session store is unavailable
+
+    return {
+        "evidence_id": evidence_id,
+        "session_id": session_id,
+        "filename": filename,
+        "snippet": snippet[:300],
+        "char_count": len(extracted),
+        "status": "attached",
+    }
 
 
 @router.get("/audit")
