@@ -1,6 +1,6 @@
 # ── Stage 1: Build React + Vite ─────────────────────────────────────────────
 # Build context must be set to the frontend directory:
-#   docker build -f Dockerfile.frontend "lexai-–-trợ-lý-pháp-lý-thông-minh UI"
+#   docker build -f Dockerfile.frontend frontend
 # Or via docker-compose (see docker-compose.yml frontend service).
 
 FROM node:20-alpine AS builder

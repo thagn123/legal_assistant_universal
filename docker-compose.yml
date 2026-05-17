@@ -52,7 +52,7 @@ services:
   # use simple COPY . paths without Unicode escaping issues.
   frontend:
     build:
-      context: "./lexai-–-trợ-lý-pháp-lý-thông-minh UI"
+      context: "./frontend"
       dockerfile: ../Dockerfile.frontend
       args:
         # The browser fetches this URL directly, so it must be reachable from
