@@ -885,16 +885,18 @@ class IntelligenceOut(BaseModel):
     domain_confidence: float
     situation_summary: str
     legal_position_strength: str
+    position_reasoning: str = ""
     position_score: float
     relevant_laws: List[Dict[str, Any]]
     recommended_actions: List[str]
     warnings: List[str]
-    risk_assessment: str
+    risk_assessment: Dict[str, Any]
     full_assessment: str
     citations: List[str]
     is_grounded: bool
     used_llm: bool
     stage_timings: Dict[str, float]
+    is_chitchat: bool = False
 
 
 @intelligence_router.post("/analyze", response_model=IntelligenceOut)
@@ -934,16 +936,18 @@ def intelligence_analyze(
         domain_confidence=result.domain_confidence,
         situation_summary=result.situation_summary,
         legal_position_strength=result.legal_position_strength,
+        position_reasoning=getattr(result, "position_reasoning", ""),
         position_score=result.position_score,
         relevant_laws=result.relevant_laws,
         recommended_actions=result.recommended_actions,
         warnings=result.warnings,
-        risk_assessment=result.risk_assessment,
+        risk_assessment=result.risk_assessment if isinstance(result.risk_assessment, dict) else {},
         full_assessment=result.full_assessment,
         citations=result.citations,
         is_grounded=result.is_grounded,
         used_llm=result.used_llm,
         stage_timings=result.stage_timings,
+        is_chitchat=getattr(result, "is_chitchat", False),
     )
 
 

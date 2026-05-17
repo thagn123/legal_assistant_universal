@@ -14,12 +14,14 @@ Public API:
 from __future__ import annotations
 
 import logging
+import os
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 _MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _model = None  # loaded lazily
+_model_load_failed = False  # set True after first failed load attempt
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +30,19 @@ _model = None  # loaded lazily
 
 
 def _get_model():
-    global _model
+    global _model, _model_load_failed
+    if _model_load_failed:
+        return None
     if _model is None:
         try:
+            # Hide all CUDA devices to force pure CPU operation.
+            # Prevents SIGSEGV from CUDA initialisation on some Windows setups.
+            os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Force CPU — prevent SIGSEGV
+
             from sentence_transformers import SentenceTransformer  # type: ignore
 
-            logger.info("Loading embedding model '%s' …", _MODEL_NAME)
-            _model = SentenceTransformer(_MODEL_NAME)
+            logger.info("Loading embedding model '%s' (CPU-only) …", _MODEL_NAME)
+            _model = SentenceTransformer(_MODEL_NAME, device="cpu")
             logger.info("Embedding model loaded (dim=384).")
         except ImportError:
             logger.warning(
@@ -42,19 +50,17 @@ def _get_model():
                 "Run: pip install sentence-transformers  "
                 "Vector search will fall back to keyword search."
             )
-            _model = None
+            _model_load_failed = True
         except Exception as exc:
             # Catches torch/triton version mismatches (e.g. triton AttrsDescriptor error)
             # The system falls back to keyword-only search gracefully.
             logger.warning(
                 "Embedding model failed to load (%s: %s). "
-                "Tip: run `pip install torch --index-url https://download.pytorch.org/whl/cpu` "
-                "to install a CPU-only torch that avoids triton conflicts. "
                 "Vector search will fall back to keyword search.",
                 type(exc).__name__,
                 str(exc)[:120],
             )
-            _model = None
+            _model_load_failed = True
     return _model
 
 
@@ -107,6 +113,7 @@ def embed_chunks_into_mongo(
     doc_id: str,
     user_id: str,
     vector_storage,  # src.mongodb.mongo_storage.VectorStorage
+    is_global: bool = False,
 ) -> int:
     """
     Generate embeddings for all chunks in *chunk_set* and upsert them
@@ -141,6 +148,7 @@ def embed_chunks_into_mongo(
             content=chunk.content,
             embedding=emb,
             metadata=metadata,
+            is_global=is_global,
         )
         stored += 1
 

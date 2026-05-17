@@ -79,6 +79,7 @@ class IntelligenceResult:
     stage_timings: Dict[str, float]      # stage_name → duration_ms
     ranking_weights: Dict[str, float]    # weights used in stage 6
     reasoning_trace: Optional[Dict[str, Any]] = None  # full trace dict for API response
+    is_chitchat: bool = False            # True when query is greeting/small-talk
 
 
 class OrchestratorError(Exception):
@@ -132,6 +133,10 @@ class LegalIntelligenceOrchestrator:
         Returns IntelligenceResult with optional full reasoning trace.
         """
         sid = session_id or f"orch_{uuid.uuid4().hex[:12]}"
+
+        # Fast-path: greetings/small-talk — skip the full pipeline
+        if _is_chitchat(situation):
+            return _make_chitchat_result(situation, sid)
         builder = TraceBuilder(session_id=sid, user_id=user_id, query=situation)
         trace_id = builder.trace_id
         stage_timings: Dict[str, float] = {}
@@ -205,8 +210,8 @@ class LegalIntelligenceOrchestrator:
                     tool_calls.append("retrieve_graph_context")
                     try:
                         graph_context = json.loads(graph_result).get("results", [])
-                    except Exception:
-                        pass
+                    except Exception as _ge:
+                        logger.debug("graph_context parse failed: %s", _ge)
                     d_g = (time.perf_counter() - t_g) * 1000
                     self._tracer.log_graph_traversal(
                         trace_id, len(law_refs), len(graph_context), 2, d_g
@@ -418,7 +423,7 @@ class LegalIntelligenceOrchestrator:
                 session_id=sid,
                 law_type=plan.detected_domain,
                 top_chunk_ids=[r.item_id for r in fused.results[:10]],
-                top_case_ids=[c.get("case_id", "") for c in raw_cases[:5]],
+                top_case_ids=[c["case_id"] for c in raw_cases[:5] if c.get("case_id")],
                 query_plan_dict=plan.to_dict(),
             )
             self._vs.log_interaction(
@@ -467,11 +472,97 @@ class LegalIntelligenceOrchestrator:
 # Stage helper functions
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = (
-    "Bạn là trợ lý pháp lý AI chuyên về luật Việt Nam. "
-    "Hãy phân tích tình huống pháp lý và truy xuất thông tin cần thiết để đưa ra đánh giá chính xác, "
-    "có căn cứ pháp lý. Chỉ sử dụng thông tin từ các công cụ đã được cung cấp."
+_SYSTEM_PROMPT = """Bạn là LexAI — trợ lý pháp lý AI chuyên về luật Việt Nam.
+
+Khi phân tích tình huống pháp lý, hãy trả lời theo cấu trúc:
+1. **Xác định vấn đề**: Lĩnh vực pháp lý và điểm mấu chốt
+2. **Cơ sở pháp lý**: Trích dẫn điều luật, khoản cụ thể (tên văn bản + số điều)
+3. **Đánh giá vị thế**: Quyền lợi và nghĩa vụ của các bên
+4. **Khuyến nghị thực tế**: Các bước hành động cụ thể
+
+Quy tắc:
+- Trả lời bằng tiếng Việt, rõ ràng và thực tế
+- Chỉ dùng thông tin từ dữ liệu pháp lý đã được truy xuất
+- Nếu thiếu thông tin, nêu rõ những gì cần bổ sung
+- Không sáng tạo điều luật — chỉ trích dẫn những gì có trong ngữ cảnh"""
+
+
+# ---------------------------------------------------------------------------
+# Chitchat detection
+# ---------------------------------------------------------------------------
+
+_CHITCHAT_STARTERS = (
+    "chào", "hello", "hi", "xin chào", "hey", "alo",
+    "cảm ơn", "cam on", "thanks", "thank you",
+    "bạn là ai", "bạn là gì", "mày là ai",
+    "ok", "oke", "okay", "được rồi", "tốt",
+    "xin lỗi", "sorry",
 )
+
+_LEGAL_KEYWORDS = (
+    "luật", "điều", "khoản", "hợp đồng", "đất", "tòa", "kiện",
+    "vi phạm", "quyền", "nghĩa vụ", "tranh chấp", "bồi thường",
+    "lao động", "sa thải", "nợ", "tiền", "thuê", "mua", "bán",
+    "thừa kế", "di chúc", "ly hôn", "công ty", "cổ đông",
+)
+
+
+def _is_chitchat(text: str) -> bool:
+    """Returns True for greetings/small-talk that don't need legal analysis."""
+    t = text.strip().lower()
+    if len(t) > 80:
+        return False
+    if any(kw in t for kw in _LEGAL_KEYWORDS):
+        return False
+    return any(t == p or t.startswith(p + " ") or t.startswith(p + "!") or t.startswith(p + ",")
+               for p in _CHITCHAT_STARTERS)
+
+
+def _make_chitchat_result(situation: str, session_id: str) -> "IntelligenceResult":
+    """Return a fast conversational response without running the pipeline."""
+    t = situation.strip().lower()
+    if any(kw in t for kw in ("cảm ơn", "cam on", "thanks", "thank")):
+        reply = "Không có gì! Nếu bạn có câu hỏi pháp lý, tôi luôn sẵn sàng hỗ trợ."
+    elif any(kw in t for kw in ("là ai", "là gì", "mày là")):
+        reply = (
+            "Tôi là **LexAI** — trợ lý pháp lý AI chuyên về luật Việt Nam. "
+            "Tôi có thể giúp bạn phân tích tình huống pháp lý, trích dẫn điều luật "
+            "và đề xuất hành động phù hợp trong các lĩnh vực: đất đai, hợp đồng, "
+            "lao động, doanh nghiệp, dân sự, hình sự và hành chính."
+        )
+    elif any(kw in t for kw in ("xin lỗi", "sorry")):
+        reply = "Không sao! Bạn cần tôi giúp gì về pháp lý không?"
+    else:
+        reply = (
+            "Xin chào! Tôi là **LexAI**, trợ lý pháp lý AI. "
+            "Bạn hãy mô tả tình huống pháp lý của mình — tôi sẽ phân tích quyền lợi, "
+            "trích dẫn điều luật cụ thể và đề xuất các bước thực hiện."
+        )
+    return IntelligenceResult(
+        session_id=session_id,
+        trace_id=f"chitchat_{uuid.uuid4().hex[:8]}",
+        situation_summary=situation,
+        legal_position_strength="",
+        position_score=0.0,
+        position_reasoning="",
+        relevant_laws=[],
+        similar_cases=[],
+        recommended_actions=[],
+        warnings=[],
+        risk_assessment={},
+        full_assessment=reply,
+        citations=[],
+        is_grounded=False,
+        used_llm=False,
+        tool_calls_made=[],
+        detected_domain="general",
+        domain_confidence=0.0,
+        dispute_classification="chitchat",
+        stage_count=0,
+        stage_timings={},
+        ranking_weights={},
+        is_chitchat=True,
+    )
 
 
 def _compute_position(

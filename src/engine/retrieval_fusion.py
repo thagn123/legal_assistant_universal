@@ -260,13 +260,32 @@ class RetrievalFusionEngine:
 # ---------------------------------------------------------------------------
 
 
+def _extract_law_reference(chunk: Dict[str, Any]) -> str:
+    """Extract a human-readable law reference from chunk data."""
+    ref = chunk.get("law_reference") or chunk.get("canonical_ref") or ""
+    if ref:
+        return ref
+    # Try canonical_refs array (join non-internal refs)
+    canonical = chunk.get("canonical_refs") or []
+    meaningful = [r for r in canonical if not r.startswith(("chapter_", "article_", "section_"))]
+    if meaningful:
+        return " | ".join(meaningful[:2])
+    # Fall back: extract "Điều NNN" from content
+    content = chunk.get("content", "")
+    import re
+    m = re.search(r"Điều\s+(\d+)[.\s]", content)
+    if m:
+        return f"Điều {m.group(1)}"
+    return ""
+
+
 def _make_result(chunk: Dict[str, Any], item_type: str) -> FusedResult:
     return FusedResult(
         item_id=chunk.get("chunk_id", ""),
         item_type=item_type,
         content=chunk.get("content", "")[:500],
         law_type=chunk.get("law_type", "general"),
-        law_reference=chunk.get("law_reference", chunk.get("canonical_ref", "")),
+        law_reference=_extract_law_reference(chunk),
         raw_data=chunk,
     )
 

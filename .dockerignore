@@ -1,0 +1,40 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node / frontend (not needed for backend image)
+lexai-*/node_modules/
+lexai-*/dist/
+lexai-*/.vite/
+
+# Data files — mounted as volumes at runtime
+raw_data/
+data/
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Claude / CI
+.claude/
+*.local.json
+
+# Secrets — never bake into images
+.env
+.env.*

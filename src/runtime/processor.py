@@ -81,11 +81,17 @@ def build_document_processor(
 
     The returned function matches the ProcessorFn signature expected by JobRunner:
         processor(user_id: str, doc_id: str, checkpoint: dict) -> dict
+
+    Documents uploaded by user_id="admin" are automatically marked is_global=True
+    in MongoDB so all users can find them via vector/keyword search.
     """
     if config is None:
         config = PipelineConfig()
 
     def processor(user_id: str, doc_id: str, checkpoint: dict) -> dict:
+        # Admin-uploaded docs are global (visible to all users)
+        is_global = user_id == "admin"
+
         # 1. Locate file
         file_path_str = storage.get_file_path(doc_id)
         if not file_path_str:
@@ -124,7 +130,7 @@ def build_document_processor(
                 try:
                     vec_storage = VectorStorage()
                     chunks_embedded = embed_chunks_into_mongo(
-                        orch.last_chunk_set, doc_id, user_id, vec_storage
+                        orch.last_chunk_set, doc_id, user_id, vec_storage, is_global=is_global
                     )
                 except Exception as exc:
                     logger.warning("processor: MongoDB embedding failed for doc_id=%s: %s", doc_id, exc)

@@ -31,7 +31,7 @@ services:
       mongodb:
         condition: service_healthy
     volumes:
-      - lka_data:/data
+      - lka_data:/app/data
     env_file:
       - .env
     environment:
@@ -46,6 +46,24 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # ── React Frontend ───────────────────────────────────────────────────────────
+  # Build context is set to the frontend folder so Dockerfile.frontend can
+  # use simple COPY . paths without Unicode escaping issues.
+  frontend:
+    build:
+      context: "./lexai-–-trợ-lý-pháp-lý-thông-minh UI"
+      dockerfile: ../Dockerfile.frontend
+      args:
+        # The browser fetches this URL directly, so it must be reachable from
+        # the user's machine (not from inside Docker).
+        VITE_API_URL: "http://localhost:8000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   lka_data:

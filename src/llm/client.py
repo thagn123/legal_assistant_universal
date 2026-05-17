@@ -119,6 +119,70 @@ def chat_complete_with_tools(
         return None
 
 
+class LLMClient:
+    """
+    Wrapper around the OpenAI client.
+    Returns dict-format responses compatible with the orchestrator's tool-calling loop.
+    """
+
+    def __init__(self, client, model: str, max_tokens: int) -> None:
+        self._client = client
+        self._model = model
+        self._max_tokens = max_tokens
+
+    def chat_complete_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        tool_choice: str = "auto",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Call the OpenAI chat-completions API with tool definitions.
+
+        Returns a dict: {"content": str, "tool_calls": [...]} or None on failure.
+        tool_calls entries are dicts: {"id", "type", "function": {"name", "arguments"}}.
+        """
+        try:
+            resp = self._client.chat.completions.create(
+                model=self._model,
+                messages=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                max_tokens=self._max_tokens,
+                temperature=0.1,
+            )
+            msg = resp.choices[0].message
+            result: Dict[str, Any] = {"content": msg.content or ""}
+            if msg.tool_calls:
+                result["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in msg.tool_calls
+                ]
+            return result
+        except Exception as exc:
+            logger.warning("LLMClient.chat_complete_with_tools failed: %s", exc)
+            return None
+
+
+def get_llm_client() -> Optional[LLMClient]:
+    """Return an LLMClient if OPENAI_API_KEY is set and openai is installed, else None."""
+    if not is_available():
+        return None
+    try:
+        client = _get_client()
+        return LLMClient(client, get_model(), get_max_tokens())
+    except Exception as exc:
+        logger.warning("get_llm_client failed: %s", exc)
+        return None
+
+
 def embed_with_openai(text: str, model: str = "text-embedding-3-small") -> Optional[List[float]]:
     """
     Generate an embedding via OpenAI (1536-dim for text-embedding-3-small).

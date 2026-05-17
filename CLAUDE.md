@@ -8,9 +8,9 @@
 ## Project Identity
 
 **Name:** Universal Legal Knowledge Assistant (LexAI / ULKA)
-**Stack:** Python 3.11 · FastAPI · MongoDB Atlas · sentence-transformers · OpenAI API
+**Stack:** Python 3.11 · FastAPI · MongoDB Atlas · sentence-transformers · OpenAI API · React 19 + TypeScript + Vite + Tailwind
 **Language:** Vietnamese legal domain (UI + domain vocabulary), codebase in English
-**Phase:** 11/12 — AI Legal Intelligence Infrastructure (current)
+**Phase:** 12 — Admin Upload Infrastructure + Frontend Wiring (current)
 **Repo branch:** `main`
 
 ---
@@ -30,104 +30,186 @@ Transform from a RAG chatbot into a **staged AI Legal Intelligence Infrastructur
 ## Module Map
 
 ```
-src/
+src/                                  # Python backend
 ├── api/
-│   ├── app.py                     # FastAPI factory — registers all routers
-│   ├── routes.py                  # Core document/job/query routes
-│   ├── recommendation_routes.py   # rec_router, interact_router, agent_router,
-│   │                              #   behavior_router, intelligence_router
-│   ├── deps.py                    # require_user dependency
-│   └── models.py                  # Pydantic request/response models
+│   ├── app.py                        # FastAPI factory — registers all routers
+│   ├── routes.py                     # Core document/job/query routes + upload-file endpoint
+│   ├── admin_routes.py               # ★ NEW — Admin router (prefix /admin, require_admin dep)
+│   ├── recommendation_routes.py      # rec_router, interact_router, agent_router,
+│   │                                 #   behavior_router, intelligence_router
+│   ├── deps.py                       # require_user + require_admin dependencies
+│   └── models.py                     # Pydantic request/response models
 │
-├── engine/                        # ★ 7-Stage Orchestration Pipeline
-│   ├── orchestrator.py            # LegalIntelligenceOrchestrator (main coordinator)
-│   ├── query_planner.py           # Stage 1 — deterministic domain/entity/strategy
-│   ├── retrieval_fusion.py        # Stage 3 — hybrid vector+BM25+graph+behavior
-│   ├── recommendation_ranker.py   # Stage 6 — 6-signal reranking
-│   └── reasoning_trace.py         # StageTrace / ReasoningTrace / TraceBuilder
+├── engine/                           # ★ 7-Stage Orchestration Pipeline
+│   ├── orchestrator.py               # LegalIntelligenceOrchestrator (main coordinator)
+│   ├── query_planner.py              # Stage 1 — deterministic domain/entity/strategy
+│   ├── retrieval_fusion.py           # Stage 3 — hybrid vector+BM25+graph+behavior
+│   ├── recommendation_ranker.py      # Stage 6 — 6-signal reranking
+│   └── reasoning_trace.py            # StageTrace / ReasoningTrace / TraceBuilder
 │
 ├── memory/
-│   └── session_store.py           # MongoDB-backed 24h TTL conversation memory
+│   └── session_store.py              # MongoDB-backed 24h TTL conversation memory
 │
 ├── observability/
-│   └── tracer.py                  # ExecutionTracer singleton (structured JSON logs)
+│   └── tracer.py                     # ExecutionTracer singleton (structured JSON logs)
 │
 ├── agents/
-│   ├── legal_agent.py             # LegalAgent — delegates to orchestrator, fallback to LLM
-│   └── tools.py                   # OpenAI tool definitions (retrieve_*, draft_*)
+│   ├── legal_agent.py                # LegalAgent — delegates to orchestrator, fallback to LLM
+│   └── tools.py                      # OpenAI tool definitions (retrieve_*, draft_*)
 │
 ├── graphrag/
-│   ├── traversal.py               # BFS graph traversal with edge weights
-│   ├── evidence_bundle.py         # EvidenceBundle construction
-│   ├── reasoning.py               # Legal reasoning chains
-│   ├── legal_ontology.py          # Node/edge type definitions
-│   └── query_intent.py            # Intent classification
+│   ├── traversal.py                  # BFS graph traversal with edge weights
+│   ├── evidence_bundle.py            # EvidenceBundle construction
+│   ├── reasoning.py                  # Legal reasoning chains
+│   ├── legal_ontology.py             # Node/edge type definitions
+│   └── query_intent.py               # Intent classification
 │
-├── pipeline/                      # 8-Stage Document Ingestion
-│   ├── orchestrator.py            # Pipeline coordinator
-│   ├── extractor.py               # Stage 1 — PDF/DOCX/HTML extraction
-│   ├── profiler.py                # Stage 2 — layout profiling
-│   ├── cleaner.py                 # Stage 3 — OCR cleanup
-│   ├── structurer.py              # Stage 4 — canonical schema
-│   ├── chunker.py                 # Stage 5 — legal chunking
-│   ├── graph_builder.py           # Stage 6 — graph construction
-│   ├── retrieval_stage.py         # Stage 7 — indexing
-│   ├── embedding_stage.py         # embed_text() shared utility
-│   └── stages.py                  # Stage interfaces
+├── pipeline/                         # 8-Stage Document Ingestion
+│   ├── orchestrator.py               # Pipeline coordinator
+│   ├── extractor.py                  # Stage 1 — PDF/DOCX/HTML extraction
+│   ├── profiler.py                   # Stage 2 — layout profiling
+│   ├── cleaner.py                    # Stage 3 — OCR cleanup
+│   ├── structurer.py                 # Stage 4 — canonical schema
+│   ├── chunker.py                    # Stage 5 — legal chunking
+│   ├── graph_builder.py              # Stage 6 — graph construction
+│   ├── retrieval_stage.py            # Stage 7 — indexing
+│   ├── embedding_stage.py            # embed_chunks_into_mongo() — is_global param added
+│   └── stages.py                     # Stage interfaces
 │
 ├── recommenders/
-│   ├── behavior_recommender.py    # Collaborative filter + bigram pattern mining
-│   ├── situation_analyzer.py      # Vector-based situation analysis
-│   ├── document_recommender.py    # Hybrid vector + collab filter docs
-│   ├── template_recommender.py    # Contract template recommendations
-│   ├── risk_recommender.py        # Legal risk recommendations
-│   └── checklist_recommender.py   # Compliance checklists
+│   ├── behavior_recommender.py       # Collaborative filter + bigram pattern mining
+│   ├── situation_analyzer.py         # Vector-based situation analysis
+│   ├── document_recommender.py       # Hybrid vector + collab filter docs
+│   ├── template_recommender.py       # Contract template recommendations
+│   ├── risk_recommender.py           # Legal risk recommendations
+│   └── checklist_recommender.py      # Compliance checklists
 │
 ├── mongodb/
-│   ├── client.py                  # get_db(), ping()
-│   ├── mongo_storage.py           # VectorStorage — all MongoDB operations
-│   └── seed_data.py               # Seed templates/risks/checklists (idempotent)
+│   ├── client.py                     # get_db(), ping()
+│   ├── mongo_storage.py              # VectorStorage — all MongoDB operations (is_global support)
+│   └── seed_data.py                  # Seed templates/risks/checklists (idempotent)
 │
 ├── llm/
-│   ├── client.py                  # LLMClient — OpenAI wrapper with is_available()
-│   ├── tool_calling.py            # OpenAI tool-calling loop (max 4 rounds)
-│   └── prompts.py                 # Prompt templates
+│   ├── client.py                     # LLMClient — OpenAI wrapper with is_available()
+│   ├── tool_calling.py               # OpenAI tool-calling loop (max 4 rounds)
+│   └── prompts.py                    # Prompt templates
 │
 ├── retrieval/
-│   ├── retrieval_engine.py        # Legacy retrieval engine
-│   ├── canonical_references.py    # Law reference normalization
-│   ├── legal_aliases.py           # Cross-language alias mapping
-│   ├── language_detector.py       # Vi/En detection
-│   └── query_normalizer.py        # Query preprocessing
+│   ├── retrieval_engine.py           # Legacy retrieval engine
+│   ├── canonical_references.py       # Law reference normalization
+│   ├── legal_aliases.py              # Cross-language alias mapping
+│   ├── language_detector.py          # Vi/En detection
+│   └── query_normalizer.py           # Query preprocessing
 │
 ├── actions/
-│   ├── action_engine.py           # Action dispatch (draft, compare, assess)
-│   ├── action_schema.py           # Action type definitions
-│   └── workflows.py               # Multi-step action workflows
+│   ├── action_engine.py              # Action dispatch (draft, compare, assess)
+│   ├── action_schema.py              # Action type definitions
+│   └── workflows.py                  # Multi-step action workflows
 │
 ├── contract/
-│   └── clause_extractor.py        # Contract clause extraction + risk flagging
+│   └── clause_extractor.py           # Contract clause extraction + risk flagging
 │
 ├── runtime/
-│   ├── processor.py               # build_document_processor() — wires 8-stage pipeline
-│   ├── job_runner.py              # Background job queue (JobRunner)
-│   ├── storage.py                 # SQLite StorageLayer
-│   ├── auth.py                    # AuthLayer
-│   ├── audit.py                   # AuditLayer
-│   └── index_store.py             # DocumentIndexStore
+│   ├── processor.py                  # build_document_processor() — auto-detects is_global
+│   ├── job_runner.py                 # Background job queue (JobRunner)
+│   ├── storage.py                    # SQLite StorageLayer — is_global column added
+│   ├── auth.py                       # AuthLayer
+│   ├── audit.py                      # AuditLayer
+│   └── index_store.py                # DocumentIndexStore
 │
 ├── schemas/
-│   ├── graph.py                   # NODE_TYPES, EDGE_TYPES, SEMANTIC_EDGES, STRUCTURAL_EDGES
-│   ├── chunk.py                   # Chunk schema
-│   ├── document.py                # Document schema
-│   └── evaluation.py              # Evaluation metrics schema
+│   ├── graph.py                      # NODE_TYPES, EDGE_TYPES, SEMANTIC_EDGES, STRUCTURAL_EDGES
+│   ├── chunk.py                      # Chunk schema
+│   ├── document.py                   # Document schema
+│   └── evaluation.py                 # Evaluation metrics schema
 │
 └── evaluation/
-    ├── metrics.py                 # Evaluation metrics
-    ├── checks.py                  # Quality checks
-    ├── multilingual_metrics.py    # Vi/En multilingual checks
-    └── reports.py                 # Report generation
+    ├── metrics.py                    # Evaluation metrics
+    ├── checks.py                     # Quality checks
+    ├── multilingual_metrics.py       # Vi/En multilingual checks
+    └── reports.py                    # Report generation
+
+lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
+├── lib/
+│   ├── api.ts                        # API client — adminFetch, dynamic getUserId(), admin endpoints
+│   └── adminAuth.ts                  # ★ NEW — getAdminKey/setAdminKey/isAdminAuthenticated
+│
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.tsx               # User sidebar navigation
+│   │   └── Header.tsx                # User header
+│   └── admin/
+│       └── AdminLayout.tsx           # ★ NEW — Admin shell (sidebar + auth guard + Outlet)
+│
+├── pages/
+│   ├── Dashboard.tsx                 # User dashboard
+│   ├── Analyze.tsx                   # Legal analysis chat (sessions from localStorage)
+│   ├── Contract.tsx                  # Contract analysis
+│   ├── Documents.tsx                 # Document list
+│   ├── Templates.tsx                 # Contract templates
+│   ├── Risks.tsx                     # Legal risk panel
+│   ├── Checklists.tsx                # Compliance checklists
+│   ├── Profile.tsx                   # User profile
+│   └── admin/
+│       ├── AdminLogin.tsx            # ★ NEW — Admin key login form
+│       ├── AdminDashboard.tsx        # ★ NEW — Admin home with quick links
+│       ├── AdminDocuments.tsx        # ★ NEW — Upload + document management table
+│       ├── AdminJobs.tsx             # ★ NEW — Job history table with polling
+│       └── AdminStats.tsx            # ★ NEW — Stats cards + Recharts charts
+│
+└── App.tsx                           # Routes — /admin/* handled separately from user routes
 ```
+
+---
+
+## Admin Infrastructure (Phase 12)
+
+### Global Document Flow
+
+```
+ADMIN                                  USER
+  │                                      │
+  ▼                                      ▼
+POST /admin/documents/upload        POST /intelligence/analyze
+  X-Admin-Key: lexai-admin-secret    X-User-ID: <user_id>
+  multipart/form-data                     │
+  │                                       │
+  ▼                                       ▼
+storage.create_global_document()    mongo_storage.vector_search_chunks(user_id)
+  user_id = "admin"                   filter: {$or: [{user_id}, {is_global: true}]}
+  is_global = True                         │
+  │                                        │
+  ▼                                        ▼
+job_runner.submit("admin", doc_id)    → returns admin docs + user's own docs
+  │
+  ▼
+processor detects: is_global = (user_id == "admin")
+  │
+  ▼
+embed_chunks_into_mongo(..., is_global=True)
+  │
+  ▼
+MongoDB chunk: {user_id: "admin", is_global: true, embedding: [...]}
+```
+
+### Admin Auth
+
+- Header: `X-Admin-Key`
+- Env var: `ADMIN_API_KEY` (default: `lexai-admin-secret` if not set)
+- Dependency: `require_admin` in `src/api/deps.py` — raises HTTP 403 if key missing/wrong
+- Frontend: key stored in `localStorage` key `lexai_admin_key`
+
+### Admin API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/admin/documents/upload` | Multipart upload, multiple files, creates global docs |
+| GET | `/admin/documents` | All docs (all user_ids), `?status=&limit=&offset=` |
+| GET | `/admin/documents/{doc_id}` | Single doc detail |
+| DELETE | `/admin/documents/{doc_id}` | Delete doc + MongoDB chunks + disk files |
+| POST | `/admin/documents/{doc_id}/reprocess` | Re-queue failed/complete job |
+| GET | `/admin/jobs` | All jobs, `?status=&limit=` |
+| GET | `/admin/stats` | Collection counts, job stats, embedding counts |
 
 ---
 
@@ -150,6 +232,7 @@ User Query
     │   Signal 3: Graph-expanded law-reference keyword (weight 0.25)
     │   Signal 4: Behavior boost from user interaction history (weight 0.10)
     │   → Min-max normalize each signal → weighted sum → FusedResultSet
+    │   IMPORTANT: all queries include {$or: [{user_id}, {is_global: True}]}
     │
     ▼ Stage 4 — GraphRAG traversal
     │   BFS from seeded law-reference nodes
@@ -183,6 +266,8 @@ Upload → Profiler → Extractor → Cleaner → Structurer
 
 Each stage emits: `document_id`, `source_hash`, `processing_version`, `provenance`, `confidence`, `status`.
 
+The processor (`src/runtime/processor.py`) auto-detects `is_global = (user_id == "admin")` and passes it through to `embed_chunks_into_mongo()`.
+
 ---
 
 ## Legal Domains (Vietnamese)
@@ -203,7 +288,18 @@ Each stage emits: `document_id`, `source_hash`, `processing_version`, `provenanc
 
 ## API Endpoints
 
-### Intelligence (new — full 7-stage pipeline)
+### Admin (require X-Admin-Key header)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/admin/documents/upload` | Multipart upload (PDF/DOCX/DOC/HTML/images) |
+| GET | `/admin/documents` | List all documents across all users |
+| GET | `/admin/documents/{doc_id}` | Document detail |
+| DELETE | `/admin/documents/{doc_id}` | Delete doc + chunks + disk files |
+| POST | `/admin/documents/{doc_id}/reprocess` | Re-queue job |
+| GET | `/admin/jobs` | All jobs list |
+| GET | `/admin/stats` | System statistics |
+
+### Intelligence (full 7-stage pipeline)
 | Method | Path | Description |
 |---|---|---|
 | POST | `/intelligence/analyze` | Full pipeline analysis → `IntelligenceOut` |
@@ -215,6 +311,14 @@ Each stage emits: `document_id`, `source_hash`, `processing_version`, `provenanc
 |---|---|---|
 | POST | `/agent/analyze` | Full agentic legal analysis |
 | POST | `/agent/contract` | Contract clause analysis |
+
+### Documents
+| Method | Path | Description |
+|---|---|---|
+| POST | `/documents/upload-file` | Multipart upload for regular users |
+| POST | `/documents/upload` | Base64 upload (legacy) |
+| GET | `/documents` | User's own documents |
+| GET | `/documents/{doc_id}/status` | Job status |
 
 ### Recommendations
 | Method | Path | Description |
@@ -246,7 +350,7 @@ Each stage emits: `document_id`, `source_hash`, `processing_version`, `provenanc
 
 | Collection | Purpose | TTL |
 |---|---|---|
-| `law_chunks` | Chunked legal documents with 384-dim embeddings | — |
+| `law_chunks` | Chunked legal documents with 384-dim embeddings + `is_global` field | — |
 | `legal_cases` | Case law documents | — |
 | `interactions` | User interaction events (view/save/download) | — |
 | `conversation_sessions` | Multi-turn session context | 24h on `last_active` |
@@ -267,6 +371,48 @@ Vector index: `law_chunks.embedding` (384-dim cosine, `$vectorSearch`)
 6. **GraphRAG new edges**: OVERRIDES > INVALIDATES > CONFLICTS_WITH > REQUIRES > DEPENDS_ON (added Phase 11).
 7. **Session TTL 24h**: MongoDB TTL index on `last_active` field, automatic cleanup.
 8. **Weights validation**: `RecommendationRanker` raises `ValueError` if weights don't sum to 1.0 ±0.02.
+9. **is_global convention**: `user_id == "admin"` → `is_global = True` auto-detected in processor — no extra parameters needed. All users query `{$or: [{user_id}, {is_global: true}]}`.
+10. **Admin key**: Simple header-based auth (`X-Admin-Key`), no JWT/session — intentional for simplicity. Admin panel is internal tooling only.
+11. **Frontend admin routing**: `useLocation()` checks `/admin` prefix → renders completely separate layout tree (AdminLayout) vs user layout (Sidebar+Header). No shared state between admin and user sessions.
+12. **Session persistence (Analyze)**: Conversation history stored in `localStorage` (max 20 sessions), not fetched from server per session — reduces latency for demo mode.
+
+---
+
+## SQLite Schema (StorageLayer)
+
+```sql
+CREATE TABLE documents (
+  doc_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  is_global INTEGER NOT NULL DEFAULT 0,   -- ★ Added Phase 12
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  metadata TEXT
+);
+
+CREATE TABLE jobs (
+  job_id TEXT PRIMARY KEY,
+  doc_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  checkpoint TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+---
+
+## Frontend State / localStorage Keys
+
+| Key | Value | Used by |
+|---|---|---|
+| `lexai_user_id` | string user ID | `api.ts` — `getUserId()`, `X-User-ID` header |
+| `lexai_admin_key` | admin API key | `adminAuth.ts` — `getAdminKey()`, `X-Admin-Key` header |
+| `lexai_sessions` | JSON array (max 20) | `Analyze.tsx` — conversation history |
 
 ---
 
@@ -279,16 +425,21 @@ docker compose up -d
 # Install deps
 pip install -r requirements.txt
 
-# Run API
-uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+# Run backend API (use python -m uvicorn — Windows Anaconda env)
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
-# Or with Docker
-docker build -t ulka . && docker run -p 8000:8000 ulka
+# Run frontend
+cd "lexai-–-trợ-lý-pháp-lý-thông-minh UI"
+npm install
+npm run dev
+# → http://localhost:5173
+# → http://localhost:5173/admin/login  (key: lexai-admin-secret)
 ```
 
-Environment variables required:
+Environment variables:
 - `MONGODB_URI` — MongoDB connection string (default: `mongodb://localhost:27017`)
 - `OPENAI_API_KEY` — for LLM reasoning (optional; system falls back to deterministic)
+- `ADMIN_API_KEY` — admin key (default: `lexai-admin-secret`)
 
 ---
 
@@ -312,5 +463,5 @@ Environment variables required:
 | 5–8 | Legal chunking, retrieval stabilization, GraphRAG, reasoning |
 | 9 | Action Engine: drafting, compliance, risk, comparison |
 | 10 | Product Runtime: API, SQLite storage, auth, audit, job orchestration |
-| 11 | AI Legal Intelligence Infrastructure (current): staged pipeline, retrieval fusion, reranking, session memory, observability, behavior recommender |
-| 12 | (Next) UI integration, evaluation harness, deployment hardening |
+| 11 | AI Legal Intelligence Infrastructure: staged pipeline, retrieval fusion, reranking, session memory, observability, behavior recommender |
+| 12 | Admin Upload Infrastructure + Frontend Wiring (current): admin API, is_global mechanism, React admin panel, localStorage session persistence |

@@ -177,7 +177,7 @@ class RecommendationRanker:
                 final_score=score,
                 rank=rank_idx,
                 sources=cand.sources,
-                explanation=_build_explanation(contrib, cand.sources),
+                explanation=_build_explanation(contrib, cand.sources, rank=rank_idx),
                 score_components=contrib,
             ))
 
@@ -267,6 +267,7 @@ def _freshness_score(updated_at_iso: Optional[str]) -> float:
 def _build_explanation(
     contributions: Dict[str, float],
     sources: List[str],
+    rank: int = 0,
 ) -> str:
     """Build a Vietnamese explanation highlighting the dominant ranking signal."""
     dominant = max(contributions, key=contributions.__getitem__)
@@ -274,7 +275,8 @@ def _build_explanation(
     top_contrib = contributions[dominant]
 
     source_str = " + ".join(sources) if sources else "hybrid"
+    rank_str = f"#{rank} " if rank else ""
     return (
-        f"Xếp hạng #{1} dựa trên {dominant_label} "
+        f"Xếp hạng {rank_str}dựa trên {dominant_label} "
         f"(đóng góp {top_contrib:.0%} | nguồn: {source_str})"
     )

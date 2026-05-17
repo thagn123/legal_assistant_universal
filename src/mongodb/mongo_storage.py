@@ -32,6 +32,8 @@ Indexes created on first use:
 from __future__ import annotations
 
 import logging
+import math
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -62,6 +64,7 @@ class VectorStorage:
         self.checklists = db["checklists"]
         self.legal_cases = db["legal_cases"]          # NEW: similar case retrieval
         self.contract_clauses = db["contract_clauses"]  # NEW: clause analysis cache
+        self.user_profiles = db["user_profiles"]         # user aggregate embeddings for user-user CF
 
     # ── Chunk vectors ────────────────────────────────────────────────────────
 
@@ -73,6 +76,7 @@ class VectorStorage:
         content: str,
         embedding: List[float],
         metadata: Dict[str, Any],
+        is_global: bool = False,
     ) -> None:
         """Store/update a law chunk with its sentence embedding."""
         self.chunks.update_one(
@@ -84,12 +88,39 @@ class VectorStorage:
                     "user_id": user_id,
                     "content": content,
                     "embedding": embedding,
+                    "is_global": is_global,
                     "updated_at": _now(),
                     **metadata,
                 }
             },
             upsert=True,
         )
+
+    def delete_chunks_by_doc(self, doc_id: str) -> int:
+        """Remove all chunks for a document. Returns count deleted."""
+        try:
+            result = self.chunks.delete_many({"doc_id": doc_id})
+            return result.deleted_count
+        except Exception as exc:
+            logger.warning("delete_chunks_by_doc failed for doc_id=%s: %s", doc_id, exc)
+            return 0
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Return collection counts for admin dashboard."""
+        try:
+            return {
+                "chunks_total": self.chunks.count_documents({}),
+                "chunks_global": self.chunks.count_documents({"is_global": True}),
+                "interactions": self.interactions.count_documents({}),
+                "templates": self.templates.count_documents({}),
+                "risks": self.risks.count_documents({}),
+                "checklists": self.checklists.count_documents({}),
+                "legal_cases": self.legal_cases.count_documents({}),
+                "contract_clauses": self.contract_clauses.count_documents({}),
+            }
+        except Exception as exc:
+            logger.warning("get_stats failed: %s", exc)
+            return {}
 
     def vector_search_chunks(
         self,
@@ -115,10 +146,10 @@ class VectorStorage:
             {"$addFields": {"vector_score": {"$meta": "vectorSearchScore"}}},
         ]
 
-        # Post-filter on scalar fields (cannot use $match before $vectorSearch)
+        # Post-filter: user's own docs OR global (admin-uploaded) docs
         post_match: Dict[str, Any] = {}
         if filter_user_id:
-            post_match["user_id"] = filter_user_id
+            post_match["$or"] = [{"user_id": filter_user_id}, {"is_global": True}]
         if law_type:
             post_match["law_type"] = law_type
         if post_match:
@@ -152,10 +183,10 @@ class VectorStorage:
         """
         if not keywords:
             return []
-        regex_pattern = "|".join(keywords)
+        regex_pattern = "|".join(re.escape(k) for k in keywords)
         query: Dict[str, Any] = {"content": {"$regex": regex_pattern, "$options": "i"}}
         if filter_user_id:
-            query["user_id"] = filter_user_id
+            query["$or"] = [{"user_id": filter_user_id}, {"is_global": True}]
         try:
             return list(
                 self.chunks.find(query, {"_id": 0, "embedding": 0}).limit(limit)
@@ -265,7 +296,18 @@ class VectorStorage:
             {
                 "$group": {
                     "_id": "$their_interactions.doc_id",
-                    "collab_score": {"$sum": 1},
+                    "collab_score": {
+                        "$sum": {
+                            "$switch": {
+                                "branches": [
+                                    {"case": {"$eq": ["$their_interactions.action_type", "download"]}, "then": 3.0},
+                                    {"case": {"$eq": ["$their_interactions.action_type", "save"]}, "then": 2.0},
+                                    {"case": {"$eq": ["$their_interactions.action_type", "view"]}, "then": 1.0},
+                                ],
+                                "default": 0.5,
+                            }
+                        }
+                    },
                     "similar_user_count": {"$addToSet": "$_id"},
                 }
             },
@@ -521,6 +563,229 @@ class VectorStorage:
         except Exception as exc:
             logger.warning("get_trending_law_types failed: %s", exc)
             return []
+
+    # ── User Profile Embeddings (User-User CF) ────────────────────────────────
+
+    def update_user_profile_embedding(self, user_id: str) -> bool:
+        """
+        Compute and upsert the user's aggregate interest embedding.
+
+        Weights interactions by type (download=3, save=2, view=1, other=0.5),
+        fetches the matching chunk embeddings, and stores a weighted L2-normalised
+        average in 'user_profiles' — enabling user-user CF via $vectorSearch.
+        """
+        pipeline = [
+            {
+                "$match": {
+                    "user_id": user_id,
+                    "chunk_id": {"$exists": True, "$ne": None},
+                }
+            },
+            {"$sort": {"timestamp": -1}},
+            {"$limit": 100},
+            {
+                "$addFields": {
+                    "weight": {
+                        "$switch": {
+                            "branches": [
+                                {"case": {"$eq": ["$action_type", "download"]}, "then": 3.0},
+                                {"case": {"$eq": ["$action_type", "save"]}, "then": 2.0},
+                                {"case": {"$eq": ["$action_type", "view"]}, "then": 1.0},
+                            ],
+                            "default": 0.5,
+                        }
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$chunk_id",
+                    "weight": {"$max": "$weight"},
+                }
+            },
+        ]
+        try:
+            chunk_weights = {
+                r["_id"]: r["weight"]
+                for r in self.interactions.aggregate(pipeline)
+            }
+            if not chunk_weights:
+                return False
+
+            chunks = list(
+                self.chunks.find(
+                    {"chunk_id": {"$in": list(chunk_weights.keys())}},
+                    {"chunk_id": 1, "embedding": 1, "_id": 0},
+                )
+            )
+            if not chunks:
+                return False
+
+            dim = len(chunks[0]["embedding"])
+            weighted_sum = [0.0] * dim
+            total_weight = 0.0
+            for chunk in chunks:
+                w = chunk_weights.get(chunk["chunk_id"], 1.0)
+                for i, v in enumerate(chunk["embedding"]):
+                    weighted_sum[i] += w * v
+                total_weight += w
+
+            if total_weight == 0:
+                return False
+
+            avg_emb = [x / total_weight for x in weighted_sum]
+            norm = math.sqrt(sum(x * x for x in avg_emb))
+            if norm > 0:
+                avg_emb = [x / norm for x in avg_emb]
+
+            law_types = self.get_user_law_types(user_id)
+            self.user_profiles.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "user_id": user_id,
+                        "embedding": avg_emb,
+                        "top_law_types": law_types[:3],
+                        "interaction_count": len(chunk_weights),
+                        "updated_at": _now(),
+                    }
+                },
+                upsert=True,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("update_user_profile_embedding failed: %s", exc)
+            return False
+
+    def vector_search_similar_users(
+        self,
+        user_id: str,
+        limit: int = 10,
+    ) -> List[str]:
+        """
+        User-User CF via $vectorSearch on user_profiles.embedding:
+        find users whose aggregate interest embeddings are most similar to
+        the current user. Returns user_ids sorted by cosine similarity.
+        """
+        profile = self.user_profiles.find_one(
+            {"user_id": user_id}, {"embedding": 1, "_id": 0}
+        )
+        if not profile or not profile.get("embedding"):
+            return []
+
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "index": "user_profile_embedding_index",
+                    "path": "embedding",
+                    "queryVector": profile["embedding"],
+                    "numCandidates": limit * 5,
+                    "limit": limit + 1,
+                }
+            },
+            {"$match": {"user_id": {"$ne": user_id}}},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "user_id": 1}},
+        ]
+        try:
+            return [r["user_id"] for r in self.user_profiles.aggregate(pipeline)]
+        except Exception as exc:
+            logger.warning("vector_search_similar_users failed: %s", exc)
+            return []
+
+    def get_item_based_cf_docs(
+        self,
+        user_id: str,
+        exclude_doc_ids: List[str],
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Item-based CF via $vectorSearch:
+        for each of the user's recently interacted chunks, find K nearest
+        neighbours via $vectorSearch and aggregate scores across seed chunks.
+        Returns docs semantically similar to what this user has read.
+        """
+        recent_pipeline = [
+            {
+                "$match": {
+                    "user_id": user_id,
+                    "chunk_id": {"$exists": True, "$ne": None},
+                }
+            },
+            {"$sort": {"timestamp": -1}},
+            {"$group": {"_id": "$chunk_id", "last_action": {"$first": "$action_type"}}},
+            {"$limit": 8},
+        ]
+        try:
+            recent = list(self.interactions.aggregate(recent_pipeline))
+        except Exception as exc:
+            logger.warning("get_item_based_cf_docs (fetch chunks) failed: %s", exc)
+            return []
+
+        if not recent:
+            return []
+
+        chunk_ids = [r["_id"] for r in recent]
+        seeds = list(
+            self.chunks.find(
+                {"chunk_id": {"$in": chunk_ids}},
+                {"chunk_id": 1, "embedding": 1, "_id": 0},
+            )
+        )
+        if not seeds:
+            return []
+
+        _system_ids = {"__recommendation__", "__cases__", "__risk__", "__situation__"}
+        exclude_set = set(exclude_doc_ids) | _system_ids
+
+        doc_scores: Dict[str, float] = {}
+        doc_law_types: Dict[str, str] = {}
+
+        for seed in seeds[:5]:  # cap at 5 seeds to control latency
+            emb = seed.get("embedding")
+            if not emb:
+                continue
+            try:
+                neighbors = list(
+                    self.chunks.aggregate([
+                        {
+                            "$vectorSearch": {
+                                "index": "chunk_embedding_index",
+                                "path": "embedding",
+                                "queryVector": emb,
+                                "numCandidates": limit * 6,
+                                "limit": limit * 3,
+                            }
+                        },
+                        {"$addFields": {"sim_score": {"$meta": "vectorSearchScore"}}},
+                        {"$match": {"doc_id": {"$nin": list(exclude_set)}}},
+                        {"$limit": limit},
+                        {"$project": {"_id": 0, "doc_id": 1, "law_type": 1, "sim_score": 1}},
+                    ])
+                )
+            except Exception as exc:
+                logger.warning("get_item_based_cf_docs ($vectorSearch) failed: %s", exc)
+                continue
+
+            for c in neighbors:
+                doc_id = c.get("doc_id", "")
+                if not doc_id or doc_id in exclude_set:
+                    continue
+                doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + c.get("sim_score", 0.0)
+                doc_law_types.setdefault(doc_id, c.get("law_type", "general"))
+
+        if not doc_scores:
+            return []
+
+        max_score = max(doc_scores.values())
+        return [
+            {
+                "doc_id": doc_id,
+                "item_cf_score": round(score / max_score, 4),
+                "law_type": doc_law_types.get(doc_id, "general"),
+            }
+            for doc_id, score in sorted(doc_scores.items(), key=lambda x: -x[1])[:limit]
+        ]
 
     # ── Templates ────────────────────────────────────────────────────────────
 
@@ -882,6 +1147,7 @@ class VectorStorage:
         self.contract_clauses.create_index([("doc_id", 1)])
         self.contract_clauses.create_index([("user_id", 1)])
         self.contract_clauses.create_index([("risk_level", 1)])
+        self.user_profiles.create_index([("user_id", 1)], unique=True)
         logger.info("Regular MongoDB indexes created.")
 
         # Vector search indexes (Atlas / Atlas-Local format)
@@ -918,6 +1184,13 @@ class VectorStorage:
             db,
             collection="contract_clauses",
             index_name="clause_embedding_index",
+            path="embedding",
+            num_dimensions=_VECTOR_DIM,
+        )
+        _create_vector_index(
+            db,
+            collection="user_profiles",
+            index_name="user_profile_embedding_index",
             path="embedding",
             num_dimensions=_VECTOR_DIM,
         )

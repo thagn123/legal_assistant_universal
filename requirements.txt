@@ -46,8 +46,9 @@ openai>=1.0.0
 # Phase 10: Product Runtime API
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
-httpx>=0.24.0          # required by FastAPI TestClient
-python-dotenv>=1.0.0   # loads .env into os.environ at startup
+python-multipart>=0.0.9  # required by FastAPI for multipart/form-data uploads
+httpx>=0.24.0            # required by FastAPI TestClient
+python-dotenv>=1.0.0     # loads .env into os.environ at startup
 
 # Phase 11: MongoDB Vector Search + Recommendation Engine
 pymongo>=4.6.0                          # MongoDB driver (sync)

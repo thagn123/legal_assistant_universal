@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 
 from src.actions.action_engine import ActionEngine
@@ -171,6 +171,33 @@ def upload_document(
 
     # If neither is provided, the job will fail when the processor tries to find the file.
     # This allows metadata-only registration where the file arrives later.
+
+    job = runner.submit(user_id, doc.doc_id)
+    return UploadResponse(doc_id=doc.doc_id, job_id=job.job_id)
+
+
+@router.post(
+    "/documents/upload-file",
+    response_model=UploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def upload_document_file(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_user),
+) -> UploadResponse:
+    """Upload a single document via multipart/form-data (browser-friendly)."""
+    storage: StorageLayer = get_storage(request)
+    runner: JobRunner = get_runner(request)
+
+    filename = file.filename or "unnamed"
+    doc = storage.create_document(user_id, filename)
+
+    upload_dir = Path("data/uploads") / doc.doc_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    dest = upload_dir / filename
+    dest.write_bytes(await file.read())
+    storage.save_file_path(doc.doc_id, str(dest.resolve()))
 
     job = runner.submit(user_id, doc.doc_id)
     return UploadResponse(doc_id=doc.doc_id, job_id=job.job_id)

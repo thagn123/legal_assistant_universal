@@ -22,15 +22,16 @@ from typing import Callable, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()  # reads .env from project root (no-op if absent)
 
+from src.api.admin_routes import admin_router
 from src.api.recommendation_routes import agent_router, behavior_router, intelligence_router, interact_router, rec_router
 from src.api.routes import router
 from src.config import PipelineConfig
 from src.mongodb.client import ping as mongo_ping
 from src.mongodb.mongo_storage import VectorStorage
-from src.mongodb.seed_data import seed_all
 from src.runtime.audit import AuditLayer
 from src.runtime.auth import AuthLayer
 from src.runtime.index_store import DocumentIndexStore
@@ -75,6 +76,14 @@ def create_app(
         version="2.0.0",
     )
 
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # ── SQLite storage (existing pipeline) ───────────────────────────────────
     storage = StorageLayer(db_path)
     app.state.storage = storage
@@ -84,6 +93,14 @@ def create_app(
     # ── Pipeline processor ────────────────────────────────────────────────────
     if processor is None and use_real_pipeline and bundle_provider is None:
         processor = build_document_processor(storage, PipelineConfig())
+
+    # ── Pre-load embedding model on main thread ───────────────────────────────
+    # SentenceTransformer/torch must be initialized on the main thread on Windows.
+    # Loading it first here means JobRunner background threads only use the
+    # already-cached model — no re-initialization, no SIGSEGV.
+    if use_real_pipeline:
+        from src.pipeline.embedding_stage import _get_model
+        _get_model()
 
     app.state.runner = JobRunner(storage, processor=processor, workers=1)
 
@@ -104,11 +121,8 @@ def create_app(
             from src.memory.session_store import SessionStore
             SessionStore().setup_indexes()
 
-            # Seed templates, risks, checklists on startup (idempotent)
-            try:
-                seed_all(vs)
-            except Exception as exc:
-                logger.warning("seed_all failed (non-fatal): %s", exc)
+            # Seed data is pre-loaded; skip auto-seed at startup to avoid
+            # SentenceTransformer model-load segfault on first import.
         else:
             logger.warning(
                 "MongoDB is not reachable. "
@@ -129,6 +143,7 @@ def create_app(
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(router)
+    app.include_router(admin_router)
     app.include_router(rec_router)
     app.include_router(interact_router)
     app.include_router(agent_router)

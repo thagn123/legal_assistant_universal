@@ -254,6 +254,8 @@ class LegalAgent:
                 fn_name = tc.function.name
                 try:
                     fn_args = json.loads(tc.function.arguments)
+                    if not isinstance(fn_args, dict):
+                        fn_args = {}
                 except Exception:
                     fn_args = {}
 
@@ -453,11 +455,11 @@ class LegalAgent:
             position_reasoning="Xem chi tiết phân tích hợp đồng trong full_assessment.",
             relevant_laws=retrieved_laws[:5],
             similar_cases=[],
-            recommended_actions=_parse_recommended_actions(full_assessment),
-            warnings=_parse_warnings(full_assessment),
-            risk_assessment=_build_risk_assessment(full_assessment),
+            recommended_actions=_parse_recommended_actions(full_assessment or ""),
+            warnings=_parse_warnings(full_assessment or ""),
+            risk_assessment=_build_risk_assessment(full_assessment or ""),
             full_assessment=full_assessment,
-            citations=_extract_citations(full_assessment, retrieved_laws),
+            citations=_extract_citations(full_assessment or "", retrieved_laws),
             is_grounded=len(retrieved_laws) > 0,
             used_llm=True,
             tool_calls_made=tool_calls_made,

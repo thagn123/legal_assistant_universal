@@ -45,6 +45,7 @@ class DocumentRecord:
     status: str          # "uploaded" | "processing" | "ready" | "failed"
     created_at: str
     metadata: Dict = field(default_factory=dict)
+    is_global: bool = False
 
 
 @dataclass
@@ -87,7 +88,8 @@ CREATE TABLE IF NOT EXISTS documents (
     filename      TEXT NOT NULL,
     status        TEXT NOT NULL DEFAULT 'uploaded',
     created_at    TEXT NOT NULL,
-    metadata_json TEXT NOT NULL DEFAULT '{}'
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    is_global     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -165,6 +167,7 @@ def _row_to_doc(row: sqlite3.Row) -> DocumentRecord:
         status=row["status"],
         created_at=row["created_at"],
         metadata=json.loads(row["metadata_json"]),
+        is_global=bool(row["is_global"]) if "is_global" in row.keys() else False,
     )
 
 
@@ -190,6 +193,12 @@ class StorageLayer:
         self._conn.execute("PRAGMA journal_mode=WAL;")
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            # Migration: add is_global column to existing DBs that predate the schema change
+            try:
+                self._conn.execute("ALTER TABLE documents ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0")
+                self._conn.commit()
+            except Exception:
+                pass  # column already exists
             self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -281,6 +290,99 @@ class StorageLayer:
                 (status, doc_id),
             )
             self._conn.commit()
+
+    def create_global_document(
+        self,
+        filename: str,
+        metadata: Optional[Dict] = None,
+    ) -> DocumentRecord:
+        """Create an admin-uploaded document visible to all users (is_global=1)."""
+        record = DocumentRecord(
+            doc_id=str(uuid.uuid4()),
+            user_id="admin",
+            filename=filename,
+            status="uploaded",
+            created_at=_now(),
+            metadata=metadata or {},
+            is_global=True,
+        )
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO documents(doc_id, user_id, filename, status, created_at, metadata_json, is_global)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    record.doc_id,
+                    record.user_id,
+                    record.filename,
+                    record.status,
+                    record.created_at,
+                    json.dumps(record.metadata),
+                    1,
+                ),
+            )
+            self._conn.commit()
+        return record
+
+    def get_all_documents(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        status_filter: Optional[str] = None,
+    ) -> List[DocumentRecord]:
+        """Return all documents across all users (admin view)."""
+        if status_filter:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM documents WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (status_filter, limit, offset),
+                ).fetchall()
+        else:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM documents ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
+        return [_row_to_doc(r) for r in rows]
+
+    def get_document_by_id(self, doc_id: str) -> Optional[DocumentRecord]:
+        """Lookup a document without user scope (admin use)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM documents WHERE doc_id=?", (doc_id,)
+            ).fetchone()
+        return _row_to_doc(row) if row else None
+
+    def delete_document(self, doc_id: str) -> bool:
+        """Delete a document and all its related records. Returns True if found."""
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM documents WHERE doc_id=?", (doc_id,))
+            self._conn.execute("DELETE FROM file_uploads WHERE doc_id=?", (doc_id,))
+            self._conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
+            self._conn.execute("DELETE FROM graphs WHERE doc_id=?", (doc_id,))
+            self._conn.execute("DELETE FROM jobs WHERE doc_id=?", (doc_id,))
+            self._conn.commit()
+        return cur.rowcount > 0
+
+    def list_all_jobs(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        status_filter: Optional[str] = None,
+    ) -> List[JobRecord]:
+        """Return all jobs across all users (admin view)."""
+        if status_filter:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM jobs WHERE status=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (status_filter, limit, offset),
+                ).fetchall()
+        else:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
+        return [_row_to_job(r) for r in rows]
 
     # ------------------------------------------------------------------
     # Jobs (reads scoped to user_id; internal lookup by job_id only)
