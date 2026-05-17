@@ -4,39 +4,63 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { 
-  Scale, 
-  Search, 
-  FileText, 
-  UserCircle, 
-  TrendingUp, 
+import {
+  Scale,
+  Search,
+  TrendingUp,
   ArrowRight,
-  TrendingDown,
   Clock,
-  Sparkles
+  Sparkles,
+  BookOpen,
+  ScrollText,
+  ClipboardList,
+  MapPin,
+  Newspaper,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { apiFetch, DigestResponse, LAW_TYPE_LABELS } from '../lib/api';
+import { apiFetch, DigestResponse, FeedItem, FeedResult, getPersonalizedFeed, LAW_TYPE_LABELS } from '../lib/api';
 import { LawTypeBadge } from '../components/ui/Shared';
+
+const FEED_TYPE_ICON: Record<FeedItem['type'], React.ReactNode> = {
+  law:       <BookOpen size={14} className="text-blue-400" />,
+  template:  <ScrollText size={14} className="text-green-400" />,
+  checklist: <ClipboardList size={14} className="text-purple-400" />,
+  case:      <Scale size={14} className="text-orange-400" />,
+  topic:     <Newspaper size={14} className="text-legal-gold" />,
+};
+
+const FEED_TYPE_LABEL: Record<FeedItem['type'], string> = {
+  law:       'Văn bản luật',
+  template:  'Mẫu hợp đồng',
+  checklist: 'Checklist',
+  case:      'Vụ án',
+  topic:     'Chủ đề',
+};
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [digest, setDigest] = useState<DigestResponse | null>(null);
   const [proactive, setProactive] = useState<any[]>([]);
+  const [feed, setFeed] = useState<FeedItem[] | null>(null);
+  const [feedLoading, setFeedLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<DigestResponse>('/recommendations/behavior/digest').then(setDigest);
-    apiFetch<any[]>('/recommendations/behavior/proactive?limit=4').then(setProactive);
+    apiFetch<DigestResponse>('/recommendations/behavior/digest').then(setDigest).catch(() => {});
+    apiFetch<any[]>('/recommendations/behavior/proactive?limit=4').then(setProactive).catch(() => {});
+    getPersonalizedFeed()
+      .then((r: FeedResult) => setFeed(r.feed_items))
+      .catch(() => setFeed([]))
+      .finally(() => setFeedLoading(false));
   }, []);
 
   const chartData = digest ? [
@@ -161,6 +185,58 @@ export function Dashboard() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* PERSONALIZED FEED — "Dành cho bạn" */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <MapPin className="text-legal-gold" size={20} />
+            Dành cho bạn
+          </h3>
+          <button
+            onClick={() => navigate('/journey')}
+            className="flex items-center gap-1 text-xs text-legal-gold hover:underline"
+          >
+            Xem hành trình pháp lý <ArrowRight size={12} />
+          </button>
+        </div>
+
+        {feedLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-24 bg-white/5 rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        ) : feed && feed.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {feed.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => navigate(item.action_url)}
+                className="glass-card p-4 text-left hover:border-legal-gold/40 transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {FEED_TYPE_ICON[item.type]}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    {FEED_TYPE_LABEL[item.type]}
+                  </span>
+                  <span className="ml-auto text-[10px] text-slate-600 font-mono">
+                    {Math.round(item.score * 100)}%
+                  </span>
+                </div>
+                <p className="text-sm font-semibold text-white line-clamp-2 group-hover:text-legal-gold transition-colors">
+                  {item.title}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1 line-clamp-1 italic">{item.reason}</p>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-500 text-sm">
+            Bắt đầu tra cứu để nhận gợi ý phù hợp với bạn
+          </div>
+        )}
       </div>
     </div>
   );

@@ -27,7 +27,9 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()  # reads .env from project root (no-op if absent)
 
 from src.api.admin_routes import admin_router
-from src.api.recommendation_routes import agent_router, behavior_router, intelligence_router, interact_router, rec_router
+from src.api.analysis_routes import analysis_router
+from src.api.journey_routes import journey_router
+from src.api.recommendation_routes import agent_router, behavior_router, feed_router, intelligence_router, interact_router, rec_router
 from src.api.routes import router
 from src.config import PipelineConfig
 from src.mongodb.client import ping as mongo_ping
@@ -149,6 +151,9 @@ def create_app(
     app.include_router(agent_router)
     app.include_router(behavior_router)
     app.include_router(intelligence_router)
+    app.include_router(analysis_router)
+    app.include_router(journey_router)
+    app.include_router(feed_router)
 
     return app
 

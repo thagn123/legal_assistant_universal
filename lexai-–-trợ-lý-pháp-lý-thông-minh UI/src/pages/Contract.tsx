@@ -3,22 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { 
-  FileText, 
-  Search, 
-  Loader2, 
-  AlertTriangle, 
-  CheckCircle2, 
+import React, { useState, useRef, useCallback } from 'react';
+import {
+  FileText,
+  Search,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
   Download,
   Scale,
   Zap,
   Wrench,
   ChevronDown,
   Info,
-  Check
+  Check,
+  Upload,
+  FilePlus2,
+  X
 } from 'lucide-react';
-import { apiFetch, ContractAnalysisResult } from '../lib/api';
+import { apiFetch, ContractAnalysisResult, API_BASE, getUserId } from '../lib/api';
 import { cn } from '../lib/api';
 import { StagePipeline } from '../components/ui/StagePipeline';
 
@@ -46,6 +49,84 @@ export function Contract() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
   const [result, setResult] = useState<ContractAnalysisResult | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState('');
+  const [uploadedFilename, setUploadedFilename] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileExtract = useCallback(async (file: File) => {
+    setExtractError('');
+    setUploadedFilename(file.name);
+    const suffix = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (suffix === 'txt') {
+      const text = await file.text();
+      setContent(text.slice(0, 60000));
+      return;
+    }
+
+    // PDF / DOCX / DOC — send to backend extraction endpoint
+    setExtracting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch(`${API_BASE}/contract/extract-text`, {
+        method: 'POST',
+        headers: { 'X-User-ID': getUserId() },
+        body: formData,
+      });
+      const data = await resp.json();
+      if (data.error) {
+        setExtractError(data.error);
+        setUploadedFilename('');
+      } else {
+        setContent(data.text || '');
+      }
+    } catch (e: any) {
+      setExtractError(`Không thể trích xuất: ${e.message}`);
+      setUploadedFilename('');
+    } finally {
+      setExtracting(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileExtract(file);
+  }, [handleFileExtract]);
+
+  const downloadReport = () => {
+    if (!result) return;
+    const lines = [
+      `BÁO CÁO RÀ SOÁT HỢP ĐỒNG — LexAI`,
+      `Loại hợp đồng: ${result.loai_hop_dong}`,
+      `Các bên: ${result.cac_ben.join(', ')}`,
+      `Phạm vi: ${result.pham_vi}`,
+      `Giá trị: ${result.gia_tri}`,
+      `Điểm tuân thủ: ${result.compliance_score}/100`,
+      '',
+      '=== ĐIỀU KHOẢN RỦI RO ===',
+      ...result.risk_clauses.map((c, i) =>
+        `${i + 1}. ${c.name}\n   Rủi ro: ${c.risk}\n   Căn cứ: ${c.legal_basis}\n   Hiện tại: ${c.before}\n   Đề xuất: ${c.after}`
+      ),
+      '',
+      '=== ĐIỀU KHOẢN CÒN THIẾU ===',
+      ...result.missing_clauses.map((c, i) => `${i + 1}. ${c}`),
+      '',
+      '=== KHUYẾN NGHỊ ===',
+      ...result.recommendations.map((r, i) => `${i + 1}. ${r}`),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lexai_contract_report.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const handleAnalyze = async () => {
     if (!content.trim()) return;
@@ -91,11 +172,57 @@ export function Contract() {
         <div className="lg:col-span-2 space-y-6">
           <div className="glass-card p-8 space-y-6">
             <div className="space-y-4">
+              {/* FILE UPLOAD ZONE */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all",
+                  isDragging ? "border-legal-gold bg-legal-gold/10" : "border-white/10 hover:border-legal-gold/40 hover:bg-white/[0.03]"
+                )}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.pdf,.docx,.doc"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileExtract(f); }}
+                />
+                {extracting ? (
+                  <div className="flex items-center justify-center gap-2 text-legal-gold">
+                    <Loader2 size={18} className="animate-spin" />
+                    <span className="text-xs font-bold">Đang trích xuất nội dung...</span>
+                  </div>
+                ) : uploadedFilename ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <CheckCircle2 size={16} className="text-legal-success" />
+                    <span className="text-xs font-bold text-legal-success">{uploadedFilename}</span>
+                    <button onClick={(e) => { e.stopPropagation(); setContent(''); setUploadedFilename(''); }} className="ml-2 text-slate-500 hover:text-white">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <FilePlus2 size={24} className="mx-auto text-slate-500" />
+                    <p className="text-xs text-slate-400">Kéo thả hoặc <span className="text-legal-gold font-bold">bấm để tải lên</span> file hợp đồng</p>
+                    <p className="text-[10px] text-slate-600">Hỗ trợ: TXT, PDF, DOCX, DOC</p>
+                  </div>
+                )}
+              </div>
+              {extractError && (
+                <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <AlertTriangle size={14} />
+                  {extractError}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nội dung hợp đồng</label>
                 <span className="text-[10px] text-slate-500 font-mono">{content.length} ký tự</span>
               </div>
-              <textarea 
+              <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Dán nội dung hợp đồng vào đây — hệ thống sẽ phân tích theo pháp luật Việt Nam..."
@@ -257,7 +384,7 @@ export function Contract() {
                      </div>
                    ))}
                 </div>
-                <button className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-3 transition-all">
+                <button onClick={downloadReport} className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-3 transition-all">
                   <Download size={16} /> Tải báo cáo phân tích
                 </button>
              </div>

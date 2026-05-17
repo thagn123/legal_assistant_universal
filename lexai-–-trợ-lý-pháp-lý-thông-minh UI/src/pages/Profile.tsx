@@ -4,16 +4,20 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  UserCircle, 
-  TrendingUp, 
-  Clock, 
-  Activity, 
-  Map as MapIcon, 
+import {
+  UserCircle,
+  TrendingUp,
+  Clock,
+  Activity,
+  Map as MapIcon,
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Calendar
+  Calendar,
+  Briefcase,
+  CheckCircle2,
+  Loader2,
+  Tag,
 } from 'lucide-react';
 import { 
   Radar, 
@@ -27,16 +31,43 @@ import {
   Cell,
   Tooltip as ChartTooltip
 } from 'recharts';
-import { apiFetch, UserProfile, LAW_TYPE_LABELS } from '../lib/api';
+import { apiFetch, getRecommendationsByRole, PersonaRecommendResult, UserProfile, LAW_TYPE_LABELS } from '../lib/api';
+
+const ROLE_OPTIONS = [
+  { value: 'individual',   label: 'Cá nhân',              emoji: '👤' },
+  { value: 'hr',           label: 'Nhân sự (HR)',          emoji: '🏢' },
+  { value: 'startup',      label: 'Startup',               emoji: '🚀' },
+  { value: 'sme',          label: 'Doanh nghiệp SME',      emoji: '🏪' },
+  { value: 'legal_staff',  label: 'Nhân viên pháp chế',   emoji: '⚖️' },
+];
+
+const ROLE_STORAGE_KEY = 'lexai_user_role';
 
 export function Profile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [peers, setPeers] = useState<any[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>(() => localStorage.getItem(ROLE_STORAGE_KEY) || '');
+  const [roleRecs, setRoleRecs] = useState<PersonaRecommendResult | null>(null);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   useEffect(() => {
-    apiFetch<UserProfile>('/recommendations/behavior/profile').then(setProfile);
-    apiFetch<any[]>('/recommendations/behavior/peers?limit=5').then(res => setPeers(Array.isArray(res) ? res : []));
+    apiFetch<UserProfile>('/recommendations/behavior/profile').then(setProfile).catch(() => {});
+    apiFetch<any[]>('/recommendations/behavior/peers?limit=5').then(res => setPeers(Array.isArray(res) ? res : [])).catch(() => {});
   }, []);
+
+  async function handleRoleSelect(role: string) {
+    setSelectedRole(role);
+    localStorage.setItem(ROLE_STORAGE_KEY, role);
+    setRoleLoading(true);
+    try {
+      const result = await getRecommendationsByRole(role);
+      setRoleRecs(result);
+    } catch {
+      setRoleRecs(null);
+    } finally {
+      setRoleLoading(false);
+    }
+  }
 
   if (!profile) return <div className="p-8 animate-skeleton h-screen" />;
 
@@ -202,6 +233,97 @@ export function Profile() {
               </div>
             ))}
          </div>
+      </div>
+
+      {/* ROLE SELECTION */}
+      <div className="glass-card p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <Briefcase className="text-legal-gold" size={20} />
+          <h3 className="text-lg font-bold text-white">Vai trò của bạn</h3>
+        </div>
+        <p className="text-sm text-slate-400">Chọn vai trò để nhận gợi ý pháp lý phù hợp nhất với công việc của bạn.</p>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {ROLE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => handleRoleSelect(opt.value)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
+                selectedRole === opt.value
+                  ? 'bg-legal-gold/10 border-legal-gold text-white'
+                  : 'bg-white/5 border-white/10 text-slate-400 hover:border-white/30 hover:text-white'
+              }`}
+            >
+              <span className="text-2xl">{opt.emoji}</span>
+              <span className="text-xs font-semibold text-center leading-tight">{opt.label}</span>
+              {selectedRole === opt.value && <CheckCircle2 size={14} className="text-legal-gold" />}
+            </button>
+          ))}
+        </div>
+
+        {roleLoading && (
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 size={16} className="animate-spin" />
+            Đang tải gợi ý...
+          </div>
+        )}
+
+        {roleRecs && !roleLoading && (
+          <div className="space-y-4 pt-2 border-t border-white/10">
+            <p className="text-sm text-slate-300 italic">{roleRecs.pack_explanation}</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                  <Tag size={11} /> Chủ đề quan tâm
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {roleRecs.recommended_topics.map(t => (
+                    <span key={t} className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full text-[10px] font-semibold">
+                      {LAW_TYPE_LABELS[t] || t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                  <Tag size={11} /> Mẫu hợp đồng gợi ý
+                </p>
+                <ul className="space-y-1">
+                  {roleRecs.recommended_templates.slice(0, 4).map((t, i) => (
+                    <li key={i} className="text-xs text-slate-300 flex gap-1">
+                      <span className="text-legal-gold/60 shrink-0">•</span> {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                  <Tag size={11} /> Checklist phù hợp
+                </p>
+                <ul className="space-y-1">
+                  {roleRecs.recommended_checklists.slice(0, 4).map((c, i) => (
+                    <li key={i} className="text-xs text-slate-300 flex gap-1">
+                      <span className="text-legal-gold/60 shrink-0">•</span> {c}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              {roleRecs.quick_links.map(lnk => (
+                <a
+                  key={lnk.url}
+                  href={lnk.url}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-legal-gold/10 border border-legal-gold/20 text-legal-gold rounded-xl text-xs font-semibold hover:bg-legal-gold/20 transition-all"
+                >
+                  {lnk.label} <ArrowRight size={11} />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PEER RECOMMENDATIONS */}

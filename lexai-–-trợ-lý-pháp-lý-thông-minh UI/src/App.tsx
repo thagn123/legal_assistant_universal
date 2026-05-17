@@ -21,6 +21,7 @@ import { Templates } from './pages/Templates';
 import { Risks } from './pages/Risks';
 import { Checklists } from './pages/Checklists';
 import { Profile } from './pages/Profile';
+import { Journey } from './pages/Journey';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminDocuments } from './pages/admin/AdminDocuments';
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/risks" element={<Risks />} />
             <Route path="/checklists" element={<Checklists />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/journey" element={<Journey />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

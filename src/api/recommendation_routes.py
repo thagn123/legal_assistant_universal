@@ -977,3 +977,142 @@ def get_session_history(
     if not history:
         raise HTTPException(status_code=404, detail="Session not found")
     return history
+
+
+# ---------------------------------------------------------------------------
+# Personalized Feed  (GET /feed/personalized)
+# ---------------------------------------------------------------------------
+
+feed_router = APIRouter(prefix="/feed", tags=["feed"])
+
+
+class FeedItem(BaseModel):
+    type: str          # law | template | checklist | case | topic
+    title: str
+    reason: str
+    score: float
+    action_url: str
+
+
+class FeedResponse(BaseModel):
+    user_id: str
+    feed_items: List[FeedItem]
+    source: str        # "behavior" | "default"
+
+
+_DEFAULT_FEED: List[Dict[str, Any]] = [
+    {"type": "topic", "title": "Luật Đất đai 2024 — điểm mới quan trọng", "reason": "Phổ biến nhất tháng này", "score": 0.9, "action_url": "/analyze?topic=dat_dai"},
+    {"type": "template", "title": "Hợp đồng mua bán nhà đất", "reason": "Mẫu được tải nhiều nhất", "score": 0.85, "action_url": "/templates"},
+    {"type": "checklist", "title": "Kiểm tra trước khi ký hợp đồng", "reason": "Gợi ý cho người dùng mới", "score": 0.8, "action_url": "/checklists"},
+    {"type": "topic", "title": "Quyền lợi người lao động khi bị sa thải", "reason": "Chủ đề quan tâm nhiều", "score": 0.75, "action_url": "/analyze?topic=lao_dong"},
+    {"type": "template", "title": "Đơn khiếu nại hành chính", "reason": "Tài liệu thiết yếu", "score": 0.7, "action_url": "/templates"},
+]
+
+
+@feed_router.get("/personalized", response_model=FeedResponse)
+def get_personalized_feed(
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> FeedResponse:
+    """
+    Trả về feed cá nhân hoá dựa trên lịch sử tương tác của người dùng.
+    Fallback về feed mặc định nếu chưa có đủ dữ liệu hành vi.
+    """
+    vs = getattr(request.app.state, "vector_storage", None)
+    if vs is None:
+        return FeedResponse(
+            user_id=user_id,
+            feed_items=[FeedItem(**item) for item in _DEFAULT_FEED],
+            source="default",
+        )
+
+    try:
+        br = BehaviorRecommender(vs)
+        proactive = br.get_proactive_recommendations(user_id, limit=10)
+
+        if not proactive:
+            return FeedResponse(
+                user_id=user_id,
+                feed_items=[FeedItem(**item) for item in _DEFAULT_FEED],
+                source="default",
+            )
+
+        _TYPE_MAP = {
+            "law": "law",
+            "template": "template",
+            "checklist": "checklist",
+            "case": "case",
+            "topic": "topic",
+        }
+        feed_items = []
+        for rec in proactive[:8]:
+            rec_type = _TYPE_MAP.get(getattr(rec, "recommendation_type", "topic"), "topic")
+            action_url = "/analyze"
+            if rec_type == "template":
+                action_url = "/templates"
+            elif rec_type == "checklist":
+                action_url = "/checklists"
+
+            feed_items.append(FeedItem(
+                type=rec_type,
+                title=getattr(rec, "name", getattr(rec, "content", "Gợi ý pháp lý")),
+                reason=getattr(rec, "reason", "Phù hợp với lịch sử của bạn"),
+                score=round(getattr(rec, "score", 0.7), 3),
+                action_url=action_url,
+            ))
+
+        return FeedResponse(user_id=user_id, feed_items=feed_items, source="behavior")
+
+    except Exception:
+        return FeedResponse(
+            user_id=user_id,
+            feed_items=[FeedItem(**item) for item in _DEFAULT_FEED],
+            source="default",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Role-based Recommendations  (POST /recommendations/by-role)
+# ---------------------------------------------------------------------------
+
+
+class RoleRequest(BaseModel):
+    role: str  # hr | startup | sme | individual | legal_staff
+
+
+class QuickLinkOut(BaseModel):
+    label: str
+    url: str
+
+
+class RoleRecommendResponse(BaseModel):
+    role: str
+    persona_label: str
+    pack_explanation: str
+    recommended_topics: List[str]
+    recommended_templates: List[str]
+    recommended_checklists: List[str]
+    quick_links: List[QuickLinkOut]
+
+
+@rec_router.post("/by-role", response_model=RoleRecommendResponse)
+def recommend_by_role(
+    body: RoleRequest,
+    user_id: str = Depends(require_user),
+) -> RoleRecommendResponse:
+    """
+    Trả về gói đề xuất cá nhân hoá theo vai trò người dùng:
+    hr | startup | sme | individual | legal_staff.
+    """
+    from src.recommenders.persona_recommender import PersonaRecommender
+    recommender = PersonaRecommender()
+    result = recommender.recommend_by_role(role=body.role, user_id=user_id)
+    return RoleRecommendResponse(
+        role=result.role,
+        persona_label=result.persona_label,
+        pack_explanation=result.pack_explanation,
+        recommended_topics=result.recommended_topics,
+        recommended_templates=result.recommended_templates,
+        recommended_checklists=result.recommended_checklists,
+        quick_links=[QuickLinkOut(**lnk) for lnk in result.quick_links],
+    )

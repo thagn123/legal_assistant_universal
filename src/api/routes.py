@@ -231,6 +231,64 @@ def get_document(
 
 
 # ---------------------------------------------------------------------------
+# Contract text extraction (synchronous — for frontend contract analysis)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/contract/extract-text")
+async def extract_contract_text(
+    file: UploadFile = File(...),
+) -> dict:
+    """
+    Extract plain text from an uploaded PDF, DOCX, DOC, or TXT file.
+    Returns {text, filename} synchronously for use in the contract analysis UI.
+    """
+    import os
+    import tempfile
+
+    filename = file.filename or "upload"
+    suffix = Path(filename).suffix.lower()
+    content = await file.read()
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    extracted = ""
+    error_msg = ""
+    try:
+        if suffix == ".txt":
+            extracted = content.decode("utf-8", errors="replace")
+        elif suffix == ".docx":
+            try:
+                import docx as python_docx  # python-docx
+                doc = python_docx.Document(tmp_path)
+                extracted = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            except Exception as e:
+                error_msg = f"Không thể đọc DOCX: {e}"
+        elif suffix == ".pdf":
+            try:
+                from pdfminer.high_level import extract_text as _pdf_extract
+                extracted = _pdf_extract(tmp_path) or ""
+            except Exception as e:
+                error_msg = f"Không thể đọc PDF: {e}"
+        elif suffix == ".doc":
+            try:
+                import docx2txt
+                extracted = docx2txt.process(tmp_path) or ""
+            except Exception as e:
+                error_msg = f"Không thể đọc DOC: {e}"
+        else:
+            error_msg = f"Định dạng '{suffix}' không được hỗ trợ. Vui lòng dùng TXT, DOCX hoặc PDF."
+    finally:
+        os.unlink(tmp_path)
+
+    if error_msg:
+        return {"text": "", "filename": filename, "error": error_msg}
+    return {"text": extracted[:60000], "filename": filename}
+
+
+# ---------------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------------
 

@@ -5,23 +5,25 @@
 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Search, 
-  FileText, 
-  FileCheck, 
-  ShieldAlert, 
-  ClipboardList, 
+import {
+  LayoutDashboard,
+  Search,
+  FileText,
+  FileCheck,
+  ShieldAlert,
+  ClipboardList,
   UserCircle,
   Scale,
   ScrollText,
-  Info
+  Info,
+  Map,
 } from 'lucide-react';
 import { cn } from '../../lib/api';
 
 const menuItems = [
   { path: '/', label: 'Tổng quan', icon: LayoutDashboard },
   { path: '/analyze', label: 'Phân tích', icon: Search },
+  { path: '/journey', label: 'Hành Trình', icon: Map },
   { path: '/contract', label: 'Rà soát hợp đồng', icon: FileCheck },
   { path: '/documents', label: 'Tài liệu', icon: FileText },
   { path: '/templates', label: 'Mẫu hợp đồng', icon: ScrollText },
