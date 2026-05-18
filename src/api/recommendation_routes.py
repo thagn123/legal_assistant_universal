@@ -930,6 +930,17 @@ def intelligence_analyze(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    # Update persistent user profile for cross-session personalization
+    try:
+        vs.update_user_profile(
+            user_id=user_id,
+            domain=result.detected_domain,
+            user_role=body.user_role or "",
+            query_snippet=body.situation[:100],
+        )
+    except Exception:
+        pass  # profile update is non-fatal
+
     return IntelligenceOut(
         session_id=result.session_id,
         trace_id=result.trace_id,

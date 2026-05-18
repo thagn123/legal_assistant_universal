@@ -132,9 +132,8 @@ def embed_chunks_into_mongo(
     embeddings = embed_batch(contents)
 
     stored = 0
+    embedded = 0
     for chunk, emb in zip(chunks, embeddings):
-        if emb is None:
-            continue
         metadata = {
             "chunk_type": chunk.chunk_type,
             "law_type": _infer_law_type(chunk),
@@ -143,21 +142,24 @@ def embed_chunks_into_mongo(
             "confidence": chunk.confidence,
             "hierarchy_path": getattr(chunk, "hierarchy_path", []),
         }
+        # Always store chunk for keyword/BM25 search, embedding is optional
         vector_storage.upsert_chunk_vector(
             chunk_id=chunk.chunk_id,
             doc_id=doc_id,
             user_id=user_id,
             content=chunk.content,
-            embedding=emb,
+            embedding=emb,  # None when model unavailable — stored without vector
             metadata=metadata,
             is_global=is_global,
         )
         stored += 1
+        if emb is not None:
+            embedded += 1
 
     logger.info(
-        "embedding_stage: embedded %d/%d chunks for doc_id=%s",
+        "embedding_stage: stored %d chunks (%d with embeddings) for doc_id=%s",
         stored,
-        len(chunks),
+        embedded,
         doc_id,
     )
     return stored

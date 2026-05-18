@@ -75,25 +75,26 @@ class VectorStorage:
         doc_id: str,
         user_id: str,
         content: str,
-        embedding: List[float],
+        embedding: Optional[List[float]],
         metadata: Dict[str, Any],
         is_global: bool = False,
     ) -> None:
-        """Store/update a law chunk with its sentence embedding."""
+        """Store/update a law chunk. Stores even when embedding is None (keyword-searchable)."""
+        doc: Dict[str, Any] = {
+            "chunk_id": chunk_id,
+            "doc_id": doc_id,
+            "user_id": user_id,
+            "content": content,
+            "is_global": is_global,
+            "has_embedding": embedding is not None,
+            "updated_at": _now(),
+            **metadata,
+        }
+        if embedding is not None:
+            doc["embedding"] = embedding
         self.chunks.update_one(
             {"chunk_id": chunk_id},
-            {
-                "$set": {
-                    "chunk_id": chunk_id,
-                    "doc_id": doc_id,
-                    "user_id": user_id,
-                    "content": content,
-                    "embedding": embedding,
-                    "is_global": is_global,
-                    "updated_at": _now(),
-                    **metadata,
-                }
-            },
+            {"$set": doc},
             upsert=True,
         )
 
@@ -275,22 +276,79 @@ class VectorStorage:
             logger.warning("get_user_viewed_docs failed: %s", exc)
             return []
 
+    def update_user_profile(
+        self,
+        user_id: str,
+        domain: str,
+        user_role: str = "",
+        query_snippet: str = "",
+    ) -> None:
+        """
+        Upsert user profile after each analysis turn.
+        Tracks domain frequency, last role, and recent queries for behavior personalization.
+        """
+        if not domain or domain == "general":
+            return
+        try:
+            self.user_profiles.update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "user_id": user_id,
+                        "last_active": _now(),
+                        "last_role": user_role,
+                    },
+                    "$inc": {f"domain_counts.{domain}": 1},
+                    "$push": {
+                        "recent_queries": {
+                            "$each": [{"q": query_snippet[:100], "domain": domain, "ts": _now()}],
+                            "$slice": -30,
+                        }
+                    },
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("update_user_profile failed for user_id=%s: %s", user_id, exc)
+
+    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+        """Return the user profile document (empty dict if not found)."""
+        try:
+            doc = self.user_profiles.find_one({"user_id": user_id}, {"_id": 0})
+            return doc or {}
+        except Exception as exc:
+            logger.warning("get_user_profile failed: %s", exc)
+            return {}
+
     def get_user_law_types(self, user_id: str) -> List[str]:
         """
-        Aggregation: which legal domains (law_type) has this user interacted with most?
-        Returns a ranked list of law_type strings.
+        Returns top legal domains for a user, merging interaction history + user profile.
         """
-        pipeline = [
-            {"$match": {"user_id": user_id, "context.law_type": {"$exists": True, "$ne": None}}},
-            {"$group": {"_id": "$context.law_type", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": 5},
-        ]
+        scores: Dict[str, float] = {}
+
+        # Signal 1: interaction history (action_type=situation_analysis carries law_type)
         try:
-            return [r["_id"] for r in self.interactions.aggregate(pipeline)]
+            pipeline = [
+                {"$match": {"user_id": user_id, "context.law_type": {"$exists": True, "$ne": None}}},
+                {"$group": {"_id": "$context.law_type", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 10},
+            ]
+            for r in self.interactions.aggregate(pipeline):
+                scores[r["_id"]] = scores.get(r["_id"], 0) + float(r["count"])
         except Exception as exc:
-            logger.warning("get_user_law_types failed: %s", exc)
-            return []
+            logger.warning("get_user_law_types interactions failed: %s", exc)
+
+        # Signal 2: persisted user profile domain counts (more durable across sessions)
+        try:
+            profile = self.user_profiles.find_one({"user_id": user_id}, {"domain_counts": 1, "_id": 0})
+            if profile:
+                for domain, cnt in (profile.get("domain_counts") or {}).items():
+                    scores[domain] = scores.get(domain, 0) + float(cnt) * 1.5  # profile weighted higher
+        except Exception as exc:
+            logger.warning("get_user_law_types profile failed: %s", exc)
+
+        return sorted(scores, key=lambda d: scores[d], reverse=True)[:5]
 
     def collaborative_filter_docs(
         self,

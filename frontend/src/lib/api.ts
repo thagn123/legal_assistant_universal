@@ -560,6 +560,17 @@ export async function adminGetStats(): Promise<AdminStats> {
   return adminFetch<AdminStats>('/admin/stats');
 }
 
+export interface AdminSeedResult {
+  templates: number;
+  risks: number;
+  checklists: number;
+  message: string;
+}
+
+export async function adminSeedData(): Promise<AdminSeedResult> {
+  return adminFetch<AdminSeedResult>('/admin/seed', { method: 'POST' });
+}
+
 // ---------------------------------------------------------------------------
 // Phase 13 — Evidence Gap, Timeline, Journey, Feed, Role-based Recs
 // ---------------------------------------------------------------------------

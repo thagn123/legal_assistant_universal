@@ -91,6 +91,23 @@ const stages_list = [
   { id: 7, name: 'Persist' },
 ];
 
+const SESSION_STORAGE_KEY = 'lexai_sessions';
+const ACTIVE_CHAT_KEY = 'lexai_active_chat';
+
+function loadStoredSessions() {
+  try { return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function loadActiveChat(): { history: ChatTurn[]; sessionId: string | null } {
+  try {
+    const raw = localStorage.getItem(ACTIVE_CHAT_KEY);
+    if (!raw) return { history: [], sessionId: null };
+    const parsed = JSON.parse(raw);
+    return { history: parsed.history ?? [], sessionId: parsed.sessionId ?? null };
+  } catch { return { history: [], sessionId: null }; }
+}
+
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [situation, setSituation] = useState('');
@@ -98,26 +115,38 @@ export function Analyze() {
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [history, setHistory] = useState<ChatTurn[]>([]);
+
+  // Restored from localStorage so navigation doesn't lose the active chat
+  const [sessionId, setSessionId] = useState<string | null>(() => loadActiveChat().sessionId);
+  const [history, setHistory] = useState<ChatTurn[]>(() => loadActiveChat().history);
+
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sessions persisted in localStorage
-  const SESSION_STORAGE_KEY = 'lexai_sessions';
-  function loadStoredSessions() {
-    try {
-      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
-    } catch { return []; }
-  }
   const [sessionHistory, setSessionHistory] = useState<Array<{
     id: string; title: string; domain: string; date: string; turns: ChatTurn[];
   }>>(loadStoredSessions);
 
   const [selectedSession, setSelectedSession] = useState<typeof sessionHistory[0] | null>(null);
+
+  // Persist active conversation whenever history or sessionId changes
+  useEffect(() => {
+    if (history.length > 0) {
+      localStorage.setItem(ACTIVE_CHAT_KEY, JSON.stringify({ history, sessionId }));
+    }
+  }, [history, sessionId]);
+
+  const handleNewChat = () => {
+    setHistory([]);
+    setSessionId(null);
+    setSituation('');
+    setAnalyzeError('');
+    setEvidenceChip(null);
+    localStorage.removeItem(ACTIVE_CHAT_KEY);
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -165,24 +194,30 @@ export function Analyze() {
       setSessionId(data.session_id);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
-      const newTurns: ChatTurn[] = [userMessage, { role: 'assistant', result: data }];
-      setHistory(prev => [...prev, { role: 'assistant', result: data }]);
+      // Grow the full conversation and persist the complete session in one update
+      setHistory(prev => {
+        const fullHistory = [...prev, { role: 'assistant' as const, result: data }];
+        const sid = data.session_id || sessionId || `sess_${Date.now()}`;
+        // Title = first user message in the session (stable across turns)
+        const firstUser = fullHistory.find(t => t.role === 'user');
+        const rawTitle = firstUser?.content ?? currentSituation;
+        const title = rawTitle.length > 50 ? rawTitle.slice(0, 50) + '…' : rawTitle;
+        const session = {
+          id: sid,
+          title,
+          domain: data.domain || 'general',
+          date: new Date().toLocaleDateString('vi-VN'),
+          turns: fullHistory,
+        };
+        setSessionHistory(sp => {
+          const updated = [session, ...sp.filter(s => s.id !== sid)].slice(0, 20);
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+        return fullHistory;
+      });
       setIsAnalyzing(false);
       setCurrentStage(0);
-
-      // Persist session to localStorage
-      const newSession = {
-        id: data.session_id || `sess_${Date.now()}`,
-        title: currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation,
-        domain: data.domain || 'general',
-        date: new Date().toLocaleDateString('vi-VN'),
-        turns: newTurns,
-      };
-      setSessionHistory(prev => {
-        const updated = [newSession, ...prev.filter(s => s.id !== newSession.id)].slice(0, 20);
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-        return updated;
-      });
     } catch (e: any) {
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
       setIsAnalyzing(false);
@@ -212,8 +247,8 @@ export function Analyze() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] relative overflow-hidden">
       {/* TABS */}
-      <div className="flex bg-legal-navy/30 border-b border-legal-border px-8">
-        <button 
+      <div className="flex items-center bg-legal-navy/30 border-b border-legal-border px-8">
+        <button
           onClick={() => setActiveTab('chat')}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
@@ -222,11 +257,11 @@ export function Analyze() {
         >
           <div className="flex items-center gap-2">
             <Zap size={14} className={activeTab === 'chat' ? "text-legal-gold" : ""} />
-            Hội thoại mới
+            Phân tích
           </div>
           {activeTab === 'chat' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-legal-gold" />}
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('history')}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
@@ -235,10 +270,21 @@ export function Analyze() {
         >
           <div className="flex items-center gap-2">
             <History size={14} className={activeTab === 'history' ? "text-legal-gold" : ""} />
-            Lịch sử
+            Lịch sử ({sessionHistory.length})
           </div>
           {activeTab === 'history' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-legal-gold" />}
         </button>
+        {/* New chat button — only shown when there's an active conversation */}
+        {history.length > 0 && activeTab === 'chat' && (
+          <button
+            onClick={handleNewChat}
+            className="ml-auto pb-3 pt-4 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-legal-gold transition-colors flex items-center gap-1.5"
+            title="Bắt đầu cuộc hội thoại mới"
+          >
+            <XIcon size={13} />
+            Xóa hội thoại
+          </button>
+        )}
       </div>
 
       <div className="flex-1 flex overflow-hidden">

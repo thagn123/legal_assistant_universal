@@ -73,6 +73,13 @@ class AdminStatsResponse(BaseModel):
     mongodb: dict
 
 
+class AdminSeedResponse(BaseModel):
+    templates: int
+    risks: int
+    checklists: int
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -263,6 +270,31 @@ def admin_list_jobs(
 # ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
+
+
+@admin_router.post(
+    "/seed",
+    response_model=AdminSeedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_admin)],
+)
+def admin_seed_data(request: Request) -> AdminSeedResponse:
+    """Seed templates, risks, and checklists into MongoDB. Safe to re-run (idempotent)."""
+    vs = getattr(request.app.state, "vector_storage", None)
+    if vs is None:
+        raise HTTPException(status_code=503, detail="MongoDB not connected — cannot seed.")
+    try:
+        from src.mongodb.seed_data import seed_all
+        counts = seed_all(vs)
+        return AdminSeedResponse(
+            templates=counts.get("templates", 0),
+            risks=counts.get("risks", 0),
+            checklists=counts.get("checklists", 0),
+            message="Seed completed successfully.",
+        )
+    except Exception as exc:
+        logger.error("admin_seed_data failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @admin_router.get(

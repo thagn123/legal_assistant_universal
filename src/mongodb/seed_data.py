@@ -544,12 +544,13 @@ _CHECKLISTS = [
 # ---------------------------------------------------------------------------
 
 
-def seed_all(vector_storage: VectorStorage) -> None:
+def seed_all(vector_storage: VectorStorage) -> dict:
     """
     Insert all templates, risks, checklists, and legal cases into MongoDB.
     Generates embeddings for templates, risks, and cases for vector search.
-    Safe to re-run (upsert semantics).
+    Safe to re-run (upsert semantics). Returns counts dict.
     """
+    from typing import Dict as _Dict
     logger.info("seed_data: seeding templates …")
     _seed_templates(vector_storage)
 
@@ -563,6 +564,12 @@ def seed_all(vector_storage: VectorStorage) -> None:
     _seed_legal_cases(vector_storage)
 
     logger.info("seed_data: done.")
+    return {
+        "templates": len(_TEMPLATES),
+        "risks": len(_RISKS),
+        "checklists": len(_CHECKLISTS),
+        "legal_cases": len(_LEGAL_CASES),
+    }
 
 
 def _seed_templates(vs: VectorStorage) -> None:
