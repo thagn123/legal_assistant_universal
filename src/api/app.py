@@ -96,14 +96,6 @@ def create_app(
     if processor is None and use_real_pipeline and bundle_provider is None:
         processor = build_document_processor(storage, PipelineConfig())
 
-    # ── Pre-load embedding model on main thread ───────────────────────────────
-    # SentenceTransformer/torch must be initialized on the main thread on Windows.
-    # Loading it first here means JobRunner background threads only use the
-    # already-cached model — no re-initialization, no SIGSEGV.
-    if use_real_pipeline:
-        from src.pipeline.embedding_stage import _get_model
-        _get_model()
-
     app.state.runner = JobRunner(storage, processor=processor, workers=1)
 
     # ── Evidence bundle provider (existing query/action logic) ─────────────
