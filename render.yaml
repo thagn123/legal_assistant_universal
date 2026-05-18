@@ -34,3 +34,5 @@ services:
         value: "true"
       - key: PYTHONUTF8
         value: "1"
+      - key: DISABLE_EMBEDDINGS
+        value: "false"   # set to "true" on free plan (512 MB RAM) to skip model preload

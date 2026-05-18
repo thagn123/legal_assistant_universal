@@ -197,7 +197,7 @@ class StorageLayer:
             try:
                 self._conn.execute("ALTER TABLE documents ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0")
                 self._conn.commit()
-            except Exception:
+            except sqlite3.OperationalError:
                 pass  # column already exists
             self._conn.commit()
 

@@ -897,6 +897,7 @@ class IntelligenceOut(BaseModel):
     used_llm: bool
     stage_timings: Dict[str, float]
     is_chitchat: bool = False
+    tool_calls_made: List[str] = []
 
 
 @intelligence_router.post("/analyze", response_model=IntelligenceOut)
@@ -948,6 +949,7 @@ def intelligence_analyze(
         used_llm=result.used_llm,
         stage_timings=result.stage_timings,
         is_chitchat=getattr(result, "is_chitchat", False),
+        tool_calls_made=getattr(result, "tool_calls_made", []),
     )
 
 

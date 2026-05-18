@@ -482,7 +482,6 @@ def download_document(
 @router.post("/sessions/{session_id}/evidence")
 async def upload_session_evidence(
     session_id: str,
-    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_user),
 ) -> dict:
@@ -539,9 +538,13 @@ async def upload_session_evidence(
             "filename": filename,
             "snippet": snippet,
             "char_count": len(extracted),
+            "user_id": user_id,
         })
-    except Exception:
-        pass  # best-effort; don't fail the upload if session store is unavailable
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "session evidence append failed (best-effort) session=%s: %s", session_id, exc
+        )
 
     return {
         "evidence_id": evidence_id,
@@ -555,7 +558,6 @@ async def upload_session_evidence(
 
 @router.get("/audit")
 def get_audit_trail(
-    request: Request,
     user_id: str = Depends(require_user),
     audit: AuditLayer = Depends(get_audit),
 ):

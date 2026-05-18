@@ -121,8 +121,8 @@ class SessionStore:
                     {"session_id": session_id},
                     {"$set": {"last_active": now}},
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("load_context: update last_active failed for session %s: %s", session_id, exc)
             return SessionContext(
                 session_id=doc["session_id"],
                 user_id=doc["user_id"],

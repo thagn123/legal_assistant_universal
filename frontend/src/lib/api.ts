@@ -41,12 +41,6 @@ export const LAW_TYPE_LABELS: Record<string, string> = {
 };
 
 // TYPES
-export interface InteractionLogPayload {
-  doc_id: string;
-  action_type: 'view' | 'save' | 'download';
-  context: Record<string, any>;
-}
-
 export interface LawChunk {
   id: string;
   law_reference: string;
