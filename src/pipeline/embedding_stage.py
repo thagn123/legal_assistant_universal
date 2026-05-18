@@ -33,6 +33,8 @@ def _get_model():
     global _model, _model_load_failed
     if _model_load_failed:
         return None
+    if os.environ.get("DISABLE_EMBEDDINGS", "").lower() in ("1", "true", "yes"):
+        return None
     if _model is None:
         try:
             # Hide all CUDA devices to force pure CPU operation.
