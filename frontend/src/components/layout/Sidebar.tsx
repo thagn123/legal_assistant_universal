@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -17,8 +17,10 @@ import {
   ScrollText,
   Info,
   Map,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
-import { cn } from '../../lib/api';
+import { cn, API_BASE } from '../../lib/api';
 
 const menuItems = [
   { path: '/', label: 'Tổng quan', icon: LayoutDashboard },
@@ -32,9 +34,29 @@ const menuItems = [
   { path: '/profile', label: 'Hồ sơ của tôi', icon: UserCircle },
 ];
 
+type SystemStatus = 'checking' | 'online' | 'offline';
+
 export function Sidebar() {
+  const [status, setStatus] = useState<SystemStatus>('checking');
+
+  useEffect(() => {
+    let mounted = true;
+    async function checkStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) });
+        if (mounted) setStatus(res.ok ? 'online' : 'offline');
+      } catch {
+        if (mounted) setStatus('offline');
+      }
+    }
+    checkStatus();
+    const interval = setInterval(checkStatus, 30_000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
   return (
     <aside className="w-64 bg-legal-navy border-r border-legal-border flex flex-col shrink-0">
+      {/* Logo */}
       <div className="p-6 flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20">
           <Scale className="text-legal-navy" size={24} />
@@ -45,15 +67,17 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
+            end={item.path === '/'}
             className={({ isActive }) => cn(
               "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group",
-              isActive 
-                ? "bg-legal-gold text-legal-navy shadow-lg shadow-legal-gold/20" 
+              isActive
+                ? "bg-legal-gold text-legal-navy shadow-lg shadow-legal-gold/20"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
             )}
           >
@@ -63,8 +87,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* AI GUIDE INFO BOX */}
-      <div className="p-4 mx-4 mb-4 bg-legal-gold/5 border border-legal-gold/10 rounded-2xl">
+      {/* AI Guide */}
+      <div className="p-4 mx-4 bg-legal-gold/5 border border-legal-gold/10 rounded-2xl">
         <div className="flex items-start gap-2 mb-2">
           <Info className="text-legal-gold shrink-0 mt-0.5" size={14} />
           <h4 className="text-[10px] font-bold text-legal-gold uppercase tracking-wider font-mono">Hướng dẫn AI</h4>
@@ -74,12 +98,29 @@ export function Sidebar() {
         </p>
       </div>
 
+      {/* System status */}
       <div className="p-4">
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Trạng thái hệ thống</p>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-legal-success animate-pulse" />
-            <span className="text-xs text-slate-300">Hoạt động bình thường</span>
+            {status === 'checking' && (
+              <>
+                <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+                <span className="text-xs text-slate-400">Đang kiểm tra...</span>
+              </>
+            )}
+            {status === 'online' && (
+              <>
+                <Wifi size={13} className="text-legal-success" />
+                <span className="text-xs text-legal-success font-medium">Backend hoạt động</span>
+              </>
+            )}
+            {status === 'offline' && (
+              <>
+                <WifiOff size={13} className="text-legal-danger" />
+                <span className="text-xs text-legal-danger font-medium">Backend ngoại tuyến</span>
+              </>
+            )}
           </div>
         </div>
       </div>

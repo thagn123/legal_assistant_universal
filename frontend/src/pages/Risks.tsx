@@ -187,10 +187,20 @@ export function Risks() {
            ))}
         </div>
 
-        {filteredRisks.length === 0 && !isLoading && (
-          <div className="py-20 flex flex-col items-center opacity-30 text-center space-y-4">
+        {filteredRisks.length === 0 && !isLoading && risks.length === 0 && (
+          <div className="py-20 flex flex-col items-center opacity-40 text-center space-y-4">
              <ShieldCheck size={64} className="text-slate-500" />
-             <p className="text-sm font-bold text-slate-500">Chưa phát hiện rủi ro nào. Tuyệt vời!</p>
+             <p className="text-sm font-bold text-slate-500">
+               {activeTab === 'situation'
+                 ? 'Nhập tình huống và nhấn "Đánh giá" để bắt đầu phân tích rủi ro.'
+                 : 'Chưa có lịch sử hội thoại để phân tích rủi ro.'}
+             </p>
+          </div>
+        )}
+        {filteredRisks.length === 0 && !isLoading && risks.length > 0 && (
+          <div className="py-20 flex flex-col items-center opacity-40 text-center space-y-4">
+             <ShieldCheck size={64} className="text-legal-success" />
+             <p className="text-sm font-bold text-slate-500">Không có rủi ro {severityFilter !== 'all' ? 'ở mức đã chọn' : 'nào được phát hiện'}. Tuyệt vời!</p>
           </div>
         )}
       </div>

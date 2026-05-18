@@ -187,53 +187,68 @@ export function Profile() {
            <Calendar className="text-legal-gold" size={20} />
            Biểu đồ nhiệt hoạt động (24h)
          </h3>
-         <div className="grid grid-cols-12 md:grid-cols-24 gap-1 h-32">
-            {(profile.active_hours || Array(24).fill(0)).map((val, i) => (
-              <div 
-                key={i} 
-                className="rounded cursor-help relative group"
-                style={{ 
-                  backgroundColor: `rgba(212, 168, 67, ${val / 100})`, 
-                  border: val === 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' 
+         <div className="gap-1 h-20" style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)' }}>
+            {(profile.active_hours && profile.active_hours.length === 24
+              ? profile.active_hours
+              : Array(24).fill(0)
+            ).map((val, i) => (
+              <div
+                key={i}
+                className="rounded-sm cursor-help relative group"
+                style={{
+                  backgroundColor: val > 0
+                    ? `rgba(212, 168, 67, ${Math.min(0.15 + (val / 100) * 0.85, 1)})`
+                    : 'rgba(255,255,255,0.04)',
+                  border: val === 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                 }}
               >
                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-slate-900 border border-white/10 rounded text-[9px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap">
-                   {i}:00h - Level: {val}%
+                   {String(i).padStart(2, '0')}:00 — {val > 0 ? `${val}%` : 'Không có hoạt động'}
                  </div>
               </div>
             ))}
          </div>
          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
             <span>00:00</span>
+            <span>06:00</span>
             <span>12:00</span>
+            <span>18:00</span>
             <span>23:59</span>
          </div>
       </div>
 
       {/* ADJACENT DOMAINS */}
-      <div className="space-y-6">
-         <h3 className="text-lg font-bold text-white flex items-center gap-2">
-           <Sparkles className="text-legal-gold" size={20} />
-           Gợi ý mở rộng kiến thức
-         </h3>
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {['hinh_su', 'hanh_chinh', 'gia_dinh'].map(d => (
-              <div key={d} className="glass-card p-6 flex flex-col hover:border-blue-500/30 transition-all">
-                 <div className="flex items-center justify-between mb-4">
-                    <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400">
-                      <MapIcon size={20} />
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">Chưa khám phá</span>
-                 </div>
-                 <h4 className="font-bold text-white text-lg">{LAW_TYPE_LABELS[d]}</h4>
-                 <p className="text-xs text-slate-400 mt-2 mb-6">Mở rộng hồ sơ năng lực pháp lý của bạn ở mảng {LAW_TYPE_LABELS[d].toLowerCase()}.</p>
-                 <button className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline">
-                    Khám phá ngay <ArrowRight size={14} />
-                 </button>
-              </div>
-            ))}
-         </div>
-      </div>
+      {(() => {
+        const knownDomains = new Set(Object.keys(profile.law_type_weights || {}));
+        const allDomains = Object.keys(LAW_TYPE_LABELS).filter(d => d !== 'general');
+        const adjacent = allDomains.filter(d => !knownDomains.has(d)).slice(0, 3);
+        if (adjacent.length === 0) return null;
+        return (
+          <div className="space-y-6">
+             <h3 className="text-lg font-bold text-white flex items-center gap-2">
+               <Sparkles className="text-legal-gold" size={20} />
+               Gợi ý mở rộng kiến thức
+             </h3>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {adjacent.map(d => (
+                  <div key={d} className="glass-card p-6 flex flex-col hover:border-blue-500/30 transition-all">
+                     <div className="flex items-center justify-between mb-4">
+                        <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400">
+                          <MapIcon size={20} />
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">Chưa khám phá</span>
+                     </div>
+                     <h4 className="font-bold text-white text-lg">{LAW_TYPE_LABELS[d]}</h4>
+                     <p className="text-xs text-slate-400 mt-2 mb-6">Mở rộng hồ sơ năng lực pháp lý của bạn ở mảng {LAW_TYPE_LABELS[d].toLowerCase()}.</p>
+                     <button className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline">
+                        Khám phá ngay <ArrowRight size={14} />
+                     </button>
+                  </div>
+                ))}
+             </div>
+          </div>
+        );
+      })()}
 
       {/* ROLE SELECTION */}
       <div className="glass-card p-8 space-y-6">
@@ -327,22 +342,29 @@ export function Profile() {
       </div>
 
       {/* PEER RECOMMENDATIONS */}
-      <div className="space-y-6">
-         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">Người có cùng hành vi quan tâm</h3>
-         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            {peers.map((p, i) => (
-               <div key={i} className="glass-card p-4 min-w-[240px] flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-legal-navy border border-white/10 flex items-center justify-center text-slate-500">
-                     <UserCircle size={24} />
+      {peers.length > 0 && (
+        <div className="space-y-6">
+           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">Người có cùng hành vi quan tâm</h3>
+           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+              {peers.map((p, i) => {
+                const similarity = typeof p.similarity === 'number' ? Math.round(p.similarity * 100) : Math.max(70, 95 - i * 5);
+                const rawId: string = p.user_id || p.id || '';
+                const displayId = rawId.length > 8 ? rawId.slice(0, 4) + '…' + rawId.slice(-4) : rawId || `User ${i + 1}`;
+                return (
+                  <div key={i} className="glass-card p-4 min-w-[240px] flex items-center gap-4">
+                     <div className="w-10 h-10 rounded-full bg-legal-navy border border-white/10 flex items-center justify-center text-slate-500">
+                        <UserCircle size={24} />
+                     </div>
+                     <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{displayId}</p>
+                        <p className="text-[10px] text-slate-500">{similarity}% Tương đồng</p>
+                     </div>
                   </div>
-                  <div className="min-w-0">
-                     <p className="text-xs font-bold text-white truncate">User #{Math.floor(Math.random()*1000)}</p>
-                     <p className="text-[10px] text-slate-500">89% Tương đồng</p>
-                  </div>
-               </div>
-            ))}
-         </div>
-      </div>
+                );
+              })}
+           </div>
+        </div>
+      )}
     </div>
   );
 }

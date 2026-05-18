@@ -358,7 +358,18 @@ export function Analyze() {
                     </div>
                     <div className="space-y-2">
                       <h3 className="text-lg font-bold text-slate-400">Trình phân tích LexAI</h3>
-                      <p className="text-sm text-slate-500 max-w-sm">Mô tả tình huống pháp lý của bạn để gpt-4o-mini bắt đầu phân tích và đưa ra giải pháp.</p>
+                      <p className="text-sm text-slate-500 max-w-sm">Mô tả tình huống pháp lý của bạn — LexAI sẽ phân tích qua 7 tầng thông minh và đưa ra giải pháp có căn cứ pháp luật.</p>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+                      {['Tranh chấp đất đai', 'Hợp đồng lao động', 'Khiếu nại hành chính'].map(hint => (
+                        <button
+                          key={hint}
+                          onClick={() => setSituation(hint)}
+                          className="px-3 py-1.5 text-[11px] bg-white/5 border border-white/10 rounded-full text-slate-500 hover:text-white hover:border-legal-gold/30 transition-all"
+                        >
+                          {hint}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -605,7 +616,7 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
             <Zap size={12} fill="currentColor" />
             {result.used_llm ? "AI" : "Xác định luật"}
           </div>
-          <span className="text-[10px] font-mono text-slate-500">⚡ gpt-4o-mini | {totalMs.toFixed(0)}ms</span>
+          <span className="text-[10px] font-mono text-slate-500">⚡ {result.used_llm ? 'LLM + RAG' : 'Deterministic RAG'} | {totalMs.toFixed(0)}ms</span>
         </div>
         <InteractionButtons docId={result.session_id} />
       </div>

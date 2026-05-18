@@ -27,7 +27,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { AdminDocuments } from './pages/admin/AdminDocuments';
 import { AdminJobs } from './pages/admin/AdminJobs';
 import { AdminStats } from './pages/admin/AdminStats';
-import { LayoutDashboard, Search, FileText, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Search, FileText, UserCircle, ShieldAlert, ScrollText } from 'lucide-react';
 
 export default function App() {
   const location = useLocation();
@@ -72,11 +72,12 @@ export default function App() {
         </main>
 
         {/* MOBILE BOTTOM NAV */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-legal-navy/80 backdrop-blur-lg border-t border-legal-border flex items-center justify-around px-4 z-50">
-          <MobileNavLink to="/" icon={<LayoutDashboard size={20} />} label="Home" />
-          <MobileNavLink to="/analyze" icon={<Search size={20} />} label="Analyze" />
-          <MobileNavLink to="/documents" icon={<FileText size={20} />} label="Docs" />
-          <MobileNavLink to="/profile" icon={<UserCircle size={20} />} label="Profile" />
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-legal-navy/95 backdrop-blur-lg border-t border-legal-border flex items-center justify-around px-2 z-50">
+          <MobileNavLink to="/" icon={<LayoutDashboard size={20} />} label="Tổng quan" />
+          <MobileNavLink to="/analyze" icon={<Search size={20} />} label="Phân tích" />
+          <MobileNavLink to="/documents" icon={<FileText size={20} />} label="Tài liệu" />
+          <MobileNavLink to="/risks" icon={<ShieldAlert size={20} />} label="Rủi ro" />
+          <MobileNavLink to="/profile" icon={<UserCircle size={20} />} label="Hồ sơ" />
         </nav>
       </div>
     </div>
@@ -85,12 +86,13 @@ export default function App() {
 
 function MobileNavLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
-    <NavLink 
-      to={to} 
-      className={({ isActive }) => `flex flex-col items-center gap-1 transition-colors ${isActive ? 'text-legal-gold' : 'text-slate-500'}`}
+    <NavLink
+      to={to}
+      end={to === '/'}
+      className={({ isActive }) => `flex flex-col items-center gap-0.5 px-2 transition-colors ${isActive ? 'text-legal-gold' : 'text-slate-500'}`}
     >
       {icon}
-      <span className="text-[10px] font-bold uppercase">{label}</span>
+      <span className="text-[9px] font-semibold">{label}</span>
     </NavLink>
   );
 }

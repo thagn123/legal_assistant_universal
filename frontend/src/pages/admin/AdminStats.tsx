@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { adminGetStats, adminSeedData, AdminStats } from '../../lib/api';
+import type { AdminStats } from '../../lib/api';
+import { adminGetStats, adminSeedData } from '../../lib/api';
 import { Database, FileText, Layers, Activity, RefreshCw, Loader2, CheckCircle2 } from 'lucide-react';
 
 const STATUS_COLORS: Record<string, string> = {
