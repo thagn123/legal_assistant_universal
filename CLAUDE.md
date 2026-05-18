@@ -10,7 +10,7 @@
 **Name:** Universal Legal Knowledge Assistant (LexAI / ULKA)
 **Stack:** Python 3.11 · FastAPI · MongoDB Atlas · sentence-transformers · OpenAI API · React 19 + TypeScript + Vite + Tailwind
 **Language:** Vietnamese legal domain (UI + domain vocabulary), codebase in English
-**Phase:** 12 — Admin Upload Infrastructure + Frontend Wiring (current)
+**Phase:** 13 — Cross-Session User Memory + ReflectionAgent + Personalization UI (current)
 **Repo branch:** `main`
 
 ---
@@ -48,7 +48,13 @@ src/                                  # Python backend
 │   └── reasoning_trace.py            # StageTrace / ReasoningTrace / TraceBuilder
 │
 ├── memory/
-│   └── session_store.py              # MongoDB-backed 24h TTL conversation memory
+│   ├── session_store.py              # MongoDB-backed 24h TTL conversation memory
+│   ├── user_memory_store.py          # ★ NEW — Persistent cross-session memory (no TTL)
+│   │                                 #   PersonalInfo + SituationRecord dataclasses
+│   │                                 #   UserMemoryStore CRUD + get_context_for_prompt()
+│   └── reflection_agent.py           # ★ NEW — Two-tier post-turn extraction (daemon thread)
+│                                     #   Tier 1: regex (name/age/occupation/location, <1ms)
+│                                     #   Tier 2: LLM async, rate-limited 1 call/60s/user
 │
 ├── observability/
 │   └── tracer.py                     # ExecutionTracer singleton (structured JSON logs)
@@ -132,12 +138,14 @@ src/                                  # Python backend
 lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 ├── lib/
 │   ├── api.ts                        # API client — adminFetch, dynamic getUserId(), admin endpoints
-│   └── adminAuth.ts                  # ★ NEW — getAdminKey/setAdminKey/isAdminAuthenticated
+│   │                                 #   ★ NEW: UserMemory/UserMemoryInfo/SituationRecord types
+│   │                                 #   ★ NEW: getUserMemory() / updateUserMemory()
+│   └── adminAuth.ts                  # getAdminKey/setAdminKey/isAdminAuthenticated
 │
 ├── components/
 │   ├── layout/
 │   │   ├── Sidebar.tsx               # User sidebar navigation
-│   │   └── Header.tsx                # User header
+│   │   └── Header.tsx                # User header — ★ NEW: shows displayName from UserMemory
 │   └── admin/
 │       └── AdminLayout.tsx           # ★ NEW — Admin shell (sidebar + auth guard + Outlet)
 │
@@ -149,7 +157,9 @@ lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 │   ├── Templates.tsx                 # Contract templates
 │   ├── Risks.tsx                     # Legal risk panel
 │   ├── Checklists.tsx                # Compliance checklists
-│   ├── Profile.tsx                   # User profile
+│   ├── Profile.tsx                   # User profile — ★ NEW: "AI ghi nhớ về bạn" card
+│   │                                 #   PersonalInfo edit panel (name/age/occupation/location/notes)
+│   │                                 #   Recent situation summaries from ReflectionAgent
 │   └── admin/
 │       ├── AdminLogin.tsx            # ★ NEW — Admin key login form
 │       ├── AdminDashboard.tsx        # ★ NEW — Admin home with quick links
@@ -159,6 +169,74 @@ lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 │
 └── App.tsx                           # Routes — /admin/* handled separately from user routes
 ```
+
+---
+
+## User Memory Infrastructure (Phase 13)
+
+### Cross-Session Memory Flow
+
+```
+User Turn                              Background (daemon thread)
+    │                                         │
+    ▼ Stage 2b                                │
+UserMemoryStore.get(user_id)                  │
+  → PersonalInfo (name/age/occ/loc/notes)    │
+  → SituationRecords[-3:]                     │
+    → prepended to Stage 5 LLM message        │
+    │                                         │
+    ▼ Stage 7b (after response sent)          │
+ReflectionAgent.reflect_async(...)            │
+    │                                         ▼
+    └─────────────────────────────────► _tier1_patterns()  [<1ms, always]
+                                          regex: name/age/occupation/location
+                                          → UserMemoryStore.update_personal_info()
+                                        _tier2_llm()  [if rate allows, domain≠general]
+                                          LLM → JSON {personal_info, situation_summary}
+                                          → update_personal_info() + upsert_situation_summary()
+```
+
+### UserMemory Schema
+
+```python
+@dataclass
+class PersonalInfo:
+    name: Optional[str]         # extracted from "tên tôi là ..."
+    age: Optional[int]          # extracted from "X tuổi"
+    occupation: Optional[str]   # from job title keywords
+    location: Optional[str]     # from major Vietnamese cities
+    notes: Optional[str]        # free-form, user-edited via PUT /memory
+
+@dataclass
+class SituationRecord:
+    session_id: str
+    date: str           # YYYY-MM-DD
+    domain: str         # law domain code
+    summary: str        # 1-sentence ≤ 150 chars (LLM-generated)
+    resolved: bool      # default False, settable via mark_situation_resolved()
+
+# MongoDB document structure (collection: user_memory, no TTL)
+{
+  "user_id": "abc123",
+  "personal_info": { "name": ..., "age": ..., "occupation": ..., "location": ..., "notes": ... },
+  "situation_summaries": [ ...last 20... ],
+  "updated_at": "2025-05-18T..."
+}
+```
+
+### Profile Page — "AI ghi nhớ về bạn" Card
+
+- Fetches `GET /recommendations/behavior/memory` on mount
+- Displays PersonalInfo fields in a 2-column grid; empty fields show italic placeholder
+- "Chỉnh sửa" button → all fields become inputs → "Lưu" calls `PUT /recommendations/behavior/memory`
+- Notes field: free-form textarea for anything the user wants AI to remember
+- Situation summaries: last 5, newest first — domain badge + resolved/pending status dot
+
+### Header — Personalized Greeting
+
+- `getUserMemory()` called on mount and on userId change
+- If `personal_info.name` known: button shows real name; dropdown shows `"Xin chào, [name]"`
+- Clears `displayName` and re-fetches when user switches to a different userId
 
 ---
 
@@ -226,6 +304,11 @@ User Query
     │   Loads 24h TTL MongoDB session (history, law_type_preferences)
     │   Creates new session if first turn
     │
+    ▼ Stage 2b — UserMemoryStore.get_context_for_prompt()  ★ NEW
+    │   Loads permanent cross-session UserMemory (no TTL)
+    │   Builds context block: name · age · occupation · location · notes
+    │   + last 3 SituationRecords — prepended to Stage 5 user message
+    │
     ▼ Stage 3 — RetrievalFusionEngine.fuse()
     │   Signal 1: Vector search ($vectorSearch, 384-dim cosine, weight 0.45)
     │   Signal 2: BM25 keyword TF approximation (weight 0.20)
@@ -243,6 +326,7 @@ User Query
     ▼ Stage 5 — LLM Reasoning (OpenAI tool-calling, max 4 rounds)
     │   Tools: retrieve_law_chunks, retrieve_similar_cases,
     │          get_graph_context, assess_legal_position, draft_legal_response
+    │   User message prefixed with UserMemory context block if available  ★ NEW
     │   Fallback: deterministic assessment if LLM unavailable
     │
     ▼ Stage 6 — RecommendationRanker.rank()
@@ -252,7 +336,14 @@ User Query
     │   Vietnamese explanation per item
     │
     ▼ Stage 7 — Persist
-        save_trace() · save_context() · cache_retrieval_context() · log_interaction()
+    │   save_trace() · save_context() · cache_retrieval_context() · log_interaction()
+    │
+    ▼ Stage 7b — ReflectionAgent.reflect_async()  ★ NEW
+        Daemon thread — returns immediately, never blocks response
+        Tier 1 (always): regex extracts name/age/occupation/location from query
+        Tier 2 (if session_turns≥1 AND domain≠general AND rate OK):
+          LLM call → JSON {personal_info, situation_summary}
+          Upserts SituationRecord into user_memory collection
 ```
 
 ---
@@ -338,6 +429,8 @@ The processor (`src/runtime/processor.py`) auto-detects `is_global = (user_id ==
 | POST | `/recommendations/behavior/next-action` | Next-action prediction |
 | GET | `/recommendations/behavior/peers` | Peer-based recommendations |
 | GET | `/recommendations/behavior/digest` | Daily digest |
+| GET | `/recommendations/behavior/memory` | ★ NEW — Get user's cross-session memory |
+| PUT | `/recommendations/behavior/memory` | ★ NEW — Update PersonalInfo fields |
 
 ### Interactions
 | Method | Path | Description |
@@ -356,6 +449,7 @@ The processor (`src/runtime/processor.py`) auto-detects `is_global = (user_id ==
 | `conversation_sessions` | Multi-turn session context | 24h on `last_active` |
 | `reasoning_traces` | Per-query structured reasoning traces | — |
 | `session_context` | Retrieval cache per session | 24h via `expires_at` |
+| `user_memory` | ★ NEW — Permanent cross-session user memory: PersonalInfo + SituationRecords (last 20) | **none** |
 
 Vector index: `law_chunks.embedding` (384-dim cosine, `$vectorSearch`)
 
@@ -375,6 +469,11 @@ Vector index: `law_chunks.embedding` (384-dim cosine, `$vectorSearch`)
 10. **Admin key**: Simple header-based auth (`X-Admin-Key`), no JWT/session — intentional for simplicity. Admin panel is internal tooling only.
 11. **Frontend admin routing**: `useLocation()` checks `/admin` prefix → renders completely separate layout tree (AdminLayout) vs user layout (Sidebar+Header). No shared state between admin and user sessions.
 12. **Session persistence (Analyze)**: Conversation history stored in `localStorage` (max 20 sessions), not fetched from server per session — reduces latency for demo mode.
+13. **UserMemory no TTL**: Unlike `conversation_sessions` (24h), `user_memory` collection never expires — stores personal facts that accumulate over a user's lifetime on the platform.
+14. **Reflection non-blocking**: `ReflectionAgent.reflect_async()` spawns a `threading.Thread(daemon=True)` — never adds latency to the response path. Errors are silently swallowed.
+15. **Reflection rate limit**: `_RateLimiter` (60s minimum interval per user) prevents LLM tier-2 from being called on every turn; tier-1 regex always runs regardless.
+16. **Memory context placement**: UserMemory block is prepended to the LLM user message (before "Tình huống:"), not to the system prompt — keeps the strict 4-part system prompt intact.
+17. **Graceful degradation for memory**: `orchestrator.__init__` wraps `UserMemoryStore()` init in try/except — if MongoDB is unavailable, `self._memory_store = None` and the pipeline runs without personalization.
 
 ---
 
@@ -464,4 +563,5 @@ Environment variables:
 | 9 | Action Engine: drafting, compliance, risk, comparison |
 | 10 | Product Runtime: API, SQLite storage, auth, audit, job orchestration |
 | 11 | AI Legal Intelligence Infrastructure: staged pipeline, retrieval fusion, reranking, session memory, observability, behavior recommender |
-| 12 | Admin Upload Infrastructure + Frontend Wiring (current): admin API, is_global mechanism, React admin panel, localStorage session persistence |
+| 12 | Admin Upload Infrastructure + Frontend Wiring: admin API, is_global mechanism, React admin panel, localStorage session persistence |
+| 13 | Cross-Session User Memory + ReflectionAgent + Personalization UI (current): UserMemoryStore (no TTL), two-tier ReflectionAgent, orchestrator Stage 2b/5/7b patches, behavior/memory API, Profile personal-info panel, Header name greeting |

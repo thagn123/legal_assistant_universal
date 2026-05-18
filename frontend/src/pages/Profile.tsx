@@ -18,6 +18,11 @@ import {
   CheckCircle2,
   Loader2,
   Tag,
+  Edit2,
+  Save,
+  X,
+  Brain,
+  History,
 } from 'lucide-react';
 import { 
   Radar, 
@@ -31,7 +36,7 @@ import {
   Cell,
   Tooltip as ChartTooltip
 } from 'recharts';
-import { apiFetch, getRecommendationsByRole, PersonaRecommendResult, UserProfile, LAW_TYPE_LABELS } from '../lib/api';
+import { apiFetch, getRecommendationsByRole, getUserMemory, updateUserMemory, PersonaRecommendResult, UserProfile, UserMemory, UserMemoryInfo, LAW_TYPE_LABELS } from '../lib/api';
 
 const ROLE_OPTIONS = [
   { value: 'individual',   label: 'Cá nhân',              emoji: '👤' },
@@ -49,11 +54,29 @@ export function Profile() {
   const [selectedRole, setSelectedRole] = useState<string>(() => localStorage.getItem(ROLE_STORAGE_KEY) || '');
   const [roleRecs, setRoleRecs] = useState<PersonaRecommendResult | null>(null);
   const [roleLoading, setRoleLoading] = useState(false);
+  const [memory, setMemory] = useState<UserMemory | null>(null);
+  const [editingMemory, setEditingMemory] = useState(false);
+  const [memoryForm, setMemoryForm] = useState<UserMemoryInfo>({});
+  const [memorySaving, setMemorySaving] = useState(false);
 
   useEffect(() => {
     apiFetch<UserProfile>('/recommendations/behavior/profile').then(setProfile).catch(() => {});
     apiFetch<any[]>('/recommendations/behavior/peers?limit=5').then(res => setPeers(Array.isArray(res) ? res : [])).catch(() => {});
+    getUserMemory().then(setMemory).catch(() => {});
   }, []);
+
+  async function handleSaveMemory() {
+    setMemorySaving(true);
+    try {
+      const updated = await updateUserMemory(memoryForm);
+      setMemory(updated);
+      setEditingMemory(false);
+    } catch {
+      // silent fail
+    } finally {
+      setMemorySaving(false);
+    }
+  }
 
   async function handleRoleSelect(role: string) {
     setSelectedRole(role);
@@ -112,6 +135,111 @@ export function Profile() {
         <button className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
            Chỉnh sửa hồ sơ
         </button>
+      </div>
+
+      {/* PERSONAL INFO MEMORY */}
+      <div className="glass-card p-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Brain className="text-legal-gold" size={20} />
+            <h3 className="text-lg font-bold text-white">AI ghi nhớ về bạn</h3>
+            <span className="text-[10px] text-slate-500 bg-white/5 px-2 py-0.5 rounded-full">Tự động từ cuộc hội thoại</span>
+          </div>
+          {!editingMemory ? (
+            <button
+              onClick={() => { setEditingMemory(true); setMemoryForm({ name: memory?.personal_info?.name, age: memory?.personal_info?.age, occupation: memory?.personal_info?.occupation, location: memory?.personal_info?.location, notes: memory?.personal_info?.notes }); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-white/30 transition-all text-xs font-semibold"
+            >
+              <Edit2 size={13} /> Chỉnh sửa
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveMemory}
+                disabled={memorySaving}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-legal-gold/10 border border-legal-gold/30 text-legal-gold hover:bg-legal-gold/20 transition-all text-xs font-semibold disabled:opacity-50"
+              >
+                {memorySaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Lưu
+              </button>
+              <button
+                onClick={() => setEditingMemory(false)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-all text-xs font-semibold"
+              >
+                <X size={13} /> Hủy
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: 'Họ tên', key: 'name' as const, placeholder: 'Chưa biết tên...', value: memory?.personal_info?.name },
+            { label: 'Tuổi', key: 'age' as const, placeholder: 'Chưa biết tuổi...', value: memory?.personal_info?.age?.toString() },
+            { label: 'Nghề nghiệp', key: 'occupation' as const, placeholder: 'Chưa rõ nghề nghiệp...', value: memory?.personal_info?.occupation },
+            { label: 'Địa điểm', key: 'location' as const, placeholder: 'Chưa rõ địa điểm...', value: memory?.personal_info?.location },
+          ].map(({ label, key, placeholder, value }) => (
+            <div key={key} className="space-y-1.5">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+              {editingMemory ? (
+                <input
+                  type={key === 'age' ? 'number' : 'text'}
+                  value={key === 'age' ? (memoryForm.age ?? '') : (memoryForm[key] ?? '')}
+                  onChange={e => setMemoryForm(f => ({ ...f, [key]: key === 'age' ? (e.target.value ? parseInt(e.target.value) : null) : (e.target.value || null) }))}
+                  placeholder={placeholder}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-legal-gold/50 focus:bg-white/8 transition-all placeholder-slate-600"
+                />
+              ) : (
+                <p className={`text-sm font-semibold ${value ? 'text-white' : 'text-slate-600 italic'}`}>
+                  {value || placeholder}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Notes field */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ghi chú thêm</p>
+          {editingMemory ? (
+            <textarea
+              value={memoryForm.notes ?? ''}
+              onChange={e => setMemoryForm(f => ({ ...f, notes: e.target.value || null }))}
+              placeholder="Thông tin bổ sung bạn muốn AI nhớ..."
+              rows={2}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-legal-gold/50 transition-all resize-none placeholder-slate-600"
+            />
+          ) : (
+            <p className={`text-sm font-semibold ${memory?.personal_info?.notes ? 'text-white' : 'text-slate-600 italic'}`}>
+              {memory?.personal_info?.notes || 'Chưa có ghi chú...'}
+            </p>
+          )}
+        </div>
+
+        {/* Recent situations */}
+        {memory && memory.situation_summaries.length > 0 && (
+          <div className="space-y-3 pt-4 border-t border-white/10">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+              <History size={11} /> Vụ việc AI đã tư vấn gần đây
+            </p>
+            <div className="space-y-2">
+              {memory.situation_summaries.slice(-5).reverse().map((s, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
+                  <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${s.resolved ? 'bg-emerald-400' : 'bg-legal-gold'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-white leading-relaxed">{s.summary}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-[10px] text-slate-500">{s.date}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded text-slate-500">{LAW_TYPE_LABELS[s.domain] || s.domain}</span>
+                      <span className={`text-[10px] font-semibold ${s.resolved ? 'text-emerald-400' : 'text-legal-gold'}`}>
+                        {s.resolved ? '✓ Đã giải quyết' : '⏳ Đang xử lý'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">

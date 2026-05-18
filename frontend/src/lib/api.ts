@@ -502,6 +502,44 @@ export interface AdminStats {
   mongodb: Record<string, number>;
 }
 
+// ---------------------------------------------------------------------------
+// User Memory (cross-session personalization)
+// ---------------------------------------------------------------------------
+
+export interface UserMemoryInfo {
+  name?: string | null;
+  age?: number | null;
+  occupation?: string | null;
+  location?: string | null;
+  notes?: string | null;
+}
+
+export interface SituationRecord {
+  session_id: string;
+  date: string;
+  domain: string;
+  summary: string;
+  resolved: boolean;
+}
+
+export interface UserMemory {
+  user_id: string;
+  personal_info: UserMemoryInfo;
+  situation_summaries: SituationRecord[];
+  updated_at: string;
+}
+
+export async function getUserMemory(): Promise<UserMemory> {
+  return apiFetch<UserMemory>('/recommendations/behavior/memory');
+}
+
+export async function updateUserMemory(updates: UserMemoryInfo): Promise<UserMemory> {
+  return apiFetch<UserMemory>('/recommendations/behavior/memory', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const adminKey = getAdminKey() || '';
   const res = await fetch(`${API_BASE}${path}`, {

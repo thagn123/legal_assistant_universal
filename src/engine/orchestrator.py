@@ -118,6 +118,17 @@ class LegalIntelligenceOrchestrator:
         self._session_store = SessionStore()
         self._tracer = get_tracer()
 
+        # Long-term user memory (cross-session, no TTL)
+        self._memory_store: Optional[Any] = None
+        self._reflection: Optional[Any] = None
+        try:
+            from src.memory.user_memory_store import UserMemoryStore
+            from src.memory.reflection_agent import ReflectionAgent
+            self._memory_store = UserMemoryStore()
+            self._reflection = ReflectionAgent(self._memory_store)
+        except Exception as _me:
+            logger.warning("user memory disabled: %s", _me)
+
     def analyze(
         self,
         situation: str,
@@ -164,9 +175,18 @@ class LegalIntelligenceOrchestrator:
         # ── Stage 2: Session Loading ─────────────────────────────────────────
         builder.begin_stage(2, "session_loader", {"session_id": sid, "user_id": user_id})
         session_ctx = self._session_store.load_context(sid, user_id)
+        # Stage 2b: Load cross-session user memory (name, occupation, past situations)
+        user_memory_ctx = ""
+        if self._memory_store:
+            try:
+                user_memory_ctx = self._memory_store.get_context_for_prompt(user_id)
+            except Exception as _ume:
+                logger.debug("user memory load failed: %s", _ume)
+
         s2 = builder.end_stage({
             "session_turns": len(session_ctx.history),
             "known_domains": session_ctx.law_type_preferences[:3],
+            "has_user_memory": bool(user_memory_ctx),
         })
         stage_timings["session_loader"] = s2.duration_ms
 
@@ -249,16 +269,16 @@ class LegalIntelligenceOrchestrator:
                     for r in fused.results[:5]
                     if r.content
                 )
+                user_content = (
+                    f"Tình huống: {situation[:800]}\n\n"
+                    f"Vai trò: {user_role}\n\n"
+                    f"Bối cảnh pháp lý đã truy xuất:\n{context_snippets}"
+                )
+                if user_memory_ctx:
+                    user_content = user_memory_ctx + "\n\n" + user_content
                 messages = [
                     {"role": "system", "content": _SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Tình huống: {situation[:800]}\n\n"
-                            f"Vai trò: {user_role}\n\n"
-                            f"Bối cảnh pháp lý đã truy xuất:\n{context_snippets}"
-                        ),
-                    },
+                    {"role": "user", "content": user_content},
                 ]
                 for _round in range(3):
                     response = llm.chat_complete_with_tools(messages, SITUATION_TOOLS)
@@ -438,6 +458,21 @@ class LegalIntelligenceOrchestrator:
             )
         except Exception as exc:
             logger.warning("stage 7 persist failed (non-fatal): %s", exc)
+
+        # Stage 7b: Reflection — async extraction of personal facts & situation summary
+        if self._reflection:
+            try:
+                self._reflection.reflect_async(
+                    user_id=user_id,
+                    session_id=sid,
+                    query=situation,
+                    result_summary=result_summary.get("query", situation[:200]),
+                    domain=plan.detected_domain,
+                    session_turns=len(session_ctx.history),
+                )
+            except Exception as _re:
+                logger.debug("reflection dispatch failed: %s", _re)
+
         s7 = builder.end_stage({"trace_saved": True, "session_saved": True})
         stage_timings["persist"] = s7.duration_ms
 

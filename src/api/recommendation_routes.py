@@ -803,6 +803,44 @@ def get_daily_digest(
     return br.get_daily_digest(user_id)
 
 
+@behavior_router.get("/memory")
+def get_user_memory(
+    user_id: str = Depends(require_user),
+) -> Dict[str, Any]:
+    """
+    Returns the user's cross-session persistent memory:
+      - personal_info: name, age, occupation, location, notes
+      - situation_summaries: last 20 compressed session summaries
+    """
+    from src.memory.user_memory_store import UserMemoryStore
+    store = UserMemoryStore()
+    return store.get(user_id).to_dict()
+
+
+class _MemoryInfoBody(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    occupation: Optional[str] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@behavior_router.put("/memory")
+def update_user_memory(
+    body: _MemoryInfoBody,
+    user_id: str = Depends(require_user),
+) -> Dict[str, Any]:
+    """
+    Update or clear personal info fields.
+    Pass null/None to clear a specific field.
+    """
+    from src.memory.user_memory_store import UserMemoryStore
+    store = UserMemoryStore()
+    updates = body.model_dump()  # includes None values so we can clear fields
+    store.update_personal_info(user_id, updates)
+    return store.get(user_id).to_dict()
+
+
 @agent_router.post("/contract", response_model=AgentAnalysisOut)
 def agent_analyze_contract(
     body: AgentContractRequest,

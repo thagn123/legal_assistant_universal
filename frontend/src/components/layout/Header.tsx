@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { User, Bell, ChevronRight, X, Check, Edit2, LogOut, UserCircle } from 'lucide-react';
-import { getUserId, setUserId } from '../../lib/api';
+import { getUserId, setUserId, getUserMemory } from '../../lib/api';
 
 const routeLabels: Record<string, string> = {
   '/':           'Tổng quan',
@@ -26,6 +26,7 @@ export function Header() {
   const currentLabel = routeLabels[location.pathname] || 'LexAI';
 
   const [userId, setUserIdState] = useState(getUserId);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [editingId, setEditingId] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -48,12 +49,19 @@ export function Header() {
     if (editingId) editRef.current?.focus();
   }, [editingId]);
 
+  useEffect(() => {
+    getUserMemory().then(m => {
+      if (m.personal_info?.name) setDisplayName(m.personal_info.name);
+    }).catch(() => {});
+  }, [userId]);
+
   function handleSaveId() {
     const trimmed = editValue.trim();
     if (trimmed && trimmed !== userId) {
       setUserId(trimmed);
       setUserIdState(trimmed);
     }
+    if (trimmed && trimmed !== userId) setDisplayName(null);
     setEditingId(false);
   }
 
@@ -84,7 +92,7 @@ export function Header() {
             className="flex items-center gap-3 pl-4 border-l border-legal-border hover:opacity-80 transition-opacity"
           >
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-white leading-none max-w-[120px] truncate">{userId}</p>
+              <p className="text-xs font-bold text-white leading-none max-w-[120px] truncate">{displayName || userId}</p>
               <p className="text-[10px] text-legal-gold font-medium mt-0.5 uppercase tracking-tighter">Pro Member</p>
             </div>
             <div className="w-8 h-8 rounded-full bg-legal-gold/20 flex items-center justify-center text-legal-gold border border-legal-gold/30 shrink-0">
@@ -115,7 +123,7 @@ export function Header() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 group">
-                        <p className="text-sm font-bold text-white truncate flex-1">{userId}</p>
+                        <p className="text-sm font-bold text-white truncate flex-1">{displayName ? `Xin chào, ${displayName}` : userId}</p>
                         <button onClick={handleStartEdit} className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-all p-0.5">
                           <Edit2 size={11} />
                         </button>
