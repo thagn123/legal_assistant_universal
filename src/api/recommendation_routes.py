@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import Field, BaseModel
 
 from src.api.deps import require_user
 from src.mongodb.mongo_storage import VectorStorage
@@ -818,11 +818,11 @@ def get_user_memory(
 
 
 class _MemoryInfoBody(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    occupation: Optional[str] = None
-    location: Optional[str] = None
-    notes: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=80)
+    age: Optional[int] = Field(None, ge=10, le=100)
+    occupation: Optional[str] = Field(None, max_length=100)
+    location: Optional[str] = Field(None, max_length=100)
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 @behavior_router.put("/memory")

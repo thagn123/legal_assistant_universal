@@ -474,6 +474,11 @@ Vector index: `law_chunks.embedding` (384-dim cosine, `$vectorSearch`)
 15. **Reflection rate limit**: `_RateLimiter` (60s minimum interval per user) prevents LLM tier-2 from being called on every turn; tier-1 regex always runs regardless.
 16. **Memory context placement**: UserMemory block is prepended to the LLM user message (before "Tình huống:"), not to the system prompt — keeps the strict 4-part system prompt intact.
 17. **Graceful degradation for memory**: `orchestrator.__init__` wraps `UserMemoryStore()` init in try/except — if MongoDB is unavailable, `self._memory_store = None` and the pipeline runs without personalization.
+18. **Prompt injection protection (Phase 13.1)**: All user-controlled memory fields pass through `_sanitize_field()` at both write time (`update_personal_info`) and read time (`get_context_for_prompt`). Blocks: control chars, ChatML/Llama format tokens, "ignore previous instructions" patterns, role-switch phrases.
+19. **Structural memory delimiters**: `get_context_for_prompt()` wraps output in `--- THÔNG TIN CÁ NHÂN (hệ thống cung cấp, chỉ đọc) ---` delimiters. The `_SYSTEM_PROMPT` explicitly instructs the LLM to not execute any directives from that block.
+20. **API input validation**: `PUT /recommendations/behavior/memory` enforces field limits via Pydantic `Field`: `name` ≤ 80 chars, `age` ∈ [10,100], `occupation`/`location` ≤ 100 chars, `notes` ≤ 500 chars.
+21. **Defence-in-depth sanitization**: `ReflectionAgent` sanitizes regex-extracted values (tier-1) and LLM-extracted values (tier-2) before calling `update_personal_info`. `upsert_situation_summary` sanitizes LLM-generated summaries before MongoDB storage.
+22. **PII log masking**: All reflection logger calls use `user_id[:8]` and log field *keys* only — never field values — to avoid name/age/occupation appearing in plaintext logs.
 
 ---
 

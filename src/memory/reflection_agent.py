@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from src.memory.user_memory_store import PersonalInfo, SituationRecord, UserMemoryStore
+from src.memory.user_memory_store import PersonalInfo, SituationRecord, UserMemoryStore, _sanitize_field, _sanitize_age
 
 logger = logging.getLogger(__name__)
 
@@ -199,8 +199,17 @@ class ReflectionAgent:
                 updates["location"] = loc
 
         if updates:
-            self._store.update_personal_info(user_id, updates)
-            logger.info("reflect[t1] %s → %s", user_id, list(updates))
+            # Sanitize before storing — guards against regex matching attacker-crafted strings
+            if "name" in updates and updates["name"]:
+                updates["name"] = _sanitize_field(updates["name"], "name")
+            if "occupation" in updates and updates["occupation"]:
+                updates["occupation"] = _sanitize_field(updates["occupation"], "occupation")
+            if "location" in updates and updates["location"]:
+                updates["location"] = _sanitize_field(updates["location"], "location")
+            updates = {k: v for k, v in updates.items() if v is not None}
+            if updates:
+                self._store.update_personal_info(user_id, updates)
+                logger.info("reflect[t1] %s → fields=%s", user_id[:8], list(updates.keys()))
 
     def _tier2_llm(
         self,
@@ -247,19 +256,19 @@ class ReflectionAgent:
             pi_raw: Dict[str, Any] = data.get("personal_info") or {}
             updates: Dict[str, Any] = {}
             if pi_raw.get("name") and not pi.name:
-                updates["name"] = str(pi_raw["name"])
+                updates["name"] = _sanitize_field(str(pi_raw["name"]), "name")
             if pi_raw.get("age") and not pi.age:
                 try:
                     updates["age"] = int(pi_raw["age"])
                 except (ValueError, TypeError):
                     pass
             if pi_raw.get("occupation") and not pi.occupation:
-                updates["occupation"] = str(pi_raw["occupation"])
+                updates["occupation"] = _sanitize_field(str(pi_raw["occupation"]), "occupation")
             if pi_raw.get("location") and not pi.location:
-                updates["location"] = str(pi_raw["location"])
+                updates["location"] = _sanitize_field(str(pi_raw["location"]), "location")
             if updates:
                 self._store.update_personal_info(user_id, updates)
-                logger.info("reflect[t2] %s → %s", user_id, list(updates))
+                logger.info("reflect[t2] %s → fields=%s", user_id[:8], list(updates.keys()))
 
             # Upsert situation summary
             summary: str = (data.get("situation_summary") or "").strip()
@@ -271,7 +280,7 @@ class ReflectionAgent:
                     summary=summary[:150],
                 )
                 self._store.upsert_situation_summary(user_id, record)
-                logger.info("reflect[t2] %s → situation saved (%s)", user_id, domain)
+                logger.info("reflect[t2] %s → situation saved (%s)", user_id[:8], domain)
 
         except Exception as exc:
             logger.debug("tier2 reflection failed %s: %s", user_id, exc)
