@@ -155,4 +155,12 @@ reports/eval_report_*.md
 data/
 
 # Node modules (large dependencies)
+node_modules/
 node_modules/node_modules/
+
+# Large data corpora (>100 MB — exceed GitHub file size limit)
+raw_data/bm25_legal_corpus/
+raw_data/VNLegalText-main/
+
+# Output files
+outputs/
