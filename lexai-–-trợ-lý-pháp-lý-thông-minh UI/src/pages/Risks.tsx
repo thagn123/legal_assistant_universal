@@ -19,8 +19,10 @@ import {
   XCircle,
   Info,
   ChevronRight,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { apiFetch, RiskAssessment, logInteraction, analyzeRisk, RiskAnalysisResult } from '../lib/api';
+import { apiFetch, RiskAssessment, logInteraction, analyzeRisk, RiskAnalysisResult, saveAnalysis } from '../lib/api';
 
 // ── Risk score gauge ──────────────────────────────────────────────────────────
 
@@ -92,12 +94,14 @@ function AiRiskPanel() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RiskAnalysisResult | null>(null);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handleAnalyze() {
     if (!situation.trim()) return;
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await analyzeRisk(situation.trim());
       setResult(r);
@@ -142,7 +146,19 @@ function AiRiskPanel() {
           <div className="glass-card p-6 flex flex-col md:flex-row items-center gap-8">
             <RiskGauge score={result.risk_score} level={result.risk_level} />
             <div className="flex-1 space-y-3">
-              <p className="text-xs text-slate-400 italic">{result.summary}</p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-xs text-slate-400 italic flex-1">{result.summary}</p>
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'risk_analysis', title: situation.slice(0, 80), summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60 shrink-0"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu</>}
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300">
                   Giai đoạn: <span className="text-white font-semibold">{result.stage_label}</span>

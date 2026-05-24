@@ -13,8 +13,10 @@ import {
   Globe,
   User,
   ExternalLink,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { searchLaws, LawArticle, LawSearchResult } from '../lib/api';
+import { searchLaws, LawArticle, LawSearchResult, saveAnalysis } from '../lib/api';
 
 // ── Relevance badge ───────────────────────────────────────────────────────────
 
@@ -106,6 +108,7 @@ export function LawSearch() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LawSearchResult | null>(null);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handleSearch(q?: string) {
     const text = (q ?? query).trim();
@@ -114,6 +117,7 @@ export function LawSearch() {
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await searchLaws(text);
       setResult(r);
@@ -194,7 +198,17 @@ export function LawSearch() {
             <span className="text-slate-400">
               Tìm kiếm: <span className="text-white font-semibold">{result.search_mode === 'vector' ? 'Ngữ nghĩa' : 'Từ khóa'}</span>
             </span>
-            <span className="ml-auto text-slate-400 italic">{result.summary}</span>
+            <span className="text-slate-400 italic flex-1 min-w-0 truncate">{result.summary}</span>
+            <button
+              onClick={() => {
+                saveAnalysis({ type: 'law_search', title: query.slice(0, 80), summary: result.summary, data: result });
+                setSaved(true);
+              }}
+              disabled={saved}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60 shrink-0"
+            >
+              {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu kết quả</>}
+            </button>
           </div>
 
           {/* Law articles */}

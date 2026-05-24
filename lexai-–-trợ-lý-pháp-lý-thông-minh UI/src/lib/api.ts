@@ -1194,7 +1194,10 @@ export type AnalysisType =
   | 'similar_cases'
   | 'action_plan'
   | 'compliance_radar'
-  | 'risk_analysis';
+  | 'risk_analysis'
+  | 'law_search'
+  | 'journey'
+  | 'contract_analysis';
 
 export interface AnalysisHistoryItem {
   id: string;

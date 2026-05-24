@@ -17,8 +17,10 @@ import {
   Shield,
   BookOpen,
   ExternalLink,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { buildJourney, JourneyResult, JourneyMilestone } from '../lib/api';
+import { buildJourney, JourneyResult, JourneyMilestone, saveAnalysis } from '../lib/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,12 +124,14 @@ export function Journey() {
   const [result, setResult] = useState<JourneyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handleAnalyze(overrideSituation?: string) {
     const trimmed = (overrideSituation ?? situation).trim();
     if (!trimmed) return;
     setLoading(true);
     setError('');
+    setSaved(false);
     try {
       const data = await buildJourney(trimmed, '', [], undefined);
       setResult(data);
@@ -202,12 +206,24 @@ export function Journey() {
                 <p className="text-lg font-bold text-white">{result.stage_label}</p>
                 <p className="text-xs text-slate-500 mt-1">Lĩnh vực: <span className="text-slate-300">{result.domain}</span></p>
               </div>
-              {riskCfg && (
-                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${riskCfg.className} shrink-0`}>
-                  <Shield size={10} className="inline mr-1" />
-                  Rủi ro {riskCfg.label}
-                </span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {riskCfg && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${riskCfg.className}`}>
+                    <Shield size={10} className="inline mr-1" />
+                    Rủi ro {riskCfg.label}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu</>}
+                </button>
+              </div>
             </div>
             <ProgressBar percent={result.progress_percent} />
             <p className="text-xs text-slate-400 italic">{result.summary}</p>

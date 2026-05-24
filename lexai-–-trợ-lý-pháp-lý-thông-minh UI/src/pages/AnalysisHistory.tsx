@@ -22,6 +22,9 @@ import {
   Radar,
   TrendingUp,
   X,
+  BookOpen,
+  Map,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -37,14 +40,17 @@ import { cn } from '../lib/api';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<AnalysisType, { label: string; icon: React.ReactNode; color: string; path: string }> = {
-  timeline:        { label: 'Tiến trình pháp lý', icon: <Clock size={14} />,      color: 'text-blue-400 bg-blue-500/10 border-blue-500/25',      path: '/timeline' },
-  evidence_gap:    { label: 'Kiểm tra chứng cứ',  icon: <FileSearch size={14} />, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25', path: '/evidence-gap' },
-  clause_coach:    { label: 'Tư vấn điều khoản',  icon: <Gavel size={14} />,      color: 'text-purple-400 bg-purple-500/10 border-purple-500/25', path: '/clause-coach' },
-  clause_search:   { label: 'Tìm điều khoản',     icon: <Search size={14} />,     color: 'text-green-400 bg-green-500/10 border-green-500/25',   path: '/clause-search' },
-  similar_cases:   { label: 'Vụ việc tương tự',   icon: <GitCompare size={14} />, color: 'text-orange-400 bg-orange-500/10 border-orange-500/25', path: '/similar-cases' },
-  action_plan:     { label: 'Kế hoạch hành động', icon: <ListChecks size={14} />, color: 'text-red-400 bg-red-500/10 border-red-500/25',          path: '/actions' },
-  compliance_radar:{ label: 'Compliance Radar',    icon: <Radar size={14} />,      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',       path: '/compliance-radar' },
-  risk_analysis:   { label: 'Phân tích rủi ro',   icon: <TrendingUp size={14} />, color: 'text-pink-400 bg-pink-500/10 border-pink-500/25',       path: '/analyze' },
+  timeline:         { label: 'Tiến trình pháp lý', icon: <Clock size={14} />,      color: 'text-blue-400 bg-blue-500/10 border-blue-500/25',      path: '/timeline' },
+  evidence_gap:     { label: 'Kiểm tra chứng cứ',  icon: <FileSearch size={14} />, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25', path: '/evidence-gap' },
+  clause_coach:     { label: 'Tư vấn điều khoản',  icon: <Gavel size={14} />,      color: 'text-purple-400 bg-purple-500/10 border-purple-500/25', path: '/clause-coach' },
+  clause_search:    { label: 'Tìm điều khoản',     icon: <Search size={14} />,     color: 'text-green-400 bg-green-500/10 border-green-500/25',   path: '/clause-search' },
+  similar_cases:    { label: 'Vụ việc tương tự',   icon: <GitCompare size={14} />, color: 'text-orange-400 bg-orange-500/10 border-orange-500/25', path: '/similar-cases' },
+  action_plan:      { label: 'Kế hoạch hành động', icon: <ListChecks size={14} />, color: 'text-red-400 bg-red-500/10 border-red-500/25',          path: '/actions' },
+  compliance_radar: { label: 'Compliance Radar',    icon: <Radar size={14} />,      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',       path: '/compliance-radar' },
+  risk_analysis:    { label: 'Phân tích rủi ro',   icon: <TrendingUp size={14} />, color: 'text-pink-400 bg-pink-500/10 border-pink-500/25',       path: '/risks' },
+  law_search:       { label: 'Tra cứu điều luật',  icon: <BookOpen size={14} />,   color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25', path: '/laws' },
+  journey:          { label: 'Hành trình pháp lý', icon: <Map size={14} />,        color: 'text-teal-400 bg-teal-500/10 border-teal-500/25',       path: '/journey' },
+  contract_analysis:{ label: 'Rà soát hợp đồng',  icon: <FileText size={14} />,   color: 'text-violet-400 bg-violet-500/10 border-violet-500/25', path: '/contract' },
 };
 
 const ALL_TYPES = Object.keys(TYPE_CONFIG) as AnalysisType[];
@@ -196,6 +202,78 @@ function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
           </p>
           <p className="text-slate-400">{d.business_type_label ?? ''} — {d.transaction_type_label ?? ''}</p>
           <p className="text-red-400">{d.critical_count ?? 0} mục bắt buộc quan trọng còn thiếu</p>
+        </div>
+      );
+
+    case 'law_search':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Lĩnh vực:</span> {d.detected_domain_label ?? '—'} ·{' '}
+            <span className="text-slate-500 font-semibold">Tìm kiếm:</span> {d.search_mode === 'vector' ? 'Ngữ nghĩa' : 'Từ khóa'}
+          </p>
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Tìm thấy:</span> {d.total ?? d.results?.length ?? 0} điều luật</p>
+          {d.results?.length > 0 && (
+            <ul className="space-y-0.5 pl-3">
+              {d.results.slice(0, 3).map((a: any, i: number) => (
+                <li key={i} className="text-slate-300 list-disc line-clamp-1">
+                  {a.law_reference && <span className="text-legal-gold font-mono mr-1">{a.law_reference}</span>}
+                  {a.snippet?.slice(0, 80)}…
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+
+    case 'journey':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Giai đoạn:</span> {d.stage_label ?? '—'} ({d.progress_percent ?? 0}%)
+          </p>
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Lĩnh vực:</span> {d.domain ?? '—'} ·{' '}
+            <span className="text-slate-500 font-semibold">Rủi ro:</span>{' '}
+            {d.risk_level === 'high' ? <span className="text-red-400">Cao</span> :
+             d.risk_level === 'medium' ? <span className="text-yellow-400">Trung bình</span> :
+             <span className="text-green-400">Thấp</span>}
+          </p>
+          {d.next_steps?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Bước tiếp theo:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.next_steps.slice(0, 3).map((step: string, i: number) => (
+                  <li key={i} className="text-slate-300 list-disc line-clamp-1">{step}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.warnings?.length > 0 && (
+            <p className="text-orange-400 italic">⚠ {d.warnings[0]}</p>
+          )}
+        </div>
+      );
+
+    case 'contract_analysis':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Điểm tuân thủ:</span>{' '}
+            <span className={d.compliance_score >= 70 ? 'text-green-400' : d.compliance_score >= 40 ? 'text-yellow-400' : 'text-red-400'}>
+              {d.compliance_score ?? 0}/100
+            </span>
+          </p>
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Loại:</span> {d.loai_hop_dong ?? '—'} ·{' '}
+            <span className="text-slate-500 font-semibold">Các bên:</span> {d.cac_ben?.join(', ') ?? '—'}
+          </p>
+          {d.risk_clauses?.length > 0 && (
+            <p className="text-red-400">{d.risk_clauses.length} điều khoản rủi ro cao</p>
+          )}
+          {d.missing_clauses?.length > 0 && (
+            <p className="text-yellow-400">{d.missing_clauses.length} điều khoản còn thiếu</p>
+          )}
         </div>
       );
 
