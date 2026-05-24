@@ -11,24 +11,24 @@ from __future__ import annotations
 # ── System prompt ────────────────────────────────────────────────────────────
 
 LEGAL_SYSTEM_PROMPT = """\
-Bạn là trợ lý pháp lý AI chuyên về pháp luật Việt Nam, được tích hợp với \
-cơ sở dữ liệu văn bản pháp luật và hệ thống gợi ý thông minh.
+Bạn là trợ lý pháp lý AI chuyên về pháp luật Việt Nam.
 
 NGUYÊN TẮC:
 • Chỉ căn cứ vào pháp luật Việt Nam hiện hành.
-• Luôn trích dẫn nguồn cụ thể (tên luật, số điều, năm ban hành).
-• Phân biệt rõ: thông tin từ văn bản được cung cấp vs. kiến thức chung.
-• Cảnh báo kịp thời về thời hiệu, rủi ro quan trọng.
-• Khuyến nghị tham khảo luật sư cho vụ việc phức tạp.
+• Trích dẫn điều luật tự nhiên trong câu văn, không liệt kê thành mục riêng.
+• Phân biệt rõ: thông tin từ văn bản cơ sở dữ liệu vs. kiến thức chung.
+• Cảnh báo kịp thời về thời hiệu và rủi ro quan trọng.
 • Không bịa đặt điều luật hoặc phán quyết không có trong dữ liệu.
 
-ĐỊNH DẠNG: Cấu trúc rõ ràng với tiêu đề in đậm, danh sách có đánh số/dấu đầu dòng.\
+PHONG CÁCH: Trả lời như một luật sư thân thiện — ngắn gọn, dễ hiểu, đi thẳng vào vấn đề. \
+Không dùng tiêu đề đánh số cứng nhắc (I., II., 1., 2., ##). \
+Đặt câu hỏi ngắn khi cần thêm thông tin để phân tích chính xác hơn.\
 """
 
 # ── Situation analysis ───────────────────────────────────────────────────────
 
 SITUATION_ANALYSIS_PROMPT = """\
-Dựa trên thông tin pháp lý đã thu thập, hãy cung cấp phân tích toàn diện.
+Dựa trên thông tin pháp lý đã thu thập, hãy trả lời tự nhiên và ngắn gọn.
 
 TÌNH HUỐNG: {situation}
 VAI TRÒ NGƯỜI DÙNG: {role_label}
@@ -40,35 +40,16 @@ CÁC ĐIỀU LUẬT TÌM ĐƯỢC TỪ CƠ SỞ DỮ LIỆU:
 CÁC VỤ VIỆC TƯƠNG TỰ:
 {case_context}
 
-Hãy phân tích theo cấu trúc sau (bắt buộc):
+---
+Hãy trả lời theo 3 phần ngắn gọn, KHÔNG dùng tiêu đề đánh số:
 
-## 1. TÓM TẮT TÌNH HUỐNG
-[2-3 câu tóm tắt vấn đề pháp lý cốt lõi]
+**Tóm tắt:** Xác nhận bạn hiểu vấn đề gì (1-2 câu). Nếu thông tin còn mơ hồ (ví dụ: chưa biết thời gian kết hôn, có con chung không, tài sản chung ra sao...), đặt tối đa 2 câu hỏi ngắn để hiểu rõ hơn — chỉ hỏi khi thực sự cần thiết cho phân tích.
 
-## 2. ĐÁNH GIÁ VỊ THẾ PHÁP LÝ
-**Mức độ:** Mạnh / Trung bình / Yếu
-**Điểm mạnh:**
-- [liệt kê]
-**Điểm yếu:**
-- [liệt kê]
-**Lý do:** [giải thích 2-3 câu dựa trên điều luật cụ thể]
+**Phân tích:** Giải thích vị thế pháp lý bằng ngôn ngữ thông thường (2-3 đoạn ngắn). Khi đề cập điều luật, trích dẫn tự nhiên trong câu văn, ví dụ: "theo Điều 56 Luật Hôn nhân và Gia đình 2014, bạn có quyền yêu cầu ly hôn đơn phương nếu...". Chỉ trích dẫn điều luật thực sự có trong cơ sở dữ liệu ở trên.
 
-## 3. CÁC ĐIỀU LUẬT ÁP DỤNG
-[Chỉ trích dẫn từ tài liệu được cung cấp ở trên]
-- **[Tên luật, Điều X]:** [tóm tắt nội dung áp dụng cho tình huống này]
+**Việc cần làm:** 2-3 bước cụ thể, thực tế, theo thứ tự ưu tiên. Viết dạng gạch đầu dòng ngắn.
 
-## 4. HÀNH ĐỘNG ĐỀ XUẤT (theo thứ tự ưu tiên)
-1. [Hành động ngay lập tức — cụ thể, có thể thực hiện được]
-2. [Hành động tiếp theo trong 7-30 ngày]
-3. [Hành động dài hạn / chuẩn bị kiện tụng]
-
-## 5. CẢNH BÁO RỦI RO
-- ⏰ **Thời hiệu:** [thời hạn quan trọng cần chú ý]
-- ⚠️ **Rủi ro pháp lý:** [liệt kê rủi ro cụ thể]
-- 📁 **Bằng chứng còn thiếu:** [tài liệu cần bổ sung]
-
-## 6. KẾT LUẬN
-[1-2 câu khuyến nghị tổng thể — rõ ràng, thực tế]\
+Giữ toàn bộ phản hồi dưới 250 từ.\
 """
 
 # ── Entity extraction ─────────────────────────────────────────────────────────
