@@ -1,0 +1,8 @@
+{
+  "name": "LexAI – Trợ Lý Pháp Lý Thông Minh",
+  "description": "LexAI (ULKA) là trợ lý ảo hỗ trợ phân tích và giải đáp thắc mắc pháp luật Việt Nam, cung cấp các hành động khuyến nghị và rà soát rủi ro pháp lý.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --context desktop-linux compose up -d mongodb)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --no-access-log)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -v http://127.0.0.1:8000/health)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/Admin/**)",
+      "Bash(python -c ':*)",
+      "Bash(python -m uvicorn --version)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(powershell -Command ':*)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(docker --context desktop-linux ps --filter \"name=mongodb\")",
+      "Bash(CUDA_VISIBLE_DEVICES=\"\" python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000)",
+      "Bash(cmd.exe /c \"start cmd.exe /k \\\\\"cd /d \\\\\"C:\\\\Users\\\\Admin\\\\OneDrive\\\\Máy tính\\\\Universal Legal Knowledge Assistant\\\\\" && set CUDA_VISIBLE_DEVICES= && python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 --reload\\\\\"\")",
+      "Bash(PYTHONPATH=\"c:/Users/Admin/OneDrive/Máy tính/Universal Legal Knowledge Assistant\" python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000)",
+      "Bash(CUDA_VISIBLE_DEVICES=\"\" python -m uvicorn --help)",
+      "Bash(python \"c:/Users/Admin/run_server.py\")",
+      "Bash(grep -n \"TODO\\\\|FIXME\\\\|NotImplemented\\\\|pass$\\\\|raise NotImplemented\\\\|# stub\\\\|# TODO\\\\|# FIXME\" src/api/routes.py src/api/recommendation_routes.py src/engine/orchestrator.py src/engine/query_planner.py src/engine/retrieval_fusion.py src/engine/recommendation_ranker.py src/memory/session_store.py src/agents/legal_agent.py src/pipeline/extractor.py src/pipeline/chunker.py src/pipeline/graph_builder.py src/mongodb/mongo_storage.py src/runtime/processor.py src/runtime/job_runner.py)",
+      "Bash(python -c \"from src.config import PipelineConfig; c = PipelineConfig\\(\\); print\\(c\\)\")",
+      "Bash(python -m pip list)",
+      "Bash(docker --context desktop-linux ps --filter \"name=mongodb\" --format \"{{.Ports}}\")",
+      "Bash(PYTHONUTF8=1 python -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 --no-access-log)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Admin"
+    ]
+  }
+}
