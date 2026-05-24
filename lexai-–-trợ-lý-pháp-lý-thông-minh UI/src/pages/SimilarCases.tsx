@@ -14,8 +14,10 @@ import {
   Gavel,
   Lightbulb,
   Tag,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { getSimilarCases, SimilarCaseItem, SimilarCasesResult } from '../lib/api';
+import { getSimilarCases, SimilarCaseItem, SimilarCasesResult, saveAnalysis } from '../lib/api';
 
 // ── Similarity bar ────────────────────────────────────────────────────────────
 
@@ -136,12 +138,14 @@ export function SimilarCases() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SimilarCasesResult | null>(null);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handleSearch() {
     if (!situation.trim()) return;
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await getSimilarCases(situation.trim());
       setResult(r);
@@ -203,7 +207,17 @@ export function SimilarCases() {
             <QueryBadge label="Lĩnh vực" value={result.query_domain_label} />
             <QueryBadge label="Giai đoạn" value={result.query_stage_label} />
             <QueryBadge label="Tìm kiếm" value={result.search_mode === 'vector' ? 'Ngữ nghĩa' : 'Từ khóa'} />
-            <span className="ml-auto text-xs text-slate-400 italic">{result.summary}</span>
+            <span className="text-xs text-slate-400 italic flex-1 min-w-0 truncate">{result.summary}</span>
+            <button
+              onClick={() => {
+                saveAnalysis({ type: 'similar_cases', title: situation.slice(0, 80), summary: result.summary, data: result });
+                setSaved(true);
+              }}
+              disabled={saved}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60 shrink-0"
+            >
+              {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu kết quả</>}
+            </button>
           </div>
 
           {/* Case list */}

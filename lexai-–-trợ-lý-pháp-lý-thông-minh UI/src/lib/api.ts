@@ -1186,7 +1186,15 @@ export async function getBehaviorProfile(): Promise<BehaviorProfile> {
 
 // ── Analysis History (localStorage) ─────────────────────────────────────────
 
-export type AnalysisType = 'timeline' | 'evidence_gap' | 'clause_coach' | 'clause_search';
+export type AnalysisType =
+  | 'timeline'
+  | 'evidence_gap'
+  | 'clause_coach'
+  | 'clause_search'
+  | 'similar_cases'
+  | 'action_plan'
+  | 'compliance_radar'
+  | 'risk_analysis';
 
 export interface AnalysisHistoryItem {
   id: string;

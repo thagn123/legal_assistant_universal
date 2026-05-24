@@ -12,8 +12,10 @@ import {
   ChevronUp,
   ShieldAlert,
   Shield,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { searchSimilarClauses, ClauseSearchResult, ClauseItem } from '../lib/api';
+import { searchSimilarClauses, ClauseSearchResult, ClauseItem, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -122,12 +124,14 @@ export function ClauseSearch() {
   const [loading, setLoading]         = useState(false);
   const [result, setResult]           = useState<ClauseSearchResult | null>(null);
   const [error, setError]             = useState('');
+  const [saved, setSaved]             = useState(false);
 
   async function handleSearch() {
     if (!clauseText.trim()) return;
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await searchSimilarClauses(
         clauseText.trim(),
@@ -240,6 +244,18 @@ export function ClauseSearch() {
 
           {result.results.length > 0 ? (
             <div className="space-y-3">
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'clause_search', title: clauseText.slice(0, 80), summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu kết quả</>}
+                </button>
+              </div>
               {result.results.map((item, i) => (
                 <ClauseCard key={item.clause_id || i} item={item} />
               ))}

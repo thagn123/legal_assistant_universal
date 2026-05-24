@@ -14,8 +14,10 @@ import {
   Scale,
   ChevronDown,
   ChevronUp,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { getComplianceRadar, ComplianceItem, ComplianceRadarResult } from '../lib/api';
+import { getComplianceRadar, ComplianceItem, ComplianceRadarResult, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -147,11 +149,13 @@ export function ComplianceRadar() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ComplianceRadarResult | null>(null);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handleCheck() {
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await getComplianceRadar(businessType, transactionType, [], situation);
       setResult(r);
@@ -254,11 +258,23 @@ export function ComplianceRadar() {
           <div className="glass-card p-5 flex flex-wrap gap-6 items-center">
             <ScoreRing score={result.compliance_score} />
             <div className="flex-1 min-w-0 space-y-2">
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">
-                  {result.business_type_label} — {result.transaction_type_label}
-                </p>
-                <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-400 mb-0.5">
+                    {result.business_type_label} — {result.transaction_type_label}
+                  </p>
+                  <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'compliance_radar', title: `${result.business_type_label} — ${result.transaction_type_label}`, summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60 shrink-0"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu</>}
+                </button>
               </div>
               <div className="flex gap-4 text-xs">
                 <span className="text-red-400 font-bold">{result.critical_count} Bắt buộc quan trọng thiếu</span>

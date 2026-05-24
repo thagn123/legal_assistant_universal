@@ -17,8 +17,10 @@ import {
   ClipboardList,
   Shield,
   Clock,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { getActionPlan, ActionPlanResult, ActionItem } from '../lib/api';
+import { getActionPlan, ActionPlanResult, ActionItem, saveAnalysis } from '../lib/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -105,12 +107,14 @@ export function Actions() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ActionPlanResult | null>(null);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
   async function handlePlan() {
     if (!situation.trim()) return;
     setLoading(true);
     setResult(null);
     setError('');
+    setSaved(false);
     try {
       const r = await getActionPlan(situation.trim());
       setResult(r);
@@ -172,13 +176,25 @@ export function Actions() {
           {/* Summary bar */}
           <div className={`glass-card p-5 border ${urgency?.border}`}>
             <div className="flex items-start justify-between gap-4 mb-3">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-xs text-slate-400 mb-1">Giai đoạn: <span className="text-white font-semibold">{result.stage_label}</span></p>
                 <p className="text-xs text-slate-400 italic">{result.summary}</p>
               </div>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full border shrink-0 ${urgency?.text} ${urgency?.border} bg-white/5`}>
-                {urgency?.label}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full border ${urgency?.text} ${urgency?.border} bg-white/5`}>
+                  {urgency?.label}
+                </span>
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'action_plan', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu</>}
+                </button>
+              </div>
             </div>
             <div className="flex gap-4 text-xs">
               <span className="text-red-400 font-bold">{result.immediate_actions.length} Khẩn cấp</span>

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   History,
   Clock,
@@ -17,6 +17,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarDays,
+  GitCompare,
+  ListChecks,
+  Radar,
+  TrendingUp,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -32,13 +37,17 @@ import { cn } from '../lib/api';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<AnalysisType, { label: string; icon: React.ReactNode; color: string; path: string }> = {
-  timeline:     { label: 'Tiến trình pháp lý', icon: <Clock size={14} />,      color: 'text-blue-400 bg-blue-500/10 border-blue-500/25',   path: '/timeline' },
-  evidence_gap: { label: 'Kiểm tra chứng cứ',  icon: <FileSearch size={14} />, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25', path: '/evidence-gap' },
-  clause_coach: { label: 'Tư vấn điều khoản',  icon: <Gavel size={14} />,      color: 'text-purple-400 bg-purple-500/10 border-purple-500/25', path: '/clause-coach' },
-  clause_search:{ label: 'Tìm điều khoản',     icon: <Search size={14} />,     color: 'text-green-400 bg-green-500/10 border-green-500/25',  path: '/clause-search' },
+  timeline:        { label: 'Tiến trình pháp lý', icon: <Clock size={14} />,      color: 'text-blue-400 bg-blue-500/10 border-blue-500/25',      path: '/timeline' },
+  evidence_gap:    { label: 'Kiểm tra chứng cứ',  icon: <FileSearch size={14} />, color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25', path: '/evidence-gap' },
+  clause_coach:    { label: 'Tư vấn điều khoản',  icon: <Gavel size={14} />,      color: 'text-purple-400 bg-purple-500/10 border-purple-500/25', path: '/clause-coach' },
+  clause_search:   { label: 'Tìm điều khoản',     icon: <Search size={14} />,     color: 'text-green-400 bg-green-500/10 border-green-500/25',   path: '/clause-search' },
+  similar_cases:   { label: 'Vụ việc tương tự',   icon: <GitCompare size={14} />, color: 'text-orange-400 bg-orange-500/10 border-orange-500/25', path: '/similar-cases' },
+  action_plan:     { label: 'Kế hoạch hành động', icon: <ListChecks size={14} />, color: 'text-red-400 bg-red-500/10 border-red-500/25',          path: '/actions' },
+  compliance_radar:{ label: 'Compliance Radar',    icon: <Radar size={14} />,      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',       path: '/compliance-radar' },
+  risk_analysis:   { label: 'Phân tích rủi ro',   icon: <TrendingUp size={14} />, color: 'text-pink-400 bg-pink-500/10 border-pink-500/25',       path: '/analyze' },
 };
 
-const ALL_TYPES: AnalysisType[] = ['timeline', 'evidence_gap', 'clause_coach', 'clause_search'];
+const ALL_TYPES = Object.keys(TYPE_CONFIG) as AnalysisType[];
 
 function formatDate(iso: string): string {
   try {
@@ -46,6 +55,156 @@ function formatDate(iso: string): string {
     return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   } catch {
     return iso;
+  }
+}
+
+// ── Formatted preview per type ────────────────────────────────────────────────
+
+function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
+  const d = item.data as any;
+  if (!d) return <p className="text-[11px] text-slate-400 italic">Không có dữ liệu chi tiết.</p>;
+
+  switch (item.type) {
+    case 'timeline':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Giai đoạn:</span> {d.stage_label ?? '—'} ({d.progress_percent ?? 0}%)</p>
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Tiếp theo:</span> {d.next_stage_label ?? '—'}</p>
+          {d.typical_deadlines?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Thời hiệu:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.typical_deadlines.slice(0, 3).map((dl: any, i: number) => (
+                  <li key={i} className="text-slate-300 list-disc">
+                    {dl.label} — {dl.days} {dl.unit}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.warnings?.length > 0 && (
+            <p className="text-orange-400 italic">⚠ {d.warnings[0]}</p>
+          )}
+        </div>
+      );
+
+    case 'evidence_gap':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Độ phủ:</span> {Math.round((d.coverage_score ?? 0) * 100)}%</p>
+          {d.priority_items?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Ưu tiên cao cần bổ sung:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.priority_items.slice(0, 3).map((it: any, i: number) => (
+                  <li key={i} className="text-red-300 list-disc">{it.item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.strong_evidence?.length > 0 && (
+            <p className="text-green-400">{d.strong_evidence.length} chứng cứ mạnh</p>
+          )}
+        </div>
+      );
+
+    case 'clause_coach':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Điểm rủi ro:</span> {d.risk_score ?? 0}/100
+            <span className="ml-2 capitalize text-slate-400">({d.risk_level ?? '—'})</span>
+          </p>
+          {d.risks?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Rủi ro phát hiện:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.risks.slice(0, 3).map((r: any, i: number) => (
+                  <li key={i} className="text-orange-300 list-disc">{r.description}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.missing_clauses?.length > 0 && (
+            <p className="text-yellow-400">{d.missing_clauses.length} điều khoản cần bổ sung</p>
+          )}
+        </div>
+      );
+
+    case 'clause_search':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Tìm thấy:</span> {d.total ?? 0} điều khoản tương tự</p>
+          {d.results?.length > 0 && (
+            <ul className="space-y-0.5 pl-3">
+              {d.results.slice(0, 3).map((r: any, i: number) => (
+                <li key={i} className="text-slate-300 list-disc line-clamp-1">
+                  <span className={`font-semibold ${r.risk_level === 'critical' || r.risk_level === 'high' ? 'text-red-400' : 'text-slate-400'}`}>
+                    [{r.risk_label}]
+                  </span>{' '}
+                  {r.clause_text?.slice(0, 80)}…
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+
+    case 'similar_cases':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300"><span className="text-slate-500 font-semibold">Tìm thấy:</span> {d.total ?? 0} vụ việc tương tự</p>
+          <p className="text-slate-400">{d.query_domain_label ?? ''} · Giai đoạn: {d.query_stage_label ?? ''}</p>
+          {d.similar_cases?.length > 0 && (
+            <ul className="space-y-0.5 pl-3">
+              {d.similar_cases.slice(0, 3).map((c: any, i: number) => (
+                <li key={i} className="text-slate-300 list-disc line-clamp-1">
+                  {Math.round(c.similarity_score * 100)}% — {c.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+
+    case 'action_plan':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Tổng hành động:</span> {d.total_actions ?? 0}
+            {' '}({d.immediate_actions?.length ?? 0} khẩn cấp)
+          </p>
+          {d.immediate_actions?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Khẩn cấp:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.immediate_actions.slice(0, 3).map((a: any, i: number) => (
+                  <li key={i} className="text-red-300 list-disc line-clamp-1">{a.step}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'compliance_radar':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Điểm tuân thủ:</span>{' '}
+            {Math.round((d.compliance_score ?? 0) * 100)}%
+          </p>
+          <p className="text-slate-400">{d.business_type_label ?? ''} — {d.transaction_type_label ?? ''}</p>
+          <p className="text-red-400">{d.critical_count ?? 0} mục bắt buộc quan trọng còn thiếu</p>
+        </div>
+      );
+
+    default:
+      return (
+        <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto leading-relaxed">
+          {JSON.stringify(d, null, 2)}
+        </pre>
+      );
   }
 }
 
@@ -61,7 +220,7 @@ function HistoryCard({
   onReopen: (item: AnalysisHistoryItem) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const cfg = TYPE_CONFIG[item.type];
+  const cfg = TYPE_CONFIG[item.type] ?? TYPE_CONFIG.timeline;
 
   return (
     <div className="glass-card overflow-hidden">
@@ -114,10 +273,8 @@ function HistoryCard({
       </div>
 
       {expanded && (
-        <div className="border-t border-white/5 px-4 py-3 bg-white/2">
-          <pre className="text-[11px] text-slate-300 whitespace-pre-wrap break-words max-h-72 overflow-y-auto leading-relaxed">
-            {JSON.stringify(item.data, null, 2)}
-          </pre>
+        <div className="border-t border-white/5 px-4 py-3 bg-white/2 animate-in fade-in duration-150">
+          <FormattedPreview item={item} />
         </div>
       )}
     </div>
@@ -130,6 +287,7 @@ export function AnalysisHistory() {
   const navigate = useNavigate();
   const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
   const [filter, setFilter] = useState<AnalysisType | 'all'>('all');
+  const [searchText, setSearchText] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
@@ -149,10 +307,20 @@ export function AnalysisHistory() {
   }
 
   function handleReopen(item: AnalysisHistoryItem) {
-    navigate(TYPE_CONFIG[item.type].path);
+    navigate((TYPE_CONFIG[item.type] ?? TYPE_CONFIG.timeline).path);
   }
 
-  const filtered = filter === 'all' ? items : items.filter(i => i.type === filter);
+  const filtered = useMemo(() => {
+    let list = filter === 'all' ? items : items.filter(i => i.type === filter);
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      list = list.filter(i =>
+        i.title.toLowerCase().includes(q) ||
+        i.summary.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [items, filter, searchText]);
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -184,6 +352,28 @@ export function AnalysisHistory() {
         )}
       </div>
 
+      {/* Search box */}
+      {items.length > 0 && (
+        <div className="relative">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="Tìm kiếm theo tiêu đề hoặc tóm tắt..."
+            className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-9 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-legal-gold/50 transition-colors"
+          />
+          {searchText && (
+            <button
+              onClick={() => setSearchText('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Filter tabs */}
       <div className="flex flex-wrap gap-2">
         <button
@@ -197,7 +387,7 @@ export function AnalysisHistory() {
         >
           Tất cả ({items.length})
         </button>
-        {ALL_TYPES.map(t => {
+        {ALL_TYPES.filter(t => items.some(i => i.type === t)).map(t => {
           const count = items.filter(i => i.type === t).length;
           const cfg = TYPE_CONFIG[t];
           return (
@@ -230,7 +420,9 @@ export function AnalysisHistory() {
           ) : (
             <>
               <CheckCircle2 size={40} className="text-slate-500" />
-              <p className="text-sm font-bold text-slate-500">Không có kết quả loại này</p>
+              <p className="text-sm font-bold text-slate-500">
+                {searchText ? 'Không tìm thấy kết quả phù hợp' : 'Không có kết quả loại này'}
+              </p>
             </>
           )}
         </div>
