@@ -18,6 +18,17 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Matches intra-document citation patterns in Vietnamese legal text.
+# Captures the article number(s) referenced.
+# Examples matched:
+#   "Theo Điều 15", "căn cứ Điều 7 và Điều 8", "quy định tại Điều 10, 11, 12"
+_CITATION_RE = re.compile(
+    r"(?:theo|căn\s+cứ|quy\s+định\s+tại|xem|theo\s+quy\s+định|tại)?\s*"
+    r"(?:khoản\s+\d+\s+)?"
+    r"[Đđ]iều\s+(\d+(?:\s*[,\s]\s*(?:và\s+)?\d+)*)",
+    re.IGNORECASE | re.UNICODE,
+)
+
 from src.config import PipelineConfig
 from src.pipeline.interfaces import StageContext, StageOutput
 from src.schemas.document import (
@@ -168,6 +179,9 @@ def stage_canonical_structuring(ctx: StageContext) -> StageOutput:
     # Detect structural hierarchy from blocks
     sections, articles, clauses = _detect_hierarchy(blocks, ctx.document_id)
 
+    # Populate article.citations from body text (enables CITES edges in graph_builder)
+    _populate_article_citations(articles, blocks, clauses)
+
     # Build canonical reference IDs for all structural units
     _attach_canonical_ids(sections, articles, clauses, ctx.document_id)
 
@@ -233,6 +247,74 @@ def stage_canonical_structuring(ctx: StageContext) -> StageOutput:
 # ---------------------------------------------------------------------------
 # Canonical ID helpers
 # ---------------------------------------------------------------------------
+
+
+def _extract_citations(text: str) -> List[str]:
+    """
+    Extract raw citation strings from article body text for graph CITES edges.
+    Returns deduplicated "Điều N" strings. graph_builder passes these through
+    extract_refs() which correctly parses Vietnamese text to canonical IDs.
+    Storing pre-built "article_N" strings causes extract_refs to misparse them
+    via regex backtracking (art → icl false match).
+    """
+    refs: List[str] = []
+    seen: set = set()
+    for m in _CITATION_RE.finditer(text):
+        numbers_str = m.group(1)
+        for part in re.split(r"[\s,]+(?:và\s+)?", numbers_str):
+            num = part.strip()
+            if num and num.isdigit():
+                key = f"Điều {num}"
+                if key not in seen:
+                    refs.append(key)
+                    seen.add(key)
+    return refs
+
+
+def _populate_article_citations(
+    articles: List["Article"],
+    blocks: List["Block"],
+    clauses: Optional[List["Clause"]] = None,
+) -> None:
+    """
+    Second pass after hierarchy detection: scan body text of each article
+    and populate article.citations with canonical refs of intra-doc Điều X
+    mentions. These refs are consumed by graph_builder to create CITES edges.
+
+    Collects both direct article body blocks AND blocks nested under clauses
+    (which have parent_structure_id = clause_id, not article_id directly).
+    """
+    if not articles:
+        return
+    art_map: Dict[str, "Article"] = {art.article_id: art for art in articles}
+
+    # Build clause_id → article_id map so clause-nested blocks can be attributed
+    clause_to_article: Dict[str, str] = {}
+    if clauses:
+        for clause in clauses:
+            if clause.parent_article_id and clause.parent_article_id in art_map:
+                clause_to_article[clause.clause_id] = clause.parent_article_id
+
+    body_texts: Dict[str, List[str]] = {aid: [] for aid in art_map}
+    for block in blocks:
+        pid = getattr(block, "parent_structure_id", None)
+        if not pid:
+            continue
+        if pid in art_map:
+            art_id = pid
+        elif pid in clause_to_article:
+            art_id = clause_to_article[pid]
+        else:
+            continue
+        t = block.clean_text or block.raw_text
+        if t:
+            body_texts[art_id].append(t)
+
+    for art_id, texts in body_texts.items():
+        if texts:
+            refs = _extract_citations(" ".join(texts))
+            if refs:
+                art_map[art_id].citations = refs
 
 
 def _attach_canonical_ids(
@@ -314,6 +396,40 @@ def _get_canonical_id(traceability: Optional[Traceability]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+def _is_citation_text(text: str) -> bool:
+    """
+    Detect whether a "heading-looking" line is actually a CITATION to another
+    legal document rather than a real heading of this document.
+
+    Examples that look like Điều/Khoản headings but are citations:
+      - "Điều 47 Nghị định số 96/2026/NĐ-CP" (referencing another decree)
+      - "Khoản 3 Điều 23 Luật Đầu tư"
+      - "Điều 32 Nghị định 96/2026/ND-CP (Chấp thuận chủ trương..."
+      - "(Điểm a khoản 1 Điều 32)"
+
+    A real article heading from the document being parsed has the form
+    "Điều X. <Title>" or "Điều X <Title>" without referencing another doc.
+
+    Returns True if the text contains citation keywords (Nghị định / Luật /
+    Thông tư / Quyết định / NĐ-CP / TT-BTC) — in which case the caller
+    should classify the block as paragraph, NOT heading.
+    """
+    if not text:
+        return False
+    citation_keywords = [
+        r"Nghị\s*định", r"Luật\s+", r"Thông\s*tư", r"Quyết\s*định",
+        r"NĐ-CP", r"TT-BTC", r"QH\d+", r"/202\d/", r"/20\d\d/",
+    ]
+    for kw in citation_keywords:
+        if re.search(kw, text, re.IGNORECASE):
+            return True
+    # Mismatched brackets often indicate the line is a fragmented citation
+    # (e.g. only the closing ")" survived after OCR slicing).
+    if text.count("(") != text.count(")"):
+        return True
+    return False
+
+
 def _detect_block_type(rb: Dict) -> str:
     """
     Heuristic block type detection.
@@ -333,20 +449,26 @@ def _detect_block_type(rb: Dict) -> str:
         return "list_item"
 
     # --- Vietnamese hierarchy headings ---
+    # Important: skip CITATIONS that mention "Điều X Nghị định Y" / similar.
+    # Those are references to other documents, not real headings of this doc.
     if re.match(r"^\s*chương\s+[\w]+", text, re.IGNORECASE | re.UNICODE):
-        return "heading"
+        return "heading" if not _is_citation_text(text) else "paragraph"
     if re.match(r"^\s*mục\s+[\w]+", text, re.IGNORECASE | re.UNICODE):
-        return "heading"
+        return "heading" if not _is_citation_text(text) else "paragraph"
     if re.match(r"^\s*điều\s+\d+", text, re.IGNORECASE | re.UNICODE):
-        return "heading"
+        return "heading" if not _is_citation_text(text) else "paragraph"
     if re.match(r"^\s*phần\s+[\w]+", text, re.IGNORECASE | re.UNICODE):
+        return "heading" if not _is_citation_text(text) else "paragraph"
+    if re.match(r"^\s*(mẫu|mau|biểu\s+mẫu|bieu\s+mau|phụ\s+lục|phu\s+luc|phy\s+luc|phu|phy|phụ|form)\s+", text, re.IGNORECASE | re.UNICODE):
         return "heading"
 
     # --- Vietnamese clause / point markers ---
+    # Also gate by _is_citation_text — "Khoản 3 Điều 23 Luật Đầu tư" is a
+    # citation, not a clause heading of this document.
     if re.match(r"^\s*khoản\s+\d+", text, re.IGNORECASE | re.UNICODE):
-        return "list_item"
+        return "list_item" if not _is_citation_text(text) else "paragraph"
     if re.match(r"^\s*điểm\s+[a-z][\.\):\s]", text, re.IGNORECASE | re.UNICODE):
-        return "list_item"
+        return "list_item" if not _is_citation_text(text) else "paragraph"
 
     # --- English hierarchy headings ---
     if re.match(r"^\s*(article|section|chapter|part|schedule|annex|exhibit)\s+[\w]+", text, re.IGNORECASE):
@@ -442,6 +564,10 @@ def _detect_hierarchy(
         r"^\s*(điểm)\s+([a-záàảãạăắằẳẵặâấầẩẫậ])([\.\)\:\s]+(.*))?$",
         re.IGNORECASE | re.UNICODE,
     )
+    re_vi_form = re.compile(
+        r"^\s*(mẫu|mau|biểu\s+mẫu|bieu\s+mau|phụ\s+lục|phu\s+luc|phy\s+luc|phu|phy|phụ|form)\s+(?:số\s+|so\s+)?(?:([a-z0-9\.\-\/]+)\s+)?(.*)$",
+        re.IGNORECASE | re.UNICODE,
+    )
 
     # ----------------------------------------------------------------
     # Compiled patterns — English
@@ -462,6 +588,29 @@ def _detect_hierarchy(
     for block in blocks:
         text = block.raw_text.strip()
         if not text:
+            continue
+
+        # ---- Vietnamese: Mẫu / Phụ lục / Form → Section ----
+        m_form = re_vi_form.match(text)
+        if m_form:
+            section_id = T.make_section_id(document_id, sec_idx)
+            sec_idx += 1
+            heading_title = (m_form.group(3) or "").strip() if m_form.lastindex and m_form.lastindex >= 3 else ""
+            sections.append(Section(
+                section_id=section_id,
+                section_kind="form",
+                label=text[:120],
+                number=m_form.group(2) or None,
+                title=heading_title or None,
+                parent_section_id=None,
+                block_ids=[block.block_id],
+                page_refs=[block.page_id],
+                confidence=Confidence(overall=0.90, structure=0.90),
+            ))
+            current_section_id = section_id
+            current_article_id = None
+            block.parent_structure_id = section_id
+            block.block_type = "heading"
             continue
 
         # ---- Vietnamese: Phần / Chương / Mục → Section ----
@@ -665,7 +814,7 @@ def _heading_level(text: str) -> int:
     Default:     h2
     """
     t = text.strip().lower()
-    if re.match(r"^(chương|phần|chapter|part)\s+", t, re.UNICODE):
+    if re.match(r"^(chương|phần|chapter|part|mẫu|mau|biểu\s+mẫu|bieu\s+mau|phụ\s+lục|phu\s+luc|phy\s+luc|phu|phy|phụ|form)\s+", t, re.UNICODE):
         return 1
     if re.match(r"^(mục|section|article|§)\s+", t, re.UNICODE):
         return 2

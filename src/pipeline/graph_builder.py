@@ -13,6 +13,7 @@ Phase 7 additions:
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Dict, List, Optional
 
@@ -25,6 +26,18 @@ from src.schemas.evaluation import STATUS_FAIL, STATUS_PASS
 from src.schemas.graph import GraphBuildJob, GraphEdge, GraphNode, GraphNodeProvenance, GraphSubgraph
 from src.utils import trace as T
 from src.graphrag.legal_ontology import add_alias_edges
+
+
+# ---------------------------------------------------------------------------
+# Semantic extraction patterns (Vietnamese legal text)
+# ---------------------------------------------------------------------------
+
+_OBL_RE  = re.compile(r'(?:phải|có nghĩa vụ|có trách nhiệm|bắt buộc)', re.IGNORECASE)
+_COND_RE = re.compile(r'(?:nếu |trong trường hợp|trường hợp |khi )', re.IGNORECASE)
+_EXC_RE  = re.compile(r'(?:trừ trường hợp|ngoại trừ|không áp dụng|trừ khi)', re.IGNORECASE)
+_PEN_RE  = re.compile(r'(?:xử phạt|bị phạt|phạt tiền|phạt cảnh cáo|xử lý vi phạm)', re.IGNORECASE)
+_DEFN_RE  = re.compile(r'(?:có nghĩa là|được hiểu là|được định nghĩa là|là loại|là hành vi|là việc|là tổ chức|là cá nhân)', re.IGNORECASE)
+_LAW_NUM_RE = re.compile(r'(?:số\s+)?(\d{1,3}/\d{4}/(?:QH|UBTVQH|HĐNN)\d+)', re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +199,10 @@ def stage_graph_building(ctx: StageContext) -> StageOutput:
             n.confidence = chunk.confidence
             nodes.append(n)
             edges.append(_make_edge(doc_node.node_id, "DERIVED_TO_CHUNK", n.node_id, confidence=0.95))
+            for ref in chunk_canonical:
+                tgt_art = canonical_to_article_node.get(ref)
+                if tgt_art:
+                    edges.append(_make_edge(n.node_id, "REFERS_TO", tgt_art, confidence=0.90, method="canonical_ref_link"))
 
     # ----------------------------------------------------------------
     # 8. Citation edges (CITES) — intra-document, evidence-gated
@@ -216,7 +233,96 @@ def stage_graph_building(ctx: StageContext) -> StageOutput:
                         citation_edges_added += 1
 
     # ----------------------------------------------------------------
-    # 9. Enrich with multilingual ALIAS_OF edges (intra-document)
+    # 9. Semantic concept nodes — Obligation, Condition, Exception,
+    #    Penalty (article-level) and DefinedTerm (clause-level)
+    # ----------------------------------------------------------------
+    block_text: Dict[str, str] = {b.block_id: b.clean_text for b in document.blocks}
+
+    def _get_text(block_ids: List[str]) -> str:
+        return " ".join(block_text[bid] for bid in block_ids if bid in block_text and block_text[bid])
+
+    doc_law_entities: Dict[str, str] = {}
+    doc_cit_nodes: Dict[str, str] = {}
+    semantic_nodes_added = 0
+
+    for article in document.articles:
+        art_nid = article_node_ids.get(article.article_id)
+        if not art_nid:
+            continue
+        label_base = article.label or article.article_id
+        text = _get_text(article.block_ids)
+
+        for cite_str in article.citations[:2]:
+            if cite_str and len(cite_str) <= 120:
+                cite_key = cite_str[:50]
+                if cite_key not in doc_cit_nodes:
+                    cit_n = _make_node("Citation", cite_str[:80], f"cit_{cite_key}")
+                    nodes.append(cit_n)
+                    doc_cit_nodes[cite_key] = cit_n.node_id
+                edges.append(_make_edge(art_nid, "REFERS_TO", doc_cit_nodes[cite_key], confidence=0.85, method="citation_node"))
+                semantic_nodes_added += 1
+
+        if not text:
+            continue
+
+        if _OBL_RE.search(text):
+            n = _make_node("Obligation", f"NV {label_base}", f"obl_{article.article_id}")
+            nodes.append(n)
+            edges.append(_make_edge(art_nid, "IMPOSES", n.node_id, confidence=0.75, method="regex_semantic"))
+            semantic_nodes_added += 1
+
+        if _COND_RE.search(text):
+            n = _make_node("Condition", f"DK {label_base}", f"cond_{article.article_id}")
+            nodes.append(n)
+            edges.append(_make_edge(art_nid, "QUALIFIED_BY", n.node_id, confidence=0.70, method="regex_semantic"))
+            semantic_nodes_added += 1
+
+        if _EXC_RE.search(text):
+            n = _make_node("Exception", f"NL {label_base}", f"exc_{article.article_id}")
+            nodes.append(n)
+            edges.append(_make_edge(art_nid, "EXCEPTED_BY", n.node_id, confidence=0.70, method="regex_semantic"))
+            semantic_nodes_added += 1
+
+        if _PEN_RE.search(text):
+            n = _make_node("Penalty", f"CT {label_base}", f"pen_{article.article_id}")
+            nodes.append(n)
+            edges.append(_make_edge(art_nid, "ENFORCED_BY", n.node_id, confidence=0.75, method="regex_semantic"))
+            semantic_nodes_added += 1
+
+        if _DEFN_RE.search(text):
+            n = _make_node("DefinedTerm", f"KN {label_base}", f"dt_art_{article.article_id}")
+            nodes.append(n)
+            edges.append(_make_edge(art_nid, "DEFINES", n.node_id, confidence=0.75, method="regex_semantic"))
+            semantic_nodes_added += 1
+
+        for law_key in {m.group(1) for m in _LAW_NUM_RE.finditer(text)}:
+            if law_key not in doc_law_entities:
+                ent_n = _make_node("Entity", law_key, f"ent_{law_key[:30]}")
+                nodes.append(ent_n)
+                doc_law_entities[law_key] = ent_n.node_id
+            edges.append(_make_edge(art_nid, "MENTIONS", doc_law_entities[law_key], confidence=0.80, method="law_ref_entity"))
+            semantic_nodes_added += 1
+
+    for clause in document.clauses:
+        cl_nid = clause_node_ids.get(clause.clause_id)
+        if not cl_nid:
+            continue
+        if clause.clause_kind == "definition":
+            terms = clause.defined_terms if clause.defined_terms else [clause.label or clause.clause_id]
+            for term in terms[:5]:
+                if term and len(term) <= 120:
+                    n = _make_node("DefinedTerm", term, f"dt_{clause.clause_id}_{term[:20]}")
+                    nodes.append(n)
+                    edges.append(_make_edge(cl_nid, "DEFINES", n.node_id, confidence=0.85, method="clause_kind"))
+                    semantic_nodes_added += 1
+        elif clause.clause_kind == "exception":
+            n = _make_node("Exception", clause.label or clause.clause_id, f"exc_cl_{clause.clause_id}")
+            nodes.append(n)
+            edges.append(_make_edge(cl_nid, "EXCEPTED_BY", n.node_id, confidence=0.80, method="clause_kind"))
+            semantic_nodes_added += 1
+
+    # ----------------------------------------------------------------
+    # 10. Enrich with multilingual ALIAS_OF edges (intra-document)
     # ----------------------------------------------------------------
     graph = GraphSubgraph(
         document_id=ctx.document_id,
@@ -240,7 +346,7 @@ def stage_graph_building(ctx: StageContext) -> StageOutput:
     alias_edge_count = sum(1 for e in graph.edges if e.edge_type == "ALIAS_OF")
     ctx.logger.info(
         f"Graph built: {graph.node_count()} nodes, {graph.edge_count()} edges "
-        f"(citation={citation_edges_added}, alias={alias_edge_count})",
+        f"(citation={citation_edges_added}, alias={alias_edge_count}, semantic={semantic_nodes_added})",
         stage="graph_building",
     )
 

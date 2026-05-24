@@ -5,6 +5,7 @@ pydantic>=2.0.0
 
 # PDF extraction (local-first)
 pdfminer.six>=20221105
+pdfplumber>=0.11.0
 
 # DOCX extraction (.docx files — modern Word format)
 python-docx>=0.8.11

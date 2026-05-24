@@ -8,12 +8,16 @@ from pydantic import BaseModel
 
 from src.api.deps import require_user
 from src.services.evidence_gap_detector import EvidenceGapDetector, EvidenceItem
+from src.services.situation_classifier import SituationClassifier
 from src.services.timeline_tracker import TimelineTracker, DeadlineItem
+from src.services.risk_analysis_service import RiskAnalysisService
 
 analysis_router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 _gap_detector = EvidenceGapDetector()
 _timeline_tracker = TimelineTracker()
+_classifier = SituationClassifier()
+_risk_service = RiskAnalysisService()
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -75,6 +79,50 @@ class TimelineResponse(BaseModel):
     warnings: List[str]
 
 
+# ── Classify models ──────────────────────────────────────────────────────────
+
+
+class ClassifyRequest(BaseModel):
+    situation: str
+    facts: List[str] = []
+    domain_hint: Optional[str] = None
+
+
+class EntityOut(BaseModel):
+    laws: List[str] = []
+    parties: List[str] = []
+    amounts: List[str] = []
+    dates: List[str] = []
+    locations: List[str] = []
+
+
+class LawRefOut(BaseModel):
+    title: str
+    score: float
+
+
+class ClassifyResponse(BaseModel):
+    request_id: str
+    feature: str = "situation_classifier"
+    domain: str
+    domain_confidence: float
+    dispute_type: str
+    stage: str
+    stage_label: str
+    stage_confidence: float
+    intent: str
+    intent_label: str
+    entities: EntityOut
+    extracted_facts: List[str]
+    risk_level: str
+    confidence: float
+    law_references: List[LawRefOut]
+    summary: str
+
+
+# ── Timeline / evidence helpers ───────────────────────────────────────────────
+
+
 def _item_out(item: EvidenceItem) -> EvidenceItemOut:
     return EvidenceItemOut(item=item.item, priority=item.priority, category=item.category)
 
@@ -84,6 +132,63 @@ def _deadline_out(d: DeadlineItem) -> DeadlineItemOut:
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
+
+
+@analysis_router.post("/classify", response_model=ClassifyResponse)
+def classify_situation(
+    body: ClassifyRequest,
+    user_id: str = Depends(require_user),
+) -> ClassifyResponse:
+    """
+    Phân loại tình huống pháp lý: xác định lĩnh vực, loại tranh chấp,
+    giai đoạn, ý định người dùng và trích xuất sự kiện chính.
+    Dùng làm bước đầu tiên trước khi gọi /analysis/evidence-gap hoặc /journey/build.
+    """
+    result = _classifier.classify(
+        situation=body.situation,
+        facts=body.facts,
+        domain_hint=body.domain_hint,
+    )
+
+    ent = result.entities
+    domain_labels = {
+        "dat_dai": "Đất đai", "hop_dong": "Hợp đồng", "lao_dong": "Lao động",
+        "doanh_nghiep": "Doanh nghiệp", "dan_su": "Dân sự", "hinh_su": "Hình sự",
+        "hanh_chinh": "Hành chính", "gia_dinh": "Gia đình & Hôn nhân",
+        "general": "Chưa xác định",
+    }
+    risk_labels = {"low": "thấp", "medium": "trung bình", "high": "cao"}
+
+    summary = (
+        f"Tình huống thuộc lĩnh vực {domain_labels.get(result.domain, result.domain)} "
+        f"(độ tin cậy {round(result.domain_confidence * 100)}%). "
+        f"Giai đoạn: {result.stage_label}. "
+        f"Mức rủi ro: {risk_labels.get(result.risk_level, result.risk_level).upper()}."
+    )
+
+    return ClassifyResponse(
+        request_id="cls_" + str(uuid.uuid4())[:8],
+        domain=result.domain,
+        domain_confidence=result.domain_confidence,
+        dispute_type=result.dispute_type,
+        stage=result.stage,
+        stage_label=result.stage_label,
+        stage_confidence=result.stage_confidence,
+        intent=result.intent,
+        intent_label=result.intent_label,
+        entities=EntityOut(
+            laws=ent.get("laws", []),
+            parties=ent.get("parties", []),
+            amounts=ent.get("amounts", []),
+            dates=ent.get("dates", []),
+            locations=ent.get("locations", []),
+        ),
+        extracted_facts=result.extracted_facts,
+        risk_level=result.risk_level,
+        confidence=result.confidence,
+        law_references=[LawRefOut(**r) for r in result.law_references],
+        summary=summary,
+    )
 
 
 @analysis_router.post("/evidence-gap", response_model=EvidenceGapResponse)
@@ -169,4 +274,64 @@ def track_timeline(
         next_stage_label=result.next_stage_label,
         summary=summary,
         warnings=warnings,
+    )
+
+
+# ── Risk Analysis ─────────────────────────────────────────────────────────────
+
+
+class RiskRequest(BaseModel):
+    situation: str
+    facts: List[str] = []
+    domain_hint: Optional[str] = None
+
+
+class RiskResponse(BaseModel):
+    request_id: str
+    feature: str = "risk_analysis"
+    domain: str
+    risk_score: float
+    risk_level: str
+    stage: str
+    stage_label: str
+    strengths: List[str]
+    weaknesses: List[str]
+    missing_points: List[str]
+    warnings: List[str]
+    recommended_actions: List[str]
+    evidence_coverage: float
+    confidence: float
+    summary: str
+
+
+@analysis_router.post("/risk", response_model=RiskResponse)
+def analyze_risk(
+    body: RiskRequest,
+    user_id: str = Depends(require_user),
+) -> RiskResponse:
+    """
+    Đánh giá rủi ro pháp lý toàn diện: kết hợp phân loại tình huống và
+    phân tích khoảng trống chứng cứ để sinh điểm rủi ro, điểm mạnh/yếu,
+    và kế hoạch hành động ưu tiên.
+    """
+    result = _risk_service.analyze(
+        situation=body.situation,
+        facts=body.facts,
+        domain_hint=body.domain_hint,
+    )
+    return RiskResponse(
+        request_id="risk_" + str(uuid.uuid4())[:8],
+        domain=result.domain,
+        risk_score=result.risk_score,
+        risk_level=result.risk_level,
+        stage=result.stage,
+        stage_label=result.stage_label,
+        strengths=result.strengths,
+        weaknesses=result.weaknesses,
+        missing_points=result.missing_points,
+        warnings=result.warnings,
+        recommended_actions=result.recommended_actions,
+        evidence_coverage=result.evidence_coverage,
+        confidence=result.confidence,
+        summary=result.summary,
     )

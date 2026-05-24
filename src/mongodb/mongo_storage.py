@@ -903,6 +903,7 @@ class VectorStorage:
         query_vector: List[float],
         industry: Optional[str] = None,
         contract_type: Optional[str] = None,
+        template_type: Optional[str] = None,
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         """$vectorSearch on templates.embedding."""
@@ -923,6 +924,8 @@ class VectorStorage:
             post["industry"] = industry
         if contract_type:
             post["contract_type"] = contract_type
+        if template_type:
+            post["template_type"] = template_type
         if post:
             pipeline.append({"$match": post})
         pipeline += [{"$limit": limit}, {"$project": {"_id": 0, "embedding": 0}}]
@@ -936,6 +939,7 @@ class VectorStorage:
         self,
         industry: Optional[str] = None,
         contract_type: Optional[str] = None,
+        template_type: Optional[str] = None,
         limit: int = 5,
     ) -> List[Dict[str, Any]]:
         """Fallback: tag-based template lookup without vector search."""
@@ -944,6 +948,8 @@ class VectorStorage:
             query["industry"] = {"$in": [industry, "general"]}
         if contract_type:
             query["contract_type"] = contract_type
+        if template_type:
+            query["template_type"] = template_type
         try:
             return list(
                 self.templates.find(query, {"_id": 0, "embedding": 0}).limit(limit)

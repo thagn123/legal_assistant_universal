@@ -22,8 +22,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.config import PipelineConfig
 from src.pipeline.interfaces import StageContext, StageOutput
+from src.pipeline.vn_ocr_normalizer import (
+    configure_pytesseract,
+    postprocess_vn_ocr,
+    preprocess_image_for_ocr,
+    split_text_into_legal_blocks,
+)
 from src.schemas.document import DocumentProfile
 from src.schemas.evaluation import STATUS_FAIL, STATUS_PASS, STATUS_WARNING
+
+# Configure tesseract globally once at import time (idempotent).
+# Resolves tesseract.exe path, sets PATH for subprocesses, configures
+# pytesseract.tesseract_cmd. No-op if tesseract is not installed.
+configure_pytesseract()
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +101,12 @@ def stage_extraction(ctx: StageContext) -> StageOutput:
 def _extract_pdf(
     path: Path, profile: DocumentProfile, cfg: PipelineConfig, warnings: List[str]
 ) -> Tuple[List[Dict], List[Dict]]:
+    from src.config import ExtractionStrategy
+
+    if profile.extraction_strategy == ExtractionStrategy.SCAN_RECOVERY and cfg.enable_ocr:
+        blocks = _extract_pdf_ocr(path, profile, cfg, warnings)
+        return blocks, []
+
     blocks: List[Dict] = []
     tables: List[Dict] = []
     try:
@@ -114,7 +131,153 @@ def _extract_pdf(
         warnings.append("pdfminer not installed; PDF text extraction skipped.")
     except Exception as exc:
         warnings.append(f"PDF extraction error: {exc}")
+        
+    # Fallback to OCR if nothing was extracted and OCR is enabled
+    if not blocks and cfg.enable_ocr:
+        warnings.append("No text extracted with pdfminer. Falling back to OCR.")
+        ocr_blocks = _extract_pdf_ocr(path, profile, cfg, warnings)
+        blocks.extend(ocr_blocks)
+
     return blocks, tables
+
+
+def _extract_pdf_ocr(
+    path: Path, profile: DocumentProfile, cfg: PipelineConfig, warnings: List[str]
+) -> List[Dict]:
+    """
+    OCR fallback for scanned PDFs (no text layer).
+
+    Improvements over the previous implementation:
+    - Uses PyMuPDF when available (faster, no Poppler dependency) with
+      pdfplumber as fallback. Both render pages at high DPI.
+    - Image preprocessing (grayscale + autocontrast + sharpen) lifts OCR
+      accuracy especially on faint scans.
+    - Tesseract config "--oem 1 --psm 6" (LSTM engine, single uniform block)
+      gives much better results on legal documents than the default PSM 3.
+    - image_to_string (with newlines) instead of image_to_data + threshold —
+      we no longer drop accented characters that fall below the conf cutoff,
+      and we preserve paragraph breaks.
+    - Vietnamese OCR post-processing (postprocess_vn_ocr) rewrites common
+      diacritic-stripped tokens ("Diéu" → "Điều", "Khodn" → "Khoản", ...).
+    - Smart block splitting (split_text_into_legal_blocks) emits one block
+      per legal heading (Điều / Khoản / Chương / Mục / Phần / Điểm) so the
+      structurer can build the Article/Clause hierarchy. Previously each
+      page collapsed to a single 1000-char prose block and structure was
+      lost entirely.
+    """
+    blocks: List[Dict] = []
+
+    page_texts = _render_and_ocr_pdf_pages(path, cfg, warnings)
+    if not page_texts:
+        return blocks
+
+    # Smart split: one block per heading / list item, prose lines merged
+    blocks = split_text_into_legal_blocks(page_texts, source="tesseract_pdf")
+    return blocks
+
+
+def _render_and_ocr_pdf_pages(
+    path: Path, cfg: PipelineConfig, warnings: List[str]
+) -> List[str]:
+    """
+    Render every page of `path` to an image and OCR it.
+
+    Backend order:
+        1. PyMuPDF (fitz)  — pure Python, no Poppler dependency
+        2. pdfplumber      — depends on pdfminer & pdfminer.six
+
+    Returns per-page text (post-processed for Vietnamese), or [] on failure.
+    """
+    try:
+        import pytesseract  # noqa: F401  (verify available before rendering)
+    except ImportError:
+        warnings.append("pytesseract not installed; PDF OCR skipped.")
+        return []
+
+    page_texts: List[str] = []
+    backend_used: Optional[str] = None
+
+    # --- Backend 1: PyMuPDF -------------------------------------------------
+    try:
+        import fitz  # PyMuPDF
+        from PIL import Image as _PILImage
+        backend_used = "pymupdf"
+
+        dpi = 300
+        zoom = dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+
+        doc = fitz.open(str(path))
+        try:
+            for page_num in range(doc.page_count):
+                try:
+                    page = doc.load_page(page_num)
+                    pix = page.get_pixmap(matrix=mat, alpha=False)
+                    img = _PILImage.frombytes(
+                        "RGB", (pix.width, pix.height), pix.samples
+                    )
+                    page_texts.append(_ocr_pil_image(img))
+                except Exception as exc:
+                    warnings.append(
+                        f"OCR failed on page {page_num + 1} (pymupdf): {exc}"
+                    )
+                    page_texts.append("")
+        finally:
+            doc.close()
+
+    except ImportError:
+        # Fall through to pdfplumber
+        pass
+    except Exception as exc:
+        warnings.append(f"PyMuPDF OCR error: {exc}; falling back to pdfplumber.")
+
+    # --- Backend 2: pdfplumber ---------------------------------------------
+    if not page_texts:
+        try:
+            import pdfplumber
+            backend_used = "pdfplumber"
+
+            with pdfplumber.open(str(path)) as pdf:
+                for page_num, page in enumerate(pdf.pages, start=1):
+                    try:
+                        img = page.to_image(resolution=300).original
+                        page_texts.append(_ocr_pil_image(img))
+                    except Exception as exc:
+                        warnings.append(f"OCR failed on page {page_num}: {exc}")
+                        page_texts.append("")
+        except ImportError:
+            warnings.append(
+                "Neither PyMuPDF nor pdfplumber installed; PDF OCR skipped."
+            )
+        except Exception as exc:
+            warnings.append(f"PDF OCR error (pdfplumber): {exc}")
+
+    if backend_used and page_texts:
+        warnings.append(f"PDF OCR backend: {backend_used} (DPI=300, lang=vie+eng)")
+    return page_texts
+
+
+def _ocr_pil_image(img) -> str:
+    """
+    OCR a single PIL image with the project's Vietnamese-tuned settings,
+    then run the post-processing pass. Returns a possibly-empty string.
+    """
+    try:
+        import pytesseract
+    except ImportError:
+        return ""
+
+    img = preprocess_image_for_ocr(img)
+    try:
+        text = pytesseract.image_to_string(
+            img,
+            lang="vie+eng",
+            config="--oem 1 --psm 6",
+        )
+    except Exception:
+        return ""
+    return postprocess_vn_ocr(text or "")
+    return blocks
 
 
 def _extract_docx(
@@ -279,15 +442,31 @@ def _extract_image(
         import pytesseract
         from PIL import Image as PILImage
 
+        # tesseract_cmd is already configured globally via configure_pytesseract()
+        # at import time. Image preprocessing + Vietnamese-tuned OCR config
+        # mirrors the PDF OCR path so single-image inputs benefit from the
+        # same accuracy improvements (diacritics retained, no aggressive
+        # confidence cutoff that drops accented characters).
         img = PILImage.open(str(path))
-        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-        words = [
-            w for w, conf in zip(data["text"], data["conf"])
-            if w.strip() and int(conf) > 0
-        ]
-        confidences = [int(c) for c in data["conf"] if int(c) > 0]
+        img = preprocess_image_for_ocr(img)
+
+        # Use image_to_data to capture confidence stats AND image_to_string
+        # to produce diacritic-preserving prose text. We post-process the
+        # prose with the VN OCR normalizer.
+        data = pytesseract.image_to_data(
+            img,
+            lang="vie+eng",
+            config="--oem 1 --psm 6",
+            output_type=pytesseract.Output.DICT,
+        )
+        confidences = [int(c) for c in data["conf"] if int(c) >= 0]
         avg_conf = sum(confidences) / len(confidences) if confidences else 0
-        text = " ".join(words)
+
+        text = pytesseract.image_to_string(
+            img, lang="vie+eng", config="--oem 1 --psm 6"
+        )
+        text = postprocess_vn_ocr(text or "").strip()
+
         if text:
             blocks.append({
                 "page_index": 1,

@@ -10,7 +10,7 @@
 **Name:** Universal Legal Knowledge Assistant (LexAI / ULKA)
 **Stack:** Python 3.11 · FastAPI · MongoDB Atlas · sentence-transformers · OpenAI API · React 19 + TypeScript + Vite + Tailwind
 **Language:** Vietnamese legal domain (UI + domain vocabulary), codebase in English
-**Phase:** 13 — Cross-Session User Memory + ReflectionAgent + Personalization UI (current)
+**Phase:** 14 — Analysis History + Dashboard Real Data + Bug Fixes (current)
 **Repo branch:** `main`
 
 ---
@@ -138,9 +138,13 @@ src/                                  # Python backend
 lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 ├── lib/
 │   ├── api.ts                        # API client — adminFetch, dynamic getUserId(), admin endpoints
-│   │                                 #   ★ NEW: UserMemory/UserMemoryInfo/SituationRecord types
-│   │                                 #   ★ NEW: getUserMemory() / updateUserMemory()
-│   └── adminAuth.ts                  # getAdminKey/setAdminKey/isAdminAuthenticated
+│   │                                 #   UserMemory/UserMemoryInfo/SituationRecord types
+│   │                                 #   getUserMemory() / updateUserMemory()
+│   │                                 #   ★ Phase 14: BehaviorProfile type + getBehaviorProfile()
+│   │                                 #   ★ Phase 14: AnalysisHistoryItem + saveAnalysis/loadHistory/deleteHistoryItem/clearHistory
+│   │                                 #   API_BASE default: http://localhost:8001
+│   ├── adminAuth.ts                  # getAdminKey/setAdminKey/isAdminAuthenticated
+│   └── (vite-env.d.ts)               # ★ Phase 14 fix — /// <reference types="vite/client" />
 │
 ├── components/
 │   ├── layout/
@@ -150,16 +154,24 @@ lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 │       └── AdminLayout.tsx           # ★ NEW — Admin shell (sidebar + auth guard + Outlet)
 │
 ├── pages/
-│   ├── Dashboard.tsx                 # User dashboard
+│   ├── Dashboard.tsx                 # User dashboard — digest + proactive + personalized feed + behavior chart (real API)
 │   ├── Analyze.tsx                   # Legal analysis chat (sessions from localStorage)
+│   ├── Journey.tsx                   # Legal journey mode
+│   ├── Actions.tsx                   # Action planner
+│   ├── Timeline.tsx                  # Timeline tracker + Save button → localStorage history
+│   ├── LawSearch.tsx                 # Law retrieval
+│   ├── SimilarCases.tsx              # Similar case explorer
 │   ├── Contract.tsx                  # Contract analysis
+│   ├── ClauseCoach.tsx               # Clause coach + Save button
+│   ├── ClauseSearch.tsx              # Clause similarity search
+│   ├── EvidenceGap.tsx               # Evidence gap detector + Save button
+│   ├── ComplianceRadar.tsx           # Compliance radar
 │   ├── Documents.tsx                 # Document list
 │   ├── Templates.tsx                 # Contract templates
 │   ├── Risks.tsx                     # Legal risk panel
 │   ├── Checklists.tsx                # Compliance checklists
-│   ├── Profile.tsx                   # User profile — ★ NEW: "AI ghi nhớ về bạn" card
-│   │                                 #   PersonalInfo edit panel (name/age/occupation/location/notes)
-│   │                                 #   Recent situation summaries from ReflectionAgent
+│   ├── AnalysisHistory.tsx           # ★ Phase 14 — saved analyses (localStorage), filter by type
+│   ├── Profile.tsx                   # User profile — "AI ghi nhớ về bạn" card
 │   └── admin/
 │       ├── AdminLogin.tsx            # ★ NEW — Admin key login form
 │       ├── AdminDashboard.tsx        # ★ NEW — Admin home with quick links
@@ -517,33 +529,67 @@ CREATE TABLE jobs (
 | `lexai_user_id` | string user ID | `api.ts` — `getUserId()`, `X-User-ID` header |
 | `lexai_admin_key` | admin API key | `adminAuth.ts` — `getAdminKey()`, `X-Admin-Key` header |
 | `lexai_sessions` | JSON array (max 20) | `Analyze.tsx` — conversation history |
+| `lexai_analysis_history` | JSON array (max 30) | `api.ts` — `saveAnalysis()`/`loadHistory()` — Timeline/EvidenceGap/ClauseCoach saved results |
 
 ---
 
 ## Running Locally
 
 ```bash
-# Start MongoDB
-docker compose up -d
-
 # Install deps
 pip install -r requirements.txt
 
 # Run backend API (use python -m uvicorn — Windows Anaconda env)
-python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
+
+# Seed ALL built-in knowledge (run once after backend starts; idempotent — safe to re-run)
+python scripts/seed_raw_data.py
+# Step 1: calls POST /admin/seed → templates, TT55 forms, risks, checklists into MongoDB
+# Step 2: uploads all raw_data/*.doc/.pdf → 8-stage pipeline → global chunks in MongoDB
+# Add new .doc/.docx/.pdf files to raw_data/ then re-run to pick them up.
+# Duplicate downloads "(1).doc" and dataset dirs are auto-excluded.
+# Flags: --skip-metadata (step 1 only), --skip-files (step 2 only), --dry-run, --force
 
 # Run frontend
 cd "lexai-–-trợ-lý-pháp-lý-thông-minh UI"
 npm install
 npm run dev
-# → http://localhost:5173
-# → http://localhost:5173/admin/login  (key: lexai-admin-secret)
+# → http://localhost:3000
+# → http://localhost:3000/admin/login  (key: lexai-admin-secret)
+# → http://localhost:3000/history      (saved analysis history)
+# API_BASE default: http://localhost:8001 (override with VITE_API_URL env var)
 ```
 
-Environment variables:
-- `MONGODB_URI` — MongoDB connection string (default: `mongodb://localhost:27017`)
+Environment variables (`.env`):
+- `MONGO_URI` — MongoDB Atlas connection string
+- `MONGO_DB` — database name (default: `legal_knowledge_assistant`)
 - `OPENAI_API_KEY` — for LLM reasoning (optional; system falls back to deterministic)
 - `ADMIN_API_KEY` — admin key (default: `lexai-admin-secret`)
+
+## Data Architecture
+
+```
+raw_data/           ← admin places legal .doc/.pdf files here
+    *.doc           ← Vietnamese laws, decrees, circulars
+    VNLegalText-main/   ← annotation dataset (excluded from seed)
+    bm25_legal_corpus/  ← BM25 corpus (excluded from seed)
+
+scripts/seed_raw_data.py  ← uploads raw_data/*.doc to admin API as is_global=True
+                           ← idempotent: skips filenames already in MongoDB
+                           ← skips "(1).doc" duplicate downloads automatically
+
+data/uploads/       ← auto-created; stores uploaded file bytes per doc_id
+data/lka.db         ← SQLite: documents, jobs, chunks, graphs
+MongoDB Atlas:
+  law_chunks        ← embedded chunks with is_global=True (visible to all users)
+  user_memory       ← per-user cross-session memory (no TTL)
+  conversation_sessions ← 24h TTL session context
+```
+
+**Data isolation model:**
+- Admin uploads (`raw_data/` via seed script) → `is_global=True` → visible to **all users**
+- User uploads (via web UI) → `is_global=False` → visible **only to that user**
+- Retrieval always queries: `{$or: [{user_id: <user>}, {is_global: true}]}`
 
 ---
 
@@ -569,4 +615,6 @@ Environment variables:
 | 10 | Product Runtime: API, SQLite storage, auth, audit, job orchestration |
 | 11 | AI Legal Intelligence Infrastructure: staged pipeline, retrieval fusion, reranking, session memory, observability, behavior recommender |
 | 12 | Admin Upload Infrastructure + Frontend Wiring: admin API, is_global mechanism, React admin panel, localStorage session persistence |
-| 13 | Cross-Session User Memory + ReflectionAgent + Personalization UI (current): UserMemoryStore (no TTL), two-tier ReflectionAgent, orchestrator Stage 2b/5/7b patches, behavior/memory API, Profile personal-info panel, Header name greeting |
+| 13 | Cross-Session User Memory + ReflectionAgent + Personalization UI: UserMemoryStore (no TTL), two-tier ReflectionAgent, orchestrator Stage 2b/5/7b patches, behavior/memory API, Profile personal-info panel, Header name greeting |
+| 12.5 | New Feature Pages: ClauseCoach (backend + frontend), EvidenceGap (frontend), ClauseSearch (backend + frontend), Timeline (frontend), Standalone POST /recommendations/rank |
+| 14 | Analysis History + Dashboard Real Data + Bug Fixes (current): AnalysisHistory page (/history), localStorage save/load helpers in api.ts, Save button on Timeline/EvidenceGap/ClauseCoach, Dashboard chart wired to real behavior profile API, API_BASE default fixed to :8001, vite-env.d.ts added, AdminStats type conflict fixed |

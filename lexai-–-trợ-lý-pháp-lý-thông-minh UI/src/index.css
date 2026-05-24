@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-legal-navy: #0f1729;
+  --color-legal-navy-light: #1e293b;
+  --color-legal-gold: #d4a843;
+  --color-legal-gold-light: #e6c273;
+  --color-legal-success: #059669;
+  --color-legal-warning: #f59e0b;
+  --color-legal-danger: #ef4444;
+  --color-legal-border: rgba(255, 255, 255, 0.1);
+  --color-legal-card: rgba(255, 255, 255, 0.05);
+}
+
+@layer base {
+  body {
+    @apply bg-legal-navy text-slate-100 font-sans antialiased selection:bg-legal-gold/30 selection:text-white;
+  }
+}
+
+.glass-card {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #d4a843 0%, #e6c273 100%);
+}
+
+.navy-gradient {
+  background: radial-gradient(circle at top right, #1e293b, #0f1729);
+}
+
+@keyframes skeleton-pulse {
+  0% { opacity: 0.1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.1; }
+}
+
+.animate-skeleton {
+  animation: skeleton-pulse 2s infinite ease-in-out;
+}

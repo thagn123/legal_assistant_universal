@@ -348,3 +348,40 @@ Chạy lại trên `raw_data/` (Luật 106/2025/QH15, Luật 45/2019/QH14):
 1. **[Tùy chọn]** Thêm regex cho numbered items "1.", "2." (không có "Khoản") để detect clause trong luật dùng format này
 2. **[Tùy chọn]** Test với Bộ luật Dân sự, Luật Doanh nghiệp để verify Khoản/Điểm nesting fix
 3. Convert `.doc` → `.docx` cho các file cần full table topology support (hiện chỉ `.docx` detect header)
+
+## 7️⃣ Cải thiện OCR và làm sạch văn bản
+
+- **Tạo module `src/pipeline/ocr_utils.py**`
+  - Các hàm: `_remove_control_chars`, `_normalize_unicode`, `merge_hyphenated_lines`, `filter_low_confidence_words`, `remove_noise_lines`, `clean_ocr_text`.
+  - Nhiệm vụ: loại bỏ ký tự điều khiển, chuẩn hoá Unicode (giữ dấu tiếng Việt), gộp các dòng bị cắt, lọc từ có confidence thấp, loại bỏ dòng nhiễu, trả về chuỗi sạch.
+
+- **Cập nhật `test_extraction_chunking.py`**
+  - Sau bước *Extraction* gọi `clean_ocr_text` để xử lý `raw_blocks` và các `blocks` trong `CanonicalDocument`.
+  - Kết quả: các block và chunk trong báo cáo cuối cùng chứa văn bản đã được làm sạch, giảm ký tự lạ, giảm độ dài chunk, cải thiện độ chính xác retrieval.
+
+- **Đảm bảo import hoạt động**: Thêm `src/pipeline/__init__.py` (đã tồn tại) để Python nhận diện package.
+
+*Thực hiện*: Chạy lại `python test_extraction_chunking.py` → các chunk bây giờ ngắn gọn, không còn các ký tự lạ và các từ bị tách.
+
+## 8️⃣ Phân loại và Trích xuất Biểu mẫu Đơn từ mẫu (Form/Template Classification)
+
+- **Cải tiến Regex và Group Indexing trong `src/pipeline/structurer.py`**:
+  - Thiết kế lại `re_vi_form` thành dạng regex phi ký tự số tùy chọn và khớp tự do hơn:
+    ```python
+    re_vi_form = re.compile(
+        r"^\s*(mẫu|mau|biểu\s+mẫu|bieu\s+mau|phụ\s+lục|phu\s+luc|phy\s+luc|phu|phy|phụ|form)\s+(?:số\s+|so\s+)?(?:([a-z0-9\.\-\/]+)\s+)?(.*)$",
+        re.IGNORECASE | re.UNICODE,
+    )
+    ```
+    Giúp nhận diện chính xác các tiêu đề bị lỗi OCR như `"Mau Dé xuat dy dau tu"`, `"Phu MAU VAN BAN"`.
+  - Sửa lỗi truy xuất sai Group Index (`m_form.group(4)` đổi thành `m_form.group(3)`) khi trích xuất tiêu đề biểu mẫu, đảm bảo không bị bỏ sót tiêu đề mẫu đơn.
+  
+- **Xây dựng Công cụ Tạo Báo cáo Tự động (`scripts/generate_form_report.py`)**:
+  - Viết script tự động chạy pipeline trích xuất OCR toàn bộ tệp, cấu trúc hóa và phân loại các biểu mẫu có thuộc tính `section_kind == "form"`.
+  - Kết xuất danh sách định dạng Markdown tại `test_outputs/form_report.md`.
+
+- **Kết quả Thực tế (Chạy thử nghiệm trên PDF 173 trang `thong-tu-55-btc-PL1.pdf`)**:
+  - Trích xuất thành công **49 biểu mẫu & quyết định pháp lý** (ví dụ: *Mẫu I.1.2 Đề xuất dự án đầu tư*, *Mẫu I.1.4 Văn bản đề nghị chấp thuận nhà đầu tư*,...).
+  - Lưu trữ tài liệu phân tích chi tiết tại: `test_outputs/legal_templates_analysis.md`.
+
+

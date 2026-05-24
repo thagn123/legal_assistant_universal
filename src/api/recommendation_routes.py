@@ -105,6 +105,7 @@ class TemplateRecRequest(BaseModel):
     context: str
     industry: Optional[str] = None
     contract_type: Optional[str] = None
+    template_type: Optional[str] = None   # "contract" | "official_form"
     limit: int = 5
 
 
@@ -127,6 +128,9 @@ class TemplateRecOut(BaseModel):
     related_laws: List[str]
     vector_score: float
     download_hint: str
+    template_type: str = "contract"
+    form_code: Optional[str] = None
+    issuer: Optional[str] = None
 
 
 class RiskRecRequest(BaseModel):
@@ -276,6 +280,7 @@ def recommend_templates(
         context=body.context,
         industry=body.industry,
         contract_type=body.contract_type,
+        template_type=body.template_type,
         limit=body.limit,
         user_id=user_id,
     )
@@ -290,6 +295,9 @@ def recommend_templates(
             related_laws=r.related_laws,
             vector_score=r.vector_score,
             download_hint=r.download_hint,
+            template_type=r.template_type,
+            form_code=r.form_code,
+            issuer=r.issuer,
         )
         for r in results
     ]
@@ -1028,6 +1036,137 @@ def get_session_history(
     if not history:
         raise HTTPException(status_code=404, detail="Session not found")
     return history
+
+
+# ---------------------------------------------------------------------------
+# Standalone Recommendation Ranker — POST /recommendations/rank
+# ---------------------------------------------------------------------------
+
+
+class RankCandidateIn(BaseModel):
+    item_id: str
+    item_type: str = "law_chunk"
+    content: str = ""
+    law_type: str = "general"
+    law_reference: str = ""
+    vector_score: float = Field(default=0.5, ge=0.0, le=1.0)
+    behavior_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    graph_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    updated_at: Optional[str] = None
+
+
+class RankRequest(BaseModel):
+    candidates: List[RankCandidateIn] = Field(..., min_length=1, max_length=50)
+    top_k: int = Field(default=10, ge=1, le=50)
+
+
+class RankedItemOut(BaseModel):
+    item_id: str
+    item_type: str
+    content: str
+    law_type: str
+    law_reference: str
+    final_score: float
+    rank: int
+    sources: List[str]
+    explanation: str
+    score_components: Dict[str, float]
+
+
+class RankResponse(BaseModel):
+    request_id: str
+    feature: str = "recommendation_ranker"
+    ranked: List[RankedItemOut]
+    total: int
+    weights_used: Dict[str, float]
+    ranking_duration_ms: float
+
+
+@rec_router.post("/rank", response_model=RankResponse)
+def rank_candidates(
+    body: RankRequest,
+    request: Request,
+    user_id: str = Depends(require_user),
+) -> RankResponse:
+    """
+    Standalone multi-signal reranking of candidate items (Stage 6).
+
+    Accepts a flat list of candidates with pre-computed signal scores
+    (vector, behavior, graph), computes freshness/popularity/acceptance
+    from MongoDB interaction history, and returns the top-k ranked list
+    with per-signal score breakdowns and Vietnamese explanations.
+
+    Example:
+        {
+          "candidates": [
+            {"item_id": "chunk_abc", "item_type": "law_chunk",
+             "content": "Điều 5...", "law_type": "dat_dai",
+             "law_reference": "Điều 5 Luật Đất đai 2024",
+             "vector_score": 0.85, "updated_at": "2024-07-01T00:00:00Z"}
+          ],
+          "top_k": 5
+        }
+    """
+    import uuid as _uuid
+    from src.engine.retrieval_fusion import FusedResult, FusedResultSet
+    from src.engine.recommendation_ranker import RecommendationRanker
+
+    vs = _get_vector_storage(request)
+
+    fused_results = [
+        FusedResult(
+            item_id=c.item_id,
+            item_type=c.item_type,
+            content=c.content[:500],
+            law_type=c.law_type,
+            law_reference=c.law_reference,
+            raw_data={"updated_at": c.updated_at} if c.updated_at else {},
+            vector_score=c.vector_score,
+            bm25_score=0.0,
+            graph_score=c.graph_score,
+            behavior_score=c.behavior_score,
+            fusion_score=c.vector_score,
+            sources=["api_input"],
+        )
+        for c in body.candidates
+    ]
+
+    fused_set = FusedResultSet(
+        plan_id="rank_" + str(_uuid.uuid4())[:8],
+        results=fused_results,
+        total_raw_hits=len(fused_results),
+        vector_hits=len(fused_results),
+        bm25_hits=0,
+        graph_hits=0,
+        behavior_hits=0,
+        fusion_weights={"vector": 1.0, "bm25": 0.0, "graph": 0.0, "behavior": 0.0},
+        fusion_duration_ms=0.0,
+    )
+
+    ranker = RecommendationRanker(vs)
+    result = ranker.rank(fused_set, user_id=user_id, top_k=body.top_k)
+
+    return RankResponse(
+        request_id="rank_" + str(_uuid.uuid4())[:8],
+        ranked=[
+            RankedItemOut(
+                item_id=item.item_id,
+                item_type=item.item_type,
+                content=item.content,
+                law_type=item.law_type,
+                law_reference=item.law_reference,
+                final_score=item.final_score,
+                rank=item.rank,
+                sources=item.sources,
+                explanation=item.explanation,
+                score_components=item.score_components,
+            )
+            for item in result.ranked
+        ],
+        total=len(result.ranked),
+        weights_used=result.weights_used,
+        ranking_duration_ms=result.ranking_duration_ms,
+    )
 
 
 # ---------------------------------------------------------------------------

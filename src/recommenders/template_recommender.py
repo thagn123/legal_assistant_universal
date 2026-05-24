@@ -11,7 +11,7 @@ Seed templates are loaded from src/mongodb/seed_data.py on first startup.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 from src.mongodb.mongo_storage import VectorStorage
@@ -31,6 +31,11 @@ class TemplateRecommendation:
     related_laws: List[str]
     vector_score: float
     download_hint: str          # e.g. "Dùng cho thuê nhà dân dụng dưới 1 năm"
+    template_type: str = "contract"   # "contract" | "official_form"
+    form_code: Optional[str] = None   # e.g. "I.1.4" for TT55 official forms
+    issuer: Optional[str] = None      # "nha_dau_tu" | "co_quan_nha_nuoc"
+    content: Optional[str] = None
+
 
 
 class TemplateRecommender:
@@ -53,6 +58,7 @@ class TemplateRecommender:
         context: str,
         industry: Optional[str] = None,
         contract_type: Optional[str] = None,
+        template_type: Optional[str] = None,
         limit: int = 5,
         user_id: Optional[str] = None,
     ) -> List[TemplateRecommendation]:
@@ -63,6 +69,7 @@ class TemplateRecommender:
             context:       Free-text description of what the user needs.
             industry:      Industry filter (e.g. "bat_dong_san", "lao_dong").
             contract_type: Type filter (e.g. "thue_nha", "lao_dong").
+            template_type: "contract" | "official_form" — filters by form kind.
             limit:         Max results.
             user_id:       Caller ID for interaction logging.
         """
@@ -75,6 +82,7 @@ class TemplateRecommender:
                 query_vector=embedding,
                 industry=industry,
                 contract_type=contract_type,
+                template_type=template_type,
                 limit=limit,
             )
 
@@ -83,6 +91,7 @@ class TemplateRecommender:
             raw_docs = self._vs.get_templates_by_profile(
                 industry=industry,
                 contract_type=contract_type,
+                template_type=template_type,
                 limit=limit,
             )
 
@@ -114,4 +123,8 @@ def _to_recommendation(doc: dict) -> TemplateRecommendation:
         related_laws=doc.get("related_laws", []),
         vector_score=round(float(doc.get("vector_score", 0.0)), 3),
         download_hint=doc.get("download_hint", ""),
+        template_type=doc.get("template_type", "contract"),
+        form_code=doc.get("form_code"),
+        issuer=doc.get("issuer"),
+        content=doc.get("content"),
     )

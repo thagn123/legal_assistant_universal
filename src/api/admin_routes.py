@@ -75,8 +75,10 @@ class AdminStatsResponse(BaseModel):
 
 class AdminSeedResponse(BaseModel):
     templates: int
+    official_forms: int = 0
     risks: int
     checklists: int
+    legal_cases: int = 0
     message: str
 
 
@@ -288,8 +290,10 @@ def admin_seed_data(request: Request) -> AdminSeedResponse:
         counts = seed_all(vs)
         return AdminSeedResponse(
             templates=counts.get("templates", 0),
+            official_forms=counts.get("official_forms", 0),
             risks=counts.get("risks", 0),
             checklists=counts.get("checklists", 0),
+            legal_cases=counts.get("legal_cases", 0),
             message="Seed completed successfully.",
         )
     except Exception as exc:
