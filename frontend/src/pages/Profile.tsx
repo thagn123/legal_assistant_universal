@@ -18,11 +18,6 @@ import {
   CheckCircle2,
   Loader2,
   Tag,
-  Edit2,
-  Save,
-  X,
-  Brain,
-  History,
 } from 'lucide-react';
 import { 
   Radar, 
@@ -36,7 +31,7 @@ import {
   Cell,
   Tooltip as ChartTooltip
 } from 'recharts';
-import { apiFetch, getRecommendationsByRole, getUserMemory, updateUserMemory, PersonaRecommendResult, UserProfile, UserMemory, UserMemoryInfo, LAW_TYPE_LABELS } from '../lib/api';
+import { apiFetch, getRecommendationsByRole, PersonaRecommendResult, UserProfile, LAW_TYPE_LABELS } from '../lib/api';
 
 const ROLE_OPTIONS = [
   { value: 'individual',   label: 'Cá nhân',              emoji: '👤' },
@@ -54,29 +49,11 @@ export function Profile() {
   const [selectedRole, setSelectedRole] = useState<string>(() => localStorage.getItem(ROLE_STORAGE_KEY) || '');
   const [roleRecs, setRoleRecs] = useState<PersonaRecommendResult | null>(null);
   const [roleLoading, setRoleLoading] = useState(false);
-  const [memory, setMemory] = useState<UserMemory | null>(null);
-  const [editingMemory, setEditingMemory] = useState(false);
-  const [memoryForm, setMemoryForm] = useState<UserMemoryInfo>({});
-  const [memorySaving, setMemorySaving] = useState(false);
 
   useEffect(() => {
     apiFetch<UserProfile>('/recommendations/behavior/profile').then(setProfile).catch(() => {});
     apiFetch<any[]>('/recommendations/behavior/peers?limit=5').then(res => setPeers(Array.isArray(res) ? res : [])).catch(() => {});
-    getUserMemory().then(setMemory).catch(() => {});
   }, []);
-
-  async function handleSaveMemory() {
-    setMemorySaving(true);
-    try {
-      const updated = await updateUserMemory(memoryForm);
-      setMemory(updated);
-      setEditingMemory(false);
-    } catch {
-      // silent fail
-    } finally {
-      setMemorySaving(false);
-    }
-  }
 
   async function handleRoleSelect(role: string) {
     setSelectedRole(role);
@@ -135,111 +112,6 @@ export function Profile() {
         <button className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
            Chỉnh sửa hồ sơ
         </button>
-      </div>
-
-      {/* PERSONAL INFO MEMORY */}
-      <div className="glass-card p-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="text-legal-gold" size={20} />
-            <h3 className="text-lg font-bold text-white">AI ghi nhớ về bạn</h3>
-            <span className="text-[10px] text-slate-500 bg-white/5 px-2 py-0.5 rounded-full">Tự động từ cuộc hội thoại</span>
-          </div>
-          {!editingMemory ? (
-            <button
-              onClick={() => { setEditingMemory(true); setMemoryForm({ name: memory?.personal_info?.name, age: memory?.personal_info?.age, occupation: memory?.personal_info?.occupation, location: memory?.personal_info?.location, notes: memory?.personal_info?.notes }); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:border-white/30 transition-all text-xs font-semibold"
-            >
-              <Edit2 size={13} /> Chỉnh sửa
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button
-                onClick={handleSaveMemory}
-                disabled={memorySaving}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-legal-gold/10 border border-legal-gold/30 text-legal-gold hover:bg-legal-gold/20 transition-all text-xs font-semibold disabled:opacity-50"
-              >
-                {memorySaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Lưu
-              </button>
-              <button
-                onClick={() => setEditingMemory(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-all text-xs font-semibold"
-              >
-                <X size={13} /> Hủy
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { label: 'Họ tên', key: 'name' as const, placeholder: 'Chưa biết tên...', value: memory?.personal_info?.name },
-            { label: 'Tuổi', key: 'age' as const, placeholder: 'Chưa biết tuổi...', value: memory?.personal_info?.age?.toString() },
-            { label: 'Nghề nghiệp', key: 'occupation' as const, placeholder: 'Chưa rõ nghề nghiệp...', value: memory?.personal_info?.occupation },
-            { label: 'Địa điểm', key: 'location' as const, placeholder: 'Chưa rõ địa điểm...', value: memory?.personal_info?.location },
-          ].map(({ label, key, placeholder, value }) => (
-            <div key={key} className="space-y-1.5">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
-              {editingMemory ? (
-                <input
-                  type={key === 'age' ? 'number' : 'text'}
-                  value={key === 'age' ? (memoryForm.age ?? '') : (memoryForm[key] ?? '')}
-                  onChange={e => setMemoryForm(f => ({ ...f, [key]: key === 'age' ? (e.target.value ? parseInt(e.target.value) : null) : (e.target.value || null) }))}
-                  placeholder={placeholder}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-legal-gold/50 focus:bg-white/8 transition-all placeholder-slate-600"
-                />
-              ) : (
-                <p className={`text-sm font-semibold ${value ? 'text-white' : 'text-slate-600 italic'}`}>
-                  {value || placeholder}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Notes field */}
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ghi chú thêm</p>
-          {editingMemory ? (
-            <textarea
-              value={memoryForm.notes ?? ''}
-              onChange={e => setMemoryForm(f => ({ ...f, notes: e.target.value || null }))}
-              placeholder="Thông tin bổ sung bạn muốn AI nhớ..."
-              rows={2}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-legal-gold/50 transition-all resize-none placeholder-slate-600"
-            />
-          ) : (
-            <p className={`text-sm font-semibold ${memory?.personal_info?.notes ? 'text-white' : 'text-slate-600 italic'}`}>
-              {memory?.personal_info?.notes || 'Chưa có ghi chú...'}
-            </p>
-          )}
-        </div>
-
-        {/* Recent situations */}
-        {memory && memory.situation_summaries.length > 0 && (
-          <div className="space-y-3 pt-4 border-t border-white/10">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-              <History size={11} /> Vụ việc AI đã tư vấn gần đây
-            </p>
-            <div className="space-y-2">
-              {memory.situation_summaries.slice(-5).reverse().map((s, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/5">
-                  <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${s.resolved ? 'bg-emerald-400' : 'bg-legal-gold'}`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-white leading-relaxed">{s.summary}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[10px] text-slate-500">{s.date}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-white/5 rounded text-slate-500">{LAW_TYPE_LABELS[s.domain] || s.domain}</span>
-                      <span className={`text-[10px] font-semibold ${s.resolved ? 'text-emerald-400' : 'text-legal-gold'}`}>
-                        {s.resolved ? '✓ Đã giải quyết' : '⏳ Đang xử lý'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -315,68 +187,53 @@ export function Profile() {
            <Calendar className="text-legal-gold" size={20} />
            Biểu đồ nhiệt hoạt động (24h)
          </h3>
-         <div className="gap-1 h-20" style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)' }}>
-            {(profile.active_hours && profile.active_hours.length === 24
-              ? profile.active_hours
-              : Array(24).fill(0)
-            ).map((val, i) => (
-              <div
-                key={i}
-                className="rounded-sm cursor-help relative group"
-                style={{
-                  backgroundColor: val > 0
-                    ? `rgba(212, 168, 67, ${Math.min(0.15 + (val / 100) * 0.85, 1)})`
-                    : 'rgba(255,255,255,0.04)',
-                  border: val === 0 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+         <div className="grid grid-cols-12 md:grid-cols-24 gap-1 h-32">
+            {(profile.active_hours || Array(24).fill(0)).map((val, i) => (
+              <div 
+                key={i} 
+                className="rounded cursor-help relative group"
+                style={{ 
+                  backgroundColor: `rgba(212, 168, 67, ${val / 100})`, 
+                  border: val === 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' 
                 }}
               >
                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2 bg-slate-900 border border-white/10 rounded text-[9px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none whitespace-nowrap">
-                   {String(i).padStart(2, '0')}:00 — {val > 0 ? `${val}%` : 'Không có hoạt động'}
+                   {i}:00h - Level: {val}%
                  </div>
               </div>
             ))}
          </div>
          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
             <span>00:00</span>
-            <span>06:00</span>
             <span>12:00</span>
-            <span>18:00</span>
             <span>23:59</span>
          </div>
       </div>
 
       {/* ADJACENT DOMAINS */}
-      {(() => {
-        const knownDomains = new Set(Object.keys(profile.law_type_weights || {}));
-        const allDomains = Object.keys(LAW_TYPE_LABELS).filter(d => d !== 'general');
-        const adjacent = allDomains.filter(d => !knownDomains.has(d)).slice(0, 3);
-        if (adjacent.length === 0) return null;
-        return (
-          <div className="space-y-6">
-             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-               <Sparkles className="text-legal-gold" size={20} />
-               Gợi ý mở rộng kiến thức
-             </h3>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {adjacent.map(d => (
-                  <div key={d} className="glass-card p-6 flex flex-col hover:border-blue-500/30 transition-all">
-                     <div className="flex items-center justify-between mb-4">
-                        <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400">
-                          <MapIcon size={20} />
-                        </span>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">Chưa khám phá</span>
-                     </div>
-                     <h4 className="font-bold text-white text-lg">{LAW_TYPE_LABELS[d]}</h4>
-                     <p className="text-xs text-slate-400 mt-2 mb-6">Mở rộng hồ sơ năng lực pháp lý của bạn ở mảng {LAW_TYPE_LABELS[d].toLowerCase()}.</p>
-                     <button className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline">
-                        Khám phá ngay <ArrowRight size={14} />
-                     </button>
-                  </div>
-                ))}
-             </div>
-          </div>
-        );
-      })()}
+      <div className="space-y-6">
+         <h3 className="text-lg font-bold text-white flex items-center gap-2">
+           <Sparkles className="text-legal-gold" size={20} />
+           Gợi ý mở rộng kiến thức
+         </h3>
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {['hinh_su', 'hanh_chinh', 'gia_dinh'].map(d => (
+              <div key={d} className="glass-card p-6 flex flex-col hover:border-blue-500/30 transition-all">
+                 <div className="flex items-center justify-between mb-4">
+                    <span className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400">
+                      <MapIcon size={20} />
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">Chưa khám phá</span>
+                 </div>
+                 <h4 className="font-bold text-white text-lg">{LAW_TYPE_LABELS[d]}</h4>
+                 <p className="text-xs text-slate-400 mt-2 mb-6">Mở rộng hồ sơ năng lực pháp lý của bạn ở mảng {LAW_TYPE_LABELS[d].toLowerCase()}.</p>
+                 <button className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline">
+                    Khám phá ngay <ArrowRight size={14} />
+                 </button>
+              </div>
+            ))}
+         </div>
+      </div>
 
       {/* ROLE SELECTION */}
       <div className="glass-card p-8 space-y-6">
@@ -470,29 +327,22 @@ export function Profile() {
       </div>
 
       {/* PEER RECOMMENDATIONS */}
-      {peers.length > 0 && (
-        <div className="space-y-6">
-           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">Người có cùng hành vi quan tâm</h3>
-           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-              {peers.map((p, i) => {
-                const similarity = typeof p.similarity === 'number' ? Math.round(p.similarity * 100) : Math.max(70, 95 - i * 5);
-                const rawId: string = p.user_id || p.id || '';
-                const displayId = rawId.length > 8 ? rawId.slice(0, 4) + '…' + rawId.slice(-4) : rawId || `User ${i + 1}`;
-                return (
-                  <div key={i} className="glass-card p-4 min-w-[240px] flex items-center gap-4">
-                     <div className="w-10 h-10 rounded-full bg-legal-navy border border-white/10 flex items-center justify-center text-slate-500">
-                        <UserCircle size={24} />
-                     </div>
-                     <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{displayId}</p>
-                        <p className="text-[10px] text-slate-500">{similarity}% Tương đồng</p>
-                     </div>
+      <div className="space-y-6">
+         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">Người có cùng hành vi quan tâm</h3>
+         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            {peers.map((p, i) => (
+               <div key={i} className="glass-card p-4 min-w-[240px] flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-legal-navy border border-white/10 flex items-center justify-center text-slate-500">
+                     <UserCircle size={24} />
                   </div>
-                );
-              })}
-           </div>
-        </div>
-      )}
+                  <div className="min-w-0">
+                     <p className="text-xs font-bold text-white truncate">User #{Math.floor(Math.random()*1000)}</p>
+                     <p className="text-[10px] text-slate-500">89% Tương đồng</p>
+                  </div>
+               </div>
+            ))}
+         </div>
+      </div>
     </div>
   );
 }

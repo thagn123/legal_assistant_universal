@@ -15,16 +15,21 @@ Endpoints:
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, BaseModel
 
-from src.api.deps import require_user
+from src.api.deps import get_storage, require_user
 from src.mongodb.mongo_storage import VectorStorage
 from src.recommenders.behavior_recommender import BehaviorRecommender
 from src.recommenders.checklist_recommender import ChecklistRecommender
 from src.recommenders.document_recommender import DocumentRecommender
+from src.recommenders.next_best_action import (
+    NextBestActionRecommender,
+    build_recommendation_context,
+)
 from src.recommenders.risk_recommender import RiskRecommender
 from src.recommenders.situation_analyzer import SituationAnalyzer
 from src.recommenders.template_recommender import TemplateRecommender
@@ -175,6 +180,33 @@ class InteractionLogRequest(BaseModel):
     chunk_id: Optional[str] = None
 
 
+class NextBestActionRequest(BaseModel):
+    situation: str
+    domain: Optional[str] = None
+    position_score: float = 0.0
+    domain_confidence: float = 0.0
+    citations: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    recommended_actions: List[str] = Field(default_factory=list)
+    risk_assessment: Dict[str, Any] = Field(default_factory=dict)
+    limit: int = Field(default=6, ge=1, le=10)
+
+
+class NextBestActionOut(BaseModel):
+    action_id: str
+    title: str
+    description: str
+    module: str
+    action_url: str
+    category: str
+    priority: str
+    score: float
+    reason: str
+    evidence: List[str]
+    prefill: Dict[str, Any]
+    blocking_gaps: List[str]
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -229,6 +261,33 @@ def analyse_situation(
         is_grounded=result.is_grounded,
         similar_situations_count=result.similar_situations_count,
     )
+
+
+@rec_router.post("/next-best-actions", response_model=List[NextBestActionOut])
+def recommend_next_best_actions(
+    body: NextBestActionRequest,
+    user_id: str = Depends(require_user),
+) -> List[NextBestActionOut]:
+    """
+    Rank the next best modules/actions after a legal analysis.
+
+    This endpoint is deterministic and does not require MongoDB. It uses the
+    analysis context (domain, score, citations, warnings, risks) to recommend
+    which module should be used next and why.
+    """
+    _ = user_id  # reserved for future personalized weighting
+    ctx = build_recommendation_context(
+        situation=body.situation,
+        domain=body.domain,
+        position_score=body.position_score,
+        domain_confidence=body.domain_confidence,
+        citations=body.citations,
+        warnings=body.warnings,
+        recommended_actions=body.recommended_actions,
+        risk_assessment=body.risk_assessment,
+    )
+    results = NextBestActionRecommender().recommend(ctx, limit=body.limit)
+    return [NextBestActionOut(**asdict(item)) for item in results]
 
 
 @rec_router.post("/documents", response_model=List[DocumentRecOut])
@@ -942,8 +1001,9 @@ class IntelligenceOut(BaseModel):
     is_grounded: bool
     used_llm: bool
     stage_timings: Dict[str, float]
+    next_best_actions: List[NextBestActionOut] = Field(default_factory=list)
     is_chitchat: bool = False
-    tool_calls_made: List[str] = []
+    tool_calls_made: List[str] = Field(default_factory=list)
 
 
 @intelligence_router.post("/analyze", response_model=IntelligenceOut)
@@ -976,6 +1036,23 @@ def intelligence_analyze(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    next_best_actions: List[NextBestActionOut] = []
+    if not getattr(result, "is_chitchat", False):
+        ctx = build_recommendation_context(
+            situation=body.situation,
+            domain=result.detected_domain,
+            position_score=result.position_score,
+            domain_confidence=result.domain_confidence,
+            citations=result.citations,
+            warnings=result.warnings,
+            recommended_actions=result.recommended_actions,
+            risk_assessment=result.risk_assessment if isinstance(result.risk_assessment, dict) else {},
+        )
+        next_best_actions = [
+            NextBestActionOut(**asdict(item))
+            for item in NextBestActionRecommender().recommend(ctx, limit=6)
+        ]
+
     # Update persistent user profile for cross-session personalization
     try:
         vs.update_user_profile(
@@ -1005,6 +1082,7 @@ def intelligence_analyze(
         is_grounded=result.is_grounded,
         used_llm=result.used_llm,
         stage_timings=result.stage_timings,
+        next_best_actions=next_best_actions,
         is_chitchat=getattr(result, "is_chitchat", False),
         tool_calls_made=getattr(result, "tool_calls_made", []),
     )
@@ -1306,8 +1384,11 @@ def get_checklist_progress(
     user_id: str = Depends(require_user),
 ) -> ChecklistProgressResponse:
     """Return the saved checked items for a user's checklist."""
-    vs = _get_vector_storage(request)
-    checked = vs.get_checklist_progress(user_id, checklist_id)
+    vs = getattr(request.app.state, "vector_storage", None)
+    if vs is not None:
+        checked = vs.get_checklist_progress(user_id, checklist_id)
+    else:
+        checked = get_storage(request).get_checklist_progress(user_id, checklist_id)
     return ChecklistProgressResponse(checklist_id=checklist_id, checked_items=checked)
 
 
@@ -1319,8 +1400,11 @@ def save_checklist_progress(
     user_id: str = Depends(require_user),
 ) -> ChecklistProgressResponse:
     """Persist the checked items for a user's checklist."""
-    vs = _get_vector_storage(request)
-    vs.save_checklist_progress(user_id, checklist_id, body.checked_items)
+    vs = getattr(request.app.state, "vector_storage", None)
+    if vs is not None:
+        vs.save_checklist_progress(user_id, checklist_id, body.checked_items)
+    else:
+        get_storage(request).save_checklist_progress(user_id, checklist_id, body.checked_items)
     return ChecklistProgressResponse(checklist_id=checklist_id, checked_items=body.checked_items)
 
 

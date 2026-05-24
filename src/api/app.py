@@ -109,7 +109,10 @@ def create_app(
         app.state.index_store = DocumentIndexStore()
 
     # ── MongoDB + Vector Storage + Seed Data ──────────────────────────────────
-    if use_mongodb:
+    # Tests can inject a deterministic bundle_provider; in that mode MongoDB is
+    # intentionally skipped so in-process API tests stay isolated and fast.
+    should_use_mongodb = use_mongodb and bundle_provider is None
+    if should_use_mongodb:
         if mongo_ping():
             logger.info("MongoDB connected — initialising VectorStorage.")
             vs = VectorStorage()

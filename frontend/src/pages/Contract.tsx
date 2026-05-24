@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -19,11 +20,13 @@ import {
   Check,
   Upload,
   FilePlus2,
-  X
+  X,
+  Bookmark,
 } from 'lucide-react';
-import { apiFetch, ContractAnalysisResult, API_BASE, getUserId } from '../lib/api';
+import { apiFetch, ContractAnalysisResult, API_BASE, getUserId, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
 import { StagePipeline } from '../components/ui/StagePipeline';
+import { getAnalysisContext } from '../lib/analysisContext';
 
 const contractTypes = [
   { id: 'thue_nha', label: 'Thuê nhà' },
@@ -43,9 +46,18 @@ const analysis_stages = [
   { id: 6, name: 'Validation' },
 ];
 
+function contractTypeFromDomain(domain?: string): string {
+  if (domain === 'lao_dong') return 'lao_dong';
+  if (domain === 'dat_dai') return 'mua_ban';
+  if (domain === 'hop_dong') return 'dich_vu';
+  return 'thue_nha';
+}
+
 export function Contract() {
-  const [content, setContent] = useState('');
-  const [type, setType] = useState('thue_nha');
+  const location = useLocation();
+  const analysisContext = getAnalysisContext(location.state);
+  const [content, setContent] = useState(() => analysisContext.summary || '');
+  const [type, setType] = useState(() => contractTypeFromDomain(analysisContext.domain));
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
   const [result, setResult] = useState<ContractAnalysisResult | null>(null);
@@ -53,6 +65,7 @@ export function Contract() {
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState('');
   const [uploadedFilename, setUploadedFilename] = useState('');
+  const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileExtract = useCallback(async (file: File) => {
@@ -130,9 +143,10 @@ export function Contract() {
 
   const handleAnalyze = async () => {
     if (!content.trim()) return;
-    
+
     setResult(null);
     setIsAnalyzing(true);
+    setSaved(false);
     setCurrentStage(1);
     
     const stageInterval = setInterval(() => {
@@ -386,6 +400,17 @@ export function Contract() {
                 </div>
                 <button onClick={downloadReport} className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-3 transition-all">
                   <Download size={16} /> Tải báo cáo phân tích
+                </button>
+                <button
+                  onClick={() => {
+                    const title = uploadedFilename || content.slice(0, 60) || 'Hợp đồng';
+                    saveAnalysis({ type: 'contract_analysis', title, summary: `Điểm tuân thủ: ${result.compliance_score}/100 · ${result.loai_hop_dong}`, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-60 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30"
+                >
+                  {saved ? <><Check size={16} className="text-green-400" /> Đã lưu vào lịch sử</> : <><Bookmark size={16} /> Lưu vào lịch sử</>}
                 </button>
              </div>
            )}

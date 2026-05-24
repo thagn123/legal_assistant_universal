@@ -14,6 +14,8 @@ services:
         sync: false          # Optional — system falls back to deterministic if absent
       - key: ADMIN_API_KEY
         sync: false          # Admin panel key (e.g. a strong random string)
+      - key: LEXAI_DEMO_AUTH
+        value: "false"       # Production: require X-API-Key or X-User-ID
 
       # Static config
       - key: MONGO_DB

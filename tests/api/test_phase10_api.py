@@ -98,10 +98,11 @@ def user_b(client):
 class TestUploadEndpoint:
 
     def test_upload_creates_document_and_job(self, client, user_a):
+        # Auth model (Phase 12+): X-User-ID header with default fallback — no mandatory API key.
         resp = client.post(
             "/documents/upload",
             json={"filename": "contract.pdf"},
-            headers={"X-API-Key": user_a},
+            headers={"X-User-ID": user_a},
         )
         assert resp.status_code == 202
         body = resp.json()
@@ -109,17 +110,35 @@ class TestUploadEndpoint:
         assert "job_id" in body
         assert body["status"] == "queued"
 
-    def test_upload_missing_api_key_returns_422(self, client):
+    def test_upload_without_user_id_uses_default_and_succeeds(self, client):
+        # Current auth model: missing X-User-ID falls back to demo_user_001 (not 422).
         resp = client.post("/documents/upload", json={"filename": "x.pdf"})
-        assert resp.status_code == 422
+        assert resp.status_code == 202
+        body = resp.json()
+        assert "doc_id" in body and "job_id" in body
 
-    def test_upload_invalid_api_key_returns_401(self, client):
+    def test_upload_with_explicit_user_id_header(self, client):
+        # Explicit X-User-ID should be accepted.
         resp = client.post(
             "/documents/upload",
             json={"filename": "x.pdf"},
-            headers={"X-API-Key": "wrong_key"},
+            headers={"X-User-ID": "some_user"},
         )
-        assert resp.status_code == 401
+        assert resp.status_code == 202
+
+    def test_demo_auth_can_be_disabled(self, client, monkeypatch):
+        monkeypatch.setenv("LEXAI_DEMO_AUTH", "false")
+        resp = client.post("/documents/upload", json={"filename": "x.pdf"})
+        assert resp.status_code == 422
+
+    def test_explicit_user_still_works_when_demo_auth_disabled(self, client, monkeypatch):
+        monkeypatch.setenv("LEXAI_DEMO_AUTH", "false")
+        resp = client.post(
+            "/documents/upload",
+            json={"filename": "x.pdf"},
+            headers={"X-User-ID": "some_user"},
+        )
+        assert resp.status_code == 202
 
 
 # ---------------------------------------------------------------------------

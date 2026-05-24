@@ -12,7 +12,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const API_BASE: string =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 const USER_ID_KEY = 'lexai_user_id';
 const DEFAULT_USER_ID = 'demo_user_001';
@@ -66,6 +66,25 @@ export interface StageTiming {
   duration_ms: number;
 }
 
+export interface NextBestAction {
+  action_id: string;
+  title: string;
+  description: string;
+  module: string;
+  action_url: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  score: number;
+  reason: string;
+  evidence: string[];
+  prefill: {
+    summary?: string;
+    domain?: string;
+    citations?: string[];
+  };
+  blocking_gaps: string[];
+}
+
 export interface AnalysisResponse {
   session_id: string;
   status: 'manh' | 'trung_binh' | 'yeu';
@@ -78,6 +97,7 @@ export interface AnalysisResponse {
   warnings: RiskWarning[];
   full_assessment: string;
   citations: string[];
+  next_best_actions: NextBestAction[];
   stage_timings: StageTiming[];
   used_llm: boolean;
   is_chitchat?: boolean;
@@ -247,6 +267,7 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
     warnings,
     full_assessment: raw.full_assessment || '',
     citations: raw.citations || [],
+    next_best_actions: raw.next_best_actions || [],
     stage_timings,
     used_llm: raw.used_llm ?? false,
     is_chitchat: raw.is_chitchat ?? false,
@@ -502,44 +523,6 @@ export interface AdminStats {
   mongodb: Record<string, number>;
 }
 
-// ---------------------------------------------------------------------------
-// User Memory (cross-session personalization)
-// ---------------------------------------------------------------------------
-
-export interface UserMemoryInfo {
-  name?: string | null;
-  age?: number | null;
-  occupation?: string | null;
-  location?: string | null;
-  notes?: string | null;
-}
-
-export interface SituationRecord {
-  session_id: string;
-  date: string;
-  domain: string;
-  summary: string;
-  resolved: boolean;
-}
-
-export interface UserMemory {
-  user_id: string;
-  personal_info: UserMemoryInfo;
-  situation_summaries: SituationRecord[];
-  updated_at: string;
-}
-
-export async function getUserMemory(): Promise<UserMemory> {
-  return apiFetch<UserMemory>('/recommendations/behavior/memory');
-}
-
-export async function updateUserMemory(updates: UserMemoryInfo): Promise<UserMemory> {
-  return apiFetch<UserMemory>('/recommendations/behavior/memory', {
-    method: 'PUT',
-    body: JSON.stringify(updates),
-  });
-}
-
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const adminKey = getAdminKey() || '';
   const res = await fetch(`${API_BASE}${path}`, {
@@ -596,17 +579,6 @@ export async function adminGetJobs(params?: { status?: string; limit?: number })
 
 export async function adminGetStats(): Promise<AdminStats> {
   return adminFetch<AdminStats>('/admin/stats');
-}
-
-export interface AdminSeedResult {
-  templates: number;
-  risks: number;
-  checklists: number;
-  message: string;
-}
-
-export async function adminSeedData(): Promise<AdminSeedResult> {
-  return adminFetch<AdminSeedResult>('/admin/seed', { method: 'POST' });
 }
 
 // ---------------------------------------------------------------------------
@@ -722,6 +694,117 @@ export async function buildJourney(
   return apiFetch<JourneyResult>('/journey/build', {
     method: 'POST',
     body: JSON.stringify({ situation, session_id: sessionId, facts, domain }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Situation Classifier — POST /analysis/classify
+// ---------------------------------------------------------------------------
+
+export interface ClassifyEntities {
+  laws: string[];
+  parties: string[];
+  amounts: string[];
+  dates: string[];
+  locations: string[];
+}
+
+export interface ClassifyResult {
+  request_id: string;
+  domain: string;
+  domain_confidence: number;
+  dispute_type: string;
+  stage: string;
+  stage_label: string;
+  stage_confidence: number;
+  intent: string;
+  intent_label: string;
+  entities: ClassifyEntities;
+  extracted_facts: string[];
+  risk_level: 'low' | 'medium' | 'high';
+  confidence: number;
+  law_references: LawRef[];
+  summary: string;
+}
+
+export async function classifySituation(
+  situation: string,
+  facts: string[] = [],
+  domainHint?: string,
+): Promise<ClassifyResult> {
+  return apiFetch<ClassifyResult>('/analysis/classify', {
+    method: 'POST',
+    body: JSON.stringify({ situation, facts, domain_hint: domainHint }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Risk Analysis — POST /analysis/risk
+// ---------------------------------------------------------------------------
+
+export interface RiskAnalysisResult {
+  request_id: string;
+  feature: string;
+  domain: string;
+  risk_score: number;          // 0–100
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  stage: string;
+  stage_label: string;
+  strengths: string[];
+  weaknesses: string[];
+  missing_points: string[];
+  warnings: string[];
+  recommended_actions: string[];
+  evidence_coverage: number;   // 0–1
+  confidence: number;
+  summary: string;
+}
+
+export async function analyzeRisk(
+  situation: string,
+  facts: string[] = [],
+  domainHint?: string,
+): Promise<RiskAnalysisResult> {
+  return apiFetch<RiskAnalysisResult>('/analysis/risk', {
+    method: 'POST',
+    body: JSON.stringify({ situation, facts, domain_hint: domainHint }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Action Planner — POST /guidance/actions
+// ---------------------------------------------------------------------------
+
+export interface ActionItem {
+  step: string;
+  priority: 'immediate' | 'important' | 'optional';
+  reason: string;
+  deadline: string;
+  category: 'evidence' | 'legal' | 'communication' | 'procedure' | 'prevention';
+}
+
+export interface ActionPlanResult {
+  request_id: string;
+  feature: string;
+  domain: string;
+  stage: string;
+  stage_label: string;
+  immediate_actions: ActionItem[];
+  important_actions: ActionItem[];
+  optional_actions: ActionItem[];
+  total_actions: number;
+  urgency: 'critical' | 'high' | 'medium' | 'low';
+  summary: string;
+}
+
+export async function getActionPlan(
+  situation: string,
+  facts: string[] = [],
+  domainHint?: string,
+): Promise<ActionPlanResult> {
+  return apiFetch<ActionPlanResult>('/guidance/actions', {
+    method: 'POST',
+    body: JSON.stringify({ situation, facts, domain_hint: domainHint }),
   });
 }
 
@@ -879,4 +962,301 @@ export async function saveChecklistProgress(checklistId: string, checkedItems: s
     method: 'POST',
     body: JSON.stringify({ checked_items: checkedItems }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Similar Case Explorer — POST /retrieval/similar-cases
+// ---------------------------------------------------------------------------
+
+export interface SimilarCaseItem {
+  case_id: string;
+  title: string;
+  situation_summary: string;
+  outcome: string;
+  lesson: string;
+  domain: string;
+  domain_label: string;
+  key_laws: string[];
+  similarity_score: number;
+  similarity_label: string;
+  stage: string;
+  stage_label: string;
+}
+
+export interface SimilarCasesResult {
+  request_id: string;
+  feature: string;
+  query_domain: string;
+  query_domain_label: string;
+  query_stage: string;
+  query_stage_label: string;
+  similar_cases: SimilarCaseItem[];
+  total: number;
+  search_mode: string;
+  summary: string;
+}
+
+export async function getSimilarCases(
+  situation: string,
+  facts: string[] = [],
+  domainHint?: string,
+  limit = 6,
+): Promise<SimilarCasesResult> {
+  return apiFetch<SimilarCasesResult>('/retrieval/similar-cases', {
+    method: 'POST',
+    body: JSON.stringify({ situation, facts, domain_hint: domainHint, limit }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Legal Retrieval Engine — POST /retrieval/laws
+// ---------------------------------------------------------------------------
+
+export interface LawArticle {
+  chunk_id: string;
+  doc_id: string;
+  law_reference: string;
+  content: string;
+  snippet: string;
+  law_type: string;
+  law_type_label: string;
+  relevance_score: number;
+  is_global: boolean;
+}
+
+export interface LawSearchResult {
+  request_id: string;
+  feature: string;
+  query: string;
+  detected_domain: string;
+  detected_domain_label: string;
+  results: LawArticle[];
+  total: number;
+  search_mode: string;
+  summary: string;
+}
+
+export async function searchLaws(
+  query: string,
+  domainHint?: string,
+  limit = 8,
+): Promise<LawSearchResult> {
+  return apiFetch<LawSearchResult>('/retrieval/laws', {
+    method: 'POST',
+    body: JSON.stringify({ query, domain_hint: domainHint, limit }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Compliance Radar — POST /compliance/checklist
+// ---------------------------------------------------------------------------
+
+export interface ComplianceItem {
+  id: string;
+  category: string;
+  requirement: string;
+  law_basis: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: 'required' | 'recommended' | 'optional';
+  deadline_note: string;
+  missing: boolean;
+}
+
+export interface ComplianceRadarResult {
+  request_id: string;
+  feature: string;
+  business_type: string;
+  business_type_label: string;
+  transaction_type: string;
+  transaction_type_label: string;
+  items: ComplianceItem[];
+  missing_count: number;
+  critical_count: number;
+  compliance_score: number;
+  alerts: string[];
+  summary: string;
+}
+
+export async function getComplianceRadar(
+  businessType: string,
+  transactionType: string,
+  facts: string[] = [],
+  situation = '',
+): Promise<ComplianceRadarResult> {
+  return apiFetch<ComplianceRadarResult>('/compliance/checklist', {
+    method: 'POST',
+    body: JSON.stringify({
+      business_type: businessType,
+      transaction_type: transactionType,
+      facts,
+      situation,
+    }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Contract Clause Coach — POST /contracts/coach
+// ---------------------------------------------------------------------------
+
+export interface ClauseRisk {
+  id: string;
+  type: string;
+  description: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  law_basis: string;
+  matched_phrase: string;
+}
+
+export interface SaferVersion {
+  original_phrase: string;
+  suggested_phrase: string;
+  reason: string;
+}
+
+export interface MissingClause {
+  clause_type: string;
+  importance: 'required' | 'recommended' | 'optional';
+  template: string;
+  law_basis: string;
+}
+
+export interface ClauseCoachResult {
+  request_id: string;
+  feature: string;
+  clause_text: string;
+  clause_type: string;
+  clause_type_label: string;
+  risks: ClauseRisk[];
+  safer_versions: SaferVersion[];
+  missing_clauses: MissingClause[];
+  risk_score: number;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  summary: string;
+}
+
+export async function analyzeClause(
+  clauseText: string,
+  contractType?: string,
+): Promise<ClauseCoachResult> {
+  return apiFetch<ClauseCoachResult>('/contracts/coach', {
+    method: 'POST',
+    body: JSON.stringify({ clause_text: clauseText, contract_type: contractType }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Clause Similarity Search — POST /retrieval/clauses
+// ---------------------------------------------------------------------------
+
+export interface ClauseItem {
+  clause_id: string;
+  doc_id: string;
+  clause_text: string;
+  clause_type: string;
+  risk_level: string;
+  risk_label: string;
+  similarity_score: number;
+  similarity_label: string;
+  suggestion: string;
+}
+
+export interface ClauseSearchResult {
+  request_id: string;
+  feature: string;
+  query: string;
+  results: ClauseItem[];
+  total: number;
+  search_mode: string;
+  summary: string;
+}
+
+export async function searchSimilarClauses(
+  clauseText: string,
+  clauseType?: string,
+  riskLevel?: string,
+  limit = 6,
+): Promise<ClauseSearchResult> {
+  return apiFetch<ClauseSearchResult>('/retrieval/clauses', {
+    method: 'POST',
+    body: JSON.stringify({
+      clause_text: clauseText,
+      clause_type: clauseType || null,
+      risk_level: riskLevel || null,
+      limit,
+    }),
+  });
+}
+
+// ── Behavior Profile ─────────────────────────────────────────────────────────
+
+export interface BehaviorProfile {
+  user_id: string;
+  law_type_weights: Record<string, number>;
+  action_frequencies: Record<string, number>;
+  active_hours: number[];
+  adjacent_domains: string[];
+  top_domain: string;
+  session_count: number;
+  total_interactions: number;
+  days_active: number;
+}
+
+export async function getBehaviorProfile(): Promise<BehaviorProfile> {
+  return apiFetch<BehaviorProfile>('/recommendations/behavior/profile');
+}
+
+// ── Analysis History (localStorage) ─────────────────────────────────────────
+
+export type AnalysisType =
+  | 'timeline'
+  | 'evidence_gap'
+  | 'clause_coach'
+  | 'clause_search'
+  | 'similar_cases'
+  | 'action_plan'
+  | 'compliance_radar'
+  | 'risk_analysis'
+  | 'law_search'
+  | 'journey'
+  | 'contract_analysis';
+
+export interface AnalysisHistoryItem {
+  id: string;
+  type: AnalysisType;
+  title: string;
+  domain?: string;
+  summary: string;
+  savedAt: string;
+  data: unknown;
+}
+
+const HISTORY_KEY = 'lexai_analysis_history';
+const MAX_HISTORY = 30;
+
+export function saveAnalysis(item: Omit<AnalysisHistoryItem, 'id' | 'savedAt'>): void {
+  const history = loadHistory();
+  const entry: AnalysisHistoryItem = {
+    ...item,
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    savedAt: new Date().toISOString(),
+  };
+  const updated = [entry, ...history].slice(0, MAX_HISTORY);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+export function loadHistory(): AnalysisHistoryItem[] {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export function deleteHistoryItem(id: string): void {
+  const updated = loadHistory().filter(h => h.id !== id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+export function clearHistory(): void {
+  localStorage.removeItem(HISTORY_KEY);
 }

@@ -24,9 +24,18 @@ import {
   Paperclip,
   X as XIcon,
   BrainCircuit,
+  BookOpen,
+  FileSearch,
+  GitCompare,
+  ShieldAlert,
+  FileCheck,
+  Map,
+  ListChecks,
+  ClipboardList,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace } from '../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace, NextBestAction } from '../lib/api';
 import { LawTypeBadge, InteractionButtons } from '../components/ui/Shared';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { cn } from '../lib/api';
@@ -91,23 +100,6 @@ const stages_list = [
   { id: 7, name: 'Persist' },
 ];
 
-const SESSION_STORAGE_KEY = 'lexai_sessions';
-const ACTIVE_CHAT_KEY = 'lexai_active_chat';
-
-function loadStoredSessions() {
-  try { return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]'); }
-  catch { return []; }
-}
-
-function loadActiveChat(): { history: ChatTurn[]; sessionId: string | null } {
-  try {
-    const raw = localStorage.getItem(ACTIVE_CHAT_KEY);
-    if (!raw) return { history: [], sessionId: null };
-    const parsed = JSON.parse(raw);
-    return { history: parsed.history ?? [], sessionId: parsed.sessionId ?? null };
-  } catch { return { history: [], sessionId: null }; }
-}
-
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [situation, setSituation] = useState('');
@@ -115,38 +107,26 @@ export function Analyze() {
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
-
-  // Restored from localStorage so navigation doesn't lose the active chat
-  const [sessionId, setSessionId] = useState<string | null>(() => loadActiveChat().sessionId);
-  const [history, setHistory] = useState<ChatTurn[]>(() => loadActiveChat().history);
-
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [history, setHistory] = useState<ChatTurn[]>([]);
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Sessions persisted in localStorage
+  const SESSION_STORAGE_KEY = 'lexai_sessions';
+  function loadStoredSessions() {
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+    } catch { return []; }
+  }
   const [sessionHistory, setSessionHistory] = useState<Array<{
     id: string; title: string; domain: string; date: string; turns: ChatTurn[];
   }>>(loadStoredSessions);
 
   const [selectedSession, setSelectedSession] = useState<typeof sessionHistory[0] | null>(null);
-
-  // Persist active conversation whenever history or sessionId changes
-  useEffect(() => {
-    if (history.length > 0) {
-      localStorage.setItem(ACTIVE_CHAT_KEY, JSON.stringify({ history, sessionId }));
-    }
-  }, [history, sessionId]);
-
-  const handleNewChat = () => {
-    setHistory([]);
-    setSessionId(null);
-    setSituation('');
-    setAnalyzeError('');
-    setEvidenceChip(null);
-    localStorage.removeItem(ACTIVE_CHAT_KEY);
-  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -194,30 +174,24 @@ export function Analyze() {
       setSessionId(data.session_id);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
-      // Grow the full conversation and persist the complete session in one update
-      setHistory(prev => {
-        const fullHistory = [...prev, { role: 'assistant' as const, result: data }];
-        const sid = data.session_id || sessionId || `sess_${Date.now()}`;
-        // Title = first user message in the session (stable across turns)
-        const firstUser = fullHistory.find(t => t.role === 'user');
-        const rawTitle = firstUser?.content ?? currentSituation;
-        const title = rawTitle.length > 50 ? rawTitle.slice(0, 50) + '…' : rawTitle;
-        const session = {
-          id: sid,
-          title,
-          domain: data.domain || 'general',
-          date: new Date().toLocaleDateString('vi-VN'),
-          turns: fullHistory,
-        };
-        setSessionHistory(sp => {
-          const updated = [session, ...sp.filter(s => s.id !== sid)].slice(0, 20);
-          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-        return fullHistory;
-      });
+      const newTurns: ChatTurn[] = [userMessage, { role: 'assistant', result: data }];
+      setHistory(prev => [...prev, { role: 'assistant', result: data }]);
       setIsAnalyzing(false);
       setCurrentStage(0);
+
+      // Persist session to localStorage
+      const newSession = {
+        id: data.session_id || `sess_${Date.now()}`,
+        title: currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation,
+        domain: data.domain || 'general',
+        date: new Date().toLocaleDateString('vi-VN'),
+        turns: newTurns,
+      };
+      setSessionHistory(prev => {
+        const updated = [newSession, ...prev.filter(s => s.id !== newSession.id)].slice(0, 20);
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
     } catch (e: any) {
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
       setIsAnalyzing(false);
@@ -247,8 +221,8 @@ export function Analyze() {
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] relative overflow-hidden">
       {/* TABS */}
-      <div className="flex items-center bg-legal-navy/30 border-b border-legal-border px-8">
-        <button
+      <div className="flex bg-legal-navy/30 border-b border-legal-border px-8">
+        <button 
           onClick={() => setActiveTab('chat')}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
@@ -257,11 +231,11 @@ export function Analyze() {
         >
           <div className="flex items-center gap-2">
             <Zap size={14} className={activeTab === 'chat' ? "text-legal-gold" : ""} />
-            Phân tích
+            Hội thoại mới
           </div>
           {activeTab === 'chat' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-legal-gold" />}
         </button>
-        <button
+        <button 
           onClick={() => setActiveTab('history')}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
@@ -270,21 +244,10 @@ export function Analyze() {
         >
           <div className="flex items-center gap-2">
             <History size={14} className={activeTab === 'history' ? "text-legal-gold" : ""} />
-            Lịch sử ({sessionHistory.length})
+            Lịch sử
           </div>
           {activeTab === 'history' && <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-legal-gold" />}
         </button>
-        {/* New chat button — only shown when there's an active conversation */}
-        {history.length > 0 && activeTab === 'chat' && (
-          <button
-            onClick={handleNewChat}
-            className="ml-auto pb-3 pt-4 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-legal-gold transition-colors flex items-center gap-1.5"
-            title="Bắt đầu cuộc hội thoại mới"
-          >
-            <XIcon size={13} />
-            Xóa hội thoại
-          </button>
-        )}
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -358,18 +321,7 @@ export function Analyze() {
                     </div>
                     <div className="space-y-2">
                       <h3 className="text-lg font-bold text-slate-400">Trình phân tích LexAI</h3>
-                      <p className="text-sm text-slate-500 max-w-sm">Mô tả tình huống pháp lý của bạn — LexAI sẽ phân tích qua 7 tầng thông minh và đưa ra giải pháp có căn cứ pháp luật.</p>
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-2 max-w-sm">
-                      {['Tranh chấp đất đai', 'Hợp đồng lao động', 'Khiếu nại hành chính'].map(hint => (
-                        <button
-                          key={hint}
-                          onClick={() => setSituation(hint)}
-                          className="px-3 py-1.5 text-[11px] bg-white/5 border border-white/10 rounded-full text-slate-500 hover:text-white hover:border-legal-gold/30 transition-all"
-                        >
-                          {hint}
-                        </button>
-                      ))}
+                      <p className="text-sm text-slate-500 max-w-sm">Mô tả tình huống pháp lý của bạn để gpt-4o-mini bắt đầu phân tích và đưa ra giải pháp.</p>
                     </div>
                   </div>
                 )}
@@ -616,7 +568,7 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
             <Zap size={12} fill="currentColor" />
             {result.used_llm ? "AI" : "Xác định luật"}
           </div>
-          <span className="text-[10px] font-mono text-slate-500">⚡ {result.used_llm ? 'LLM + RAG' : 'Deterministic RAG'} | {totalMs.toFixed(0)}ms</span>
+          <span className="text-[10px] font-mono text-slate-500">⚡ gpt-4o-mini | {totalMs.toFixed(0)}ms</span>
         </div>
         <InteractionButtons docId={result.session_id} />
       </div>
@@ -683,6 +635,8 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
         <div className="bg-white/[0.02] border-y border-white/10 px-4 -mx-6 md:-mx-8 overflow-x-auto scrollbar-hide">
           <StagePipeline timings={result.stage_timings} />
         </div>
+
+        <DynamicRelatedModuleGrid result={result} />
 
         {/* Laws Accordion */}
         {result.laws.length > 0 && (
@@ -793,4 +747,236 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
       </div>
     </div>
   );
+}
+
+function RelatedModuleGrid({ result }: { result: AnalysisResponse }) {
+  const navigate = useNavigate();
+  const context = {
+    domain: result.domain,
+    sessionId: result.session_id,
+    traceId: result.trace_id,
+    summary: result.position_reasoning || result.full_assessment,
+    citations: result.citations,
+  };
+
+  const modules = [
+    {
+      path: '/evidence-gap',
+      title: 'Kiểm tra chứng cứ',
+      description: 'Xác định giấy tờ còn thiếu và mức độ bao phủ.',
+      icon: FileSearch,
+      group: 'Chứng cứ',
+    },
+    {
+      path: '/law-search',
+      title: 'Tra cứu điều luật',
+      description: 'Tìm căn cứ pháp lý sát với nhận định.',
+      icon: BookOpen,
+      group: 'Dẫn chứng',
+    },
+    {
+      path: '/similar-cases',
+      title: 'Vụ việc tương tự',
+      description: 'So sánh với tình huống đã có kết quả.',
+      icon: GitCompare,
+      group: 'Dẫn chứng',
+    },
+    {
+      path: '/risks',
+      title: 'Đánh giá rủi ro',
+      description: 'Rà các điểm yếu, thời hiệu và nguy cơ thủ tục.',
+      icon: ShieldAlert,
+      group: 'Đánh giá',
+    },
+    {
+      path: '/actions',
+      title: 'Kế hoạch hành động',
+      description: 'Chuyển kết quả thành các bước cần làm.',
+      icon: ListChecks,
+      group: 'Gợi ý',
+    },
+    {
+      path: '/timeline',
+      title: 'Tiến trình pháp lý',
+      description: 'Ước lượng giai đoạn, mốc thời gian và hạn cần lưu ý.',
+      icon: Clock,
+      group: 'Gợi ý',
+    },
+    {
+      path: '/contract',
+      title: 'Rà soát hợp đồng',
+      description: 'Dùng khi tình huống có hợp đồng hoặc điều khoản.',
+      icon: FileCheck,
+      group: 'Hợp đồng',
+    },
+    {
+      path: '/checklists',
+      title: 'Checklist tuân thủ',
+      description: 'Theo dõi việc cần hoàn thành sau phân tích.',
+      icon: ClipboardList,
+      group: 'Thực thi',
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+        <div>
+          <p className="text-xs font-bold text-white uppercase tracking-wider">Dùng tiếp với module liên quan</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Kết quả phân tích là trung tâm. Mở công cụ chuyên sâu khi cần chứng cứ, rủi ro, điều luật hoặc kế hoạch.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/journey', { state: context })}
+          className="flex items-center gap-2 self-start md:self-auto px-3 py-2 rounded-xl bg-legal-gold/10 text-legal-gold border border-legal-gold/20 text-[11px] font-bold hover:bg-legal-gold/20 transition-all"
+        >
+          <Map size={14} />
+          Mở hành trình
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+        {modules.map(item => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path, { state: context })}
+            className="group text-left rounded-xl border border-white/10 bg-white/5 p-3 hover:border-legal-gold/30 hover:bg-white/10 transition-all"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
+                <item.icon size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.group}</span>
+                </div>
+                <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
+                <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
+  const navigate = useNavigate();
+  const context = {
+    domain: result.domain,
+    sessionId: result.session_id,
+    traceId: result.trace_id,
+    summary: result.position_reasoning || result.full_assessment,
+    citations: result.citations,
+  };
+
+  const fallbackModules: NextBestAction[] = [
+    {
+      action_id: 'evidence_gap',
+      action_url: '/evidence-gap',
+      module: 'evidence_gap',
+      title: 'Kiểm tra chứng cứ',
+      description: 'Xác định giấy tờ còn thiếu và mức độ bao phủ.',
+      category: 'evidence',
+      priority: 'medium',
+      score: 0.6,
+      reason: 'Chứng cứ là đầu vào của mọi bước pháp lý tiếp theo.',
+      evidence: result.citations,
+      prefill: context,
+      blocking_gaps: [],
+    },
+    {
+      action_id: 'action_plan',
+      action_url: '/actions',
+      module: 'actions',
+      title: 'Kế hoạch hành động',
+      description: 'Chuyển kết quả thành các bước cần làm.',
+      category: 'execution',
+      priority: 'medium',
+      score: 0.55,
+      reason: 'Kết quả phân tích cần được chuyển thành việc làm cụ thể.',
+      evidence: result.citations,
+      prefill: context,
+      blocking_gaps: [],
+    },
+  ];
+  const recommendations = result.next_best_actions?.length ? result.next_best_actions : fallbackModules;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+        <div>
+          <p className="text-xs font-bold text-white uppercase tracking-wider">Recommendation engine: bước nên làm tiếp</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Các gợi ý được xếp hạng theo điểm vị thế, cảnh báo, domain và mức độ dẫn chứng.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/journey', { state: context })}
+          className="flex items-center gap-2 self-start md:self-auto px-3 py-2 rounded-xl bg-legal-gold/10 text-legal-gold border border-legal-gold/20 text-[11px] font-bold hover:bg-legal-gold/20 transition-all"
+        >
+          <Map size={14} />
+          Mở hành trình
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+        {recommendations.map(item => {
+          const Icon = moduleIcon(item.module);
+          const navState = {
+            ...context,
+            summary: item.prefill?.summary || context.summary,
+            domain: item.prefill?.domain || context.domain,
+            citations: item.prefill?.citations || context.citations,
+          };
+          return (
+            <button
+              key={item.action_id}
+              onClick={() => navigate(item.action_url, { state: navState })}
+              className="group text-left rounded-xl border border-white/10 bg-white/5 p-3 hover:border-legal-gold/30 hover:bg-white/10 transition-all"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
+                  <Icon size={16} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.category}</span>
+                    <span className={cn(
+                      'text-[9px] font-bold px-1.5 py-0.5 rounded border',
+                      item.priority === 'high' ? 'text-red-300 border-red-500/30 bg-red-500/10' :
+                      item.priority === 'medium' ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
+                      'text-slate-400 border-white/10 bg-white/5',
+                    )}>
+                      {Math.round(item.score * 100)}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
+                  <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
+                  {item.reason && <p className="text-[10px] text-slate-600 leading-snug mt-2">{item.reason}</p>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function moduleIcon(module: string) {
+  const icons = {
+    evidence_gap: FileSearch,
+    law_search: BookOpen,
+    similar_cases: GitCompare,
+    risks: ShieldAlert,
+    actions: ListChecks,
+    timeline: Clock,
+    contract: FileCheck,
+    checklists: ClipboardList,
+    journey: Map,
+  } as const;
+  return icons[module as keyof typeof icons] || ListChecks;
 }

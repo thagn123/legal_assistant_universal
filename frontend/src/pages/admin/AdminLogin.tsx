@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { setAdminKey } from '../../lib/adminAuth';
@@ -8,11 +8,6 @@ export function AdminLogin() {
   const [key, setKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,11 +40,10 @@ export function AdminLogin() {
             <div className="relative">
               <KeyRound size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
-                ref={inputRef}
                 type={showKey ? 'text' : 'password'}
                 value={key}
                 onChange={(e) => { setKey(e.target.value); setError(''); }}
-                placeholder="Nhập admin key..."
+                placeholder="lexai-admin-secret"
                 className="w-full pl-9 pr-10 py-2.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/20"
               />
               <button
@@ -72,7 +66,7 @@ export function AdminLogin() {
         </form>
 
         <p className="text-center text-xs text-slate-600 mt-4">
-          Liên hệ quản trị viên để lấy admin key.
+          Key mặc định: <code className="text-slate-500">lexai-admin-secret</code>
         </p>
       </div>
     </div>

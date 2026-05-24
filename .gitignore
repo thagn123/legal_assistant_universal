@@ -155,4 +155,4 @@ reports/eval_report_*.md
 data/
 
 # Node modules (large dependencies)
-node_modules/
+node_modules/node_modules/

@@ -1,8 +1,8 @@
 """
-FastAPI dependency providers for the Phase 10 API.
+FastAPI dependency providers for the API.
 
-All stateful objects (storage, auth, audit, runner) are stored on
-app.state and retrieved here so they are shared across requests.
+All stateful objects (storage, auth, audit, runner) are stored on app.state
+and retrieved here so they are shared across requests.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from src.runtime.storage import StorageLayer
 
 _ADMIN_KEY_ENV = "ADMIN_API_KEY"
 _ADMIN_KEY_DEFAULT = "lexai-admin-secret"
+_DEFAULT_USER_ID = "demo_user_001"
+_DEMO_AUTH_ENV = "LEXAI_DEMO_AUTH"
 
 
 def get_storage(request: Request) -> StorageLayer:
@@ -36,25 +38,64 @@ def get_runner(request: Request) -> JobRunner:
     return request.app.state.runner
 
 
-_DEFAULT_USER_ID = "demo_user_001"
+def _demo_auth_enabled() -> bool:
+    value = os.environ.get(_DEMO_AUTH_ENV, "true").strip().lower()
+    return value not in {"0", "false", "no", "off"}
 
 
 def require_user(
-    x_user_id: str = Header(_DEFAULT_USER_ID, alias="X-User-ID"),
+    request: Request,
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
 ) -> str:
-    """Return the caller's user_id from the X-User-ID header.
+    """Resolve the caller identity.
 
-    Phase 12 uses a simple demo identity — no password/token needed.
-    Phase 13 will replace this with JWT auth.
+    API clients send X-API-Key; the key is verified and mapped to the stored
+    tenant user_id. The browser demo may send a stable X-User-ID directly. If
+    neither header is present, fall back to a demo user for low-risk flows such
+    as metadata-only upload.
     """
+    api_key = (x_api_key or "").strip()
+    if api_key:
+        user_id = get_auth(request).verify(api_key)
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key.",
+            )
+        return user_id
+
     uid = (x_user_id or "").strip()
-    return uid if uid else _DEFAULT_USER_ID
+    if uid:
+        return uid
+
+    if _demo_auth_enabled():
+        return _DEFAULT_USER_ID
+
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="Missing X-API-Key or X-User-ID header.",
+    )
+
+
+def require_explicit_user(
+    request: Request,
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+    x_user_id: str | None = Header(None, alias="X-User-ID"),
+) -> str:
+    """Resolve identity, requiring the caller to send an auth/user header."""
+    if not (x_api_key or x_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing X-API-Key or X-User-ID header.",
+        )
+    return require_user(request, x_api_key=x_api_key, x_user_id=x_user_id)
 
 
 def require_admin(
-    x_admin_key: str = Header(None, alias="X-Admin-Key"),
+    x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
 ) -> None:
-    """Dependency that validates the admin API key. Raises 403 if wrong/missing."""
+    """Validate the admin API key. Raises 403 if wrong or missing."""
     expected = os.environ.get(_ADMIN_KEY_ENV, _ADMIN_KEY_DEFAULT)
     if not x_admin_key or x_admin_key != expected:
         raise HTTPException(

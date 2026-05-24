@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Map,
   ChevronRight,
@@ -17,8 +17,11 @@ import {
   Shield,
   BookOpen,
   ExternalLink,
+  Bookmark,
+  Check,
 } from 'lucide-react';
-import { buildJourney, JourneyResult, JourneyMilestone } from '../lib/api';
+import { buildJourney, JourneyResult, JourneyMilestone, saveAnalysis } from '../lib/api';
+import { getAnalysisContext } from '../lib/analysisContext';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -117,18 +120,25 @@ function LawRefItem({ title, score }: { title: string; score: number }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function Journey() {
-  const [situation, setSituation] = useState('');
+  const location = useLocation();
+  const [situation, setSituation] = useState(() => {
+    const context = getAnalysisContext(location.state);
+    return context.summary || '';
+  });
   const [result, setResult] = useState<JourneyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
-  async function handleAnalyze() {
-    const trimmed = situation.trim();
+  async function handleAnalyze(overrideSituation?: string) {
+    const context = getAnalysisContext(location.state);
+    const trimmed = (overrideSituation ?? situation).trim();
     if (!trimmed) return;
     setLoading(true);
     setError('');
+    setSaved(false);
     try {
-      const data = await buildJourney(trimmed, '', [], undefined);
+      const data = await buildJourney(trimmed, context.sessionId || '', [], context.domain);
       setResult(data);
     } catch (err: any) {
       setError(err?.message || 'Không thể kết nối đến máy chủ. Vui lòng thử lại.');
@@ -136,6 +146,19 @@ export function Journey() {
       setLoading(false);
     }
   }
+
+  // Pre-fill and auto-analyze when navigated from Dashboard quick-classify
+  useEffect(() => {
+    const state = location.state as { situation?: string } | null;
+    const context = getAnalysisContext(location.state);
+    const initialSituation = state?.situation || context.summary;
+    if (initialSituation) {
+      setSituation(initialSituation);
+      handleAnalyze(initialSituation);
+      // Clear state so navigating back + forward doesn't re-trigger
+      window.history.replaceState({}, '');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const riskCfg = result ? (RISK_CONFIG[result.risk_level] ?? RISK_CONFIG.medium) : null;
 
@@ -163,7 +186,7 @@ export function Journey() {
           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 focus:ring-1 focus:ring-legal-gold/30 transition-all"
         />
         <button
-          onClick={handleAnalyze}
+          onClick={() => handleAnalyze()}
           disabled={loading || !situation.trim()}
           className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy font-semibold rounded-xl hover:bg-legal-gold/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm"
         >
@@ -190,12 +213,24 @@ export function Journey() {
                 <p className="text-lg font-bold text-white">{result.stage_label}</p>
                 <p className="text-xs text-slate-500 mt-1">Lĩnh vực: <span className="text-slate-300">{result.domain}</span></p>
               </div>
-              {riskCfg && (
-                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${riskCfg.className} shrink-0`}>
-                  <Shield size={10} className="inline mr-1" />
-                  Rủi ro {riskCfg.label}
-                </span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {riskCfg && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${riskCfg.className}`}>
+                    <Shield size={10} className="inline mr-1" />
+                    Rủi ro {riskCfg.label}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu</>}
+                </button>
+              </div>
             </div>
             <ProgressBar percent={result.progress_percent} />
             <p className="text-xs text-slate-400 italic">{result.summary}</p>

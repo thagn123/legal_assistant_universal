@@ -25,7 +25,7 @@ from pydantic import BaseModel
 
 from src.actions.action_engine import ActionEngine
 from src.actions.action_schema import ActionRequest as EngineActionRequest
-from src.api.deps import get_audit, get_runner, get_storage, require_user
+from src.api.deps import get_audit, get_runner, get_storage, require_explicit_user, require_user
 from src.api.models import (
     ActionRequest,
     ActionResponse,
@@ -325,7 +325,7 @@ def get_job(
 def run_query(
     body: QueryRequest,
     request: Request,
-    user_id: str = Depends(require_user),
+    user_id: str = Depends(require_explicit_user),
 ) -> QueryResponse:
     query_id = body.query_id or ("q_" + str(uuid.uuid4())[:8])
     bundles = _get_bundles(request, user_id, body.document_ids, query=body.query, query_id=query_id)
@@ -355,7 +355,7 @@ def run_query(
 def run_action(
     body: ActionRequest,
     request: Request,
-    user_id: str = Depends(require_user),
+    user_id: str = Depends(require_explicit_user),
     audit: AuditLayer = Depends(get_audit),
 ) -> ActionResponse:
     request_id = body.request_id or ("req_" + str(uuid.uuid4())[:8])
@@ -482,6 +482,7 @@ def download_document(
 @router.post("/sessions/{session_id}/evidence")
 async def upload_session_evidence(
     session_id: str,
+    request: Request,
     file: UploadFile = File(...),
     user_id: str = Depends(require_user),
 ) -> dict:
@@ -533,7 +534,8 @@ async def upload_session_evidence(
     # Persist into MongoDB session so orchestrator picks it up on next query
     try:
         from src.memory.session_store import SessionStore
-        SessionStore().append_evidence(session_id, {
+        session_store = getattr(request.app.state, "session_store", None) or SessionStore()
+        session_store.append_evidence(session_id, {
             "evidence_id": evidence_id,
             "filename": filename,
             "snippet": snippet,
@@ -558,7 +560,7 @@ async def upload_session_evidence(
 
 @router.get("/audit")
 def get_audit_trail(
-    user_id: str = Depends(require_user),
+    user_id: str = Depends(require_explicit_user),
     audit: AuditLayer = Depends(get_audit),
 ):
     records = audit.get_trail(user_id)

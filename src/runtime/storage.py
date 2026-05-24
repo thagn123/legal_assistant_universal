@@ -129,6 +129,14 @@ CREATE TABLE IF NOT EXISTS graphs (
     graph_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS checklist_progress (
+    user_id       TEXT NOT NULL,
+    checklist_id  TEXT NOT NULL,
+    checked_json  TEXT NOT NULL DEFAULT '[]',
+    updated_at    TEXT NOT NULL,
+    PRIMARY KEY (user_id, checklist_id)
+);
 """
 
 
@@ -560,6 +568,50 @@ class StorageLayer:
                 "SELECT graph_json FROM graphs WHERE doc_id=?", (doc_id,)
             ).fetchone()
         return row["graph_json"] if row else None
+
+    # ------------------------------------------------------------------
+    # Checklist progress (local fallback when MongoDB is unavailable)
+    # ------------------------------------------------------------------
+
+    def get_checklist_progress(self, user_id: str, checklist_id: str) -> List[str]:
+        """Return saved checklist item keys for a user/checklist pair."""
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT checked_json
+                FROM checklist_progress
+                WHERE user_id=? AND checklist_id=?
+                """,
+                (user_id, checklist_id),
+            ).fetchone()
+        if row is None:
+            return []
+        try:
+            value = json.loads(row["checked_json"])
+        except json.JSONDecodeError:
+            return []
+        return value if isinstance(value, list) else []
+
+    def save_checklist_progress(
+        self,
+        user_id: str,
+        checklist_id: str,
+        checked_items: List[str],
+    ) -> None:
+        """Persist saved checklist item keys for a user/checklist pair."""
+        unique_items = list(dict.fromkeys(str(item) for item in checked_items))
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO checklist_progress(user_id, checklist_id, checked_json, updated_at)
+                VALUES (?,?,?,?)
+                ON CONFLICT(user_id, checklist_id) DO UPDATE SET
+                    checked_json=excluded.checked_json,
+                    updated_at=excluded.updated_at
+                """,
+                (user_id, checklist_id, json.dumps(unique_items), _now()),
+            )
+            self._conn.commit()
 
     def close(self) -> None:
         """Close the underlying SQLite connection (required on Windows before deleting the file)."""

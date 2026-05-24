@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   CheckSquare,
   Printer,
@@ -16,10 +17,20 @@ import {
 } from 'lucide-react';
 import { apiFetch, Checklist, getChecklistProgress, saveChecklistProgress, logInteraction } from '../lib/api';
 import { cn } from '../lib/api';
+import { getContextDomain } from '../lib/analysisContext';
+
+function transactionFromDomain(domain?: string): string {
+  if (domain === 'lao_dong') return 'lao_dong';
+  if (domain === 'dat_dai') return 'mua_ban';
+  if (domain === 'hop_dong') return 'mua_ban';
+  return 'thanh_lap';
+}
 
 export function Checklists() {
+  const location = useLocation();
+  const initialDomain = getContextDomain(location.state, '');
   const [businessType, setBusinessType] = useState('cong_ty_tnhh');
-  const [transactionType, setTransactionType] = useState('thanh_lap');
+  const [transactionType, setTransactionType] = useState(() => transactionFromDomain(initialDomain));
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   // checked items: key = `${checklistId}:${categoryIdx}:${itemIdx}`

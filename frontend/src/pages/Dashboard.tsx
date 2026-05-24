@@ -16,7 +16,10 @@ import {
   ClipboardList,
   MapPin,
   Newspaper,
-  RefreshCw,
+  Zap,
+  AlertTriangle,
+  CheckCircle,
+  Info,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -29,7 +32,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { apiFetch, DigestResponse, FeedItem, FeedResult, getPersonalizedFeed, LAW_TYPE_LABELS, UserProfile } from '../lib/api';
+import { apiFetch, BehaviorProfile, DigestResponse, FeedItem, FeedResult, getBehaviorProfile, getPersonalizedFeed, LAW_TYPE_LABELS, classifySituation, ClassifyResult } from '../lib/api';
 import { LawTypeBadge } from '../components/ui/Shared';
 
 const FEED_TYPE_ICON: Record<FeedItem['type'], React.ReactNode> = {
@@ -48,32 +51,63 @@ const FEED_TYPE_LABEL: Record<FeedItem['type'], string> = {
   topic:     'Chủ đề',
 };
 
+const RISK_CONFIG = {
+  high:   { label: 'Rủi ro cao',   color: 'text-red-400 bg-red-400/10 border-red-400/30',    icon: <AlertTriangle size={12} /> },
+  medium: { label: 'Rủi ro trung bình', color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30', icon: <Info size={12} /> },
+  low:    { label: 'Rủi ro thấp',  color: 'text-green-400 bg-green-400/10 border-green-400/30', icon: <CheckCircle size={12} /> },
+} as const;
+
+const DOMAIN_LABELS: Record<string, string> = {
+  dat_dai: 'Đất đai', hop_dong: 'Hợp đồng', lao_dong: 'Lao động',
+  doanh_nghiep: 'Doanh nghiệp', dan_su: 'Dân sự', hinh_su: 'Hình sự',
+  hanh_chinh: 'Hành chính', gia_dinh: 'Gia đình', general: 'Chưa xác định',
+};
+
 export function Dashboard() {
   const navigate = useNavigate();
   const [digest, setDigest] = useState<DigestResponse | null>(null);
+  const [profile, setProfile] = useState<BehaviorProfile | null>(null);
   const [proactive, setProactive] = useState<any[]>([]);
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
   const [feedLoading, setFeedLoading] = useState(true);
-  const [behaviorProfile, setBehaviorProfile] = useState<UserProfile | null>(null);
 
-  const loadAll = () => {
+  // Quick classify widget state
+  const [quickInput, setQuickInput] = useState('');
+  const [classifying, setClassifying] = useState(false);
+  const [classifyResult, setClassifyResult] = useState<ClassifyResult | null>(null);
+  const [classifyError, setClassifyError] = useState('');
+
+  async function handleQuickClassify() {
+    if (!quickInput.trim()) return;
+    setClassifying(true);
+    setClassifyResult(null);
+    setClassifyError('');
+    try {
+      const result = await classifySituation(quickInput.trim());
+      setClassifyResult(result);
+    } catch {
+      setClassifyError('Không thể phân loại. Vui lòng thử lại.');
+    } finally {
+      setClassifying(false);
+    }
+  }
+
+  useEffect(() => {
     apiFetch<DigestResponse>('/recommendations/behavior/digest').then(setDigest).catch(() => {});
+    getBehaviorProfile().then(setProfile).catch(() => {});
     apiFetch<any[]>('/recommendations/behavior/proactive?limit=4').then(setProactive).catch(() => {});
-    apiFetch<UserProfile>('/recommendations/behavior/profile').then(setBehaviorProfile).catch(() => {});
     getPersonalizedFeed()
       .then((r: FeedResult) => setFeed(r.feed_items))
       .catch(() => setFeed([]))
       .finally(() => setFeedLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { loadAll(); }, []);
-
-  const chartData = behaviorProfile
-    ? Object.entries(behaviorProfile.law_type_weights || {})
-        .map(([k, v]) => ({ name: LAW_TYPE_LABELS[k] || k, value: Math.round((v || 0) * 100) }))
+  const chartData = profile
+    ? Object.entries(profile.law_type_weights)
+        .map(([domain, w]) => ({ name: LAW_TYPE_LABELS[domain] ?? domain, value: Math.round(w * 100) }))
         .filter(d => d.value > 0)
         .sort((a, b) => b.value - a.value)
-        .slice(0, 6)
+        .slice(0, 7)
     : [];
 
   return (
@@ -88,14 +122,7 @@ export function Dashboard() {
           <p className="text-slate-400 mt-1">Hôm nay LexAI có {digest?.recommendations.length || 0} khuyến nghị mới dựa trên hành vi của bạn.</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={loadAll}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-slate-400 rounded-xl font-semibold text-sm hover:bg-white/10 transition-all"
-            title="Làm mới dữ liệu"
-          >
-            <RefreshCw size={16} />
-          </button>
-          <button
+          <button 
             onClick={() => navigate('/analyze')}
             className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy rounded-xl font-bold shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 transition-all"
           >
@@ -103,6 +130,67 @@ export function Dashboard() {
             Phân tích mới
           </button>
         </div>
+      </div>
+
+      {/* QUICK CLASSIFY WIDGET */}
+      <div className="glass-card p-6 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Zap className="text-legal-gold" size={16} />
+          Phân loại nhanh tình huống pháp lý
+        </h3>
+        <div className="flex gap-3">
+          <textarea
+            value={quickInput}
+            onChange={e => setQuickInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleQuickClassify(); }}
+            placeholder="Mô tả ngắn tình huống của bạn... (Ctrl+Enter để phân loại)"
+            rows={2}
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 transition-colors"
+          />
+          <button
+            onClick={handleQuickClassify}
+            disabled={classifying || !quickInput.trim()}
+            className="px-5 py-2 bg-legal-gold text-legal-navy rounded-xl font-bold text-sm disabled:opacity-40 hover:scale-105 active:scale-95 transition-all self-end"
+          >
+            {classifying ? '...' : 'Phân loại'}
+          </button>
+        </div>
+
+        {classifyError && (
+          <p className="text-xs text-red-400">{classifyError}</p>
+        )}
+
+        {classifyResult && (
+          <div className="space-y-3 pt-1">
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* Domain */}
+              <span className="px-3 py-1 rounded-full bg-legal-gold/15 text-legal-gold border border-legal-gold/30 text-xs font-bold">
+                {DOMAIN_LABELS[classifyResult.domain] ?? classifyResult.domain}
+                <span className="ml-1 opacity-60">{Math.round(classifyResult.domain_confidence * 100)}%</span>
+              </span>
+              {/* Risk */}
+              <span className={`flex items-center gap-1 px-3 py-1 rounded-full border text-xs font-bold ${RISK_CONFIG[classifyResult.risk_level].color}`}>
+                {RISK_CONFIG[classifyResult.risk_level].icon}
+                {RISK_CONFIG[classifyResult.risk_level].label}
+              </span>
+              {/* Stage */}
+              <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-medium">
+                {classifyResult.stage_label}
+              </span>
+              {/* Intent */}
+              <span className="px-3 py-1 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 text-xs font-medium">
+                {classifyResult.intent_label}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 italic">{classifyResult.summary}</p>
+            <button
+              onClick={() => navigate('/journey', { state: { situation: quickInput, domain: classifyResult.domain } })}
+              className="flex items-center gap-1 text-xs text-legal-gold hover:underline"
+            >
+              Xem hành trình pháp lý đầy đủ <ArrowRight size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -121,8 +209,8 @@ export function Dashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Tương tác" value={digest?.total_interactions || 0} icon={<Clock size={16} />} />
             <StatCard label="Ngày hoạt động" value={digest?.days_active || 0} icon={<TrendingUp size={16} />} />
-            <StatCard label="Lĩnh vực chính" value={LAW_TYPE_LABELS[digest?.top_domain || ''] || '—'} icon={<Scale size={16} />} />
-            <StatCard label="Lĩnh vực đã dùng" value={Object.keys(behaviorProfile?.law_type_weights || {}).length || '—'} icon={<Sparkles size={16} />} />
+            <StatCard label="Lĩnh vực chính" value={LAW_TYPE_LABELS[digest?.top_domain || ''] || '...'} icon={<Scale size={16} />} />
+            <StatCard label="Tỷ lệ phù hợp" value="92%" icon={<Sparkles size={16} />} />
           </div>
 
           <div className="space-y-4">

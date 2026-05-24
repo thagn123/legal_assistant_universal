@@ -324,3 +324,25 @@ class TestAuditTrail:
         audit.log_action_result(user.user_id, result)
         trail = audit.get_trail(user.user_id)
         assert any(r.request_id == "req_xyz" for r in trail)
+
+
+# ---------------------------------------------------------------------------
+# Checklist progress local persistence (Phase 15)
+# ---------------------------------------------------------------------------
+
+
+class TestChecklistProgressStorage:
+
+    def test_checklist_progress_round_trip(self, storage: StorageLayer):
+        storage.save_checklist_progress("user_a", "checklist_1", ["a", "b"])
+        assert storage.get_checklist_progress("user_a", "checklist_1") == ["a", "b"]
+
+    def test_checklist_progress_is_user_scoped(self, storage: StorageLayer):
+        storage.save_checklist_progress("user_a", "checklist_1", ["a"])
+        storage.save_checklist_progress("user_b", "checklist_1", ["b"])
+        assert storage.get_checklist_progress("user_a", "checklist_1") == ["a"]
+        assert storage.get_checklist_progress("user_b", "checklist_1") == ["b"]
+
+    def test_checklist_progress_deduplicates_items(self, storage: StorageLayer):
+        storage.save_checklist_progress("user_a", "checklist_1", ["a", "a", "b"])
+        assert storage.get_checklist_progress("user_a", "checklist_1") == ["a", "b"]

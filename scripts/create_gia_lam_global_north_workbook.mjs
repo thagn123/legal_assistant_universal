@@ -230,6 +230,8 @@ function addDataSheet(name, headers, rows, color, tableName, widths) {
   return sheet;
 }
 
+const dashboard = workbook.worksheets.add("01_TONG_QUAN_DIEU_HANH");
+
 const projectSheet = addDataSheet(
   "02_DANH_MUC_DU_AN",
   ["Mã dự án", "Tên dự án", "Tỉnh/Thành", "Vùng", "Loại dự án", "Đối tác/khách hàng", "Phạm vi vận hành nội bộ"],
@@ -335,14 +337,13 @@ performanceSheet.getRange("F2:F6").conditionalFormats.add("colorScale", {
   ],
 });
 
-const dashboard = workbook.worksheets.add("01_TONG_QUAN_DIEU_HANH");
 setWidths(dashboard, [135, 95, 24, 135, 95, 24, 135, 95, 24, 135, 95, 24, 150, 120, 120, 120]);
 dashboard.getRange("A1:P1").format = { fill: "#1F4E5F", font: { name: "Arial", size: 16, color: "#FFFFFF", bold: true }, verticalAlignment: "center", wrapText: true };
 dashboard.getRange("A1").values = [[company.name]];
 dashboard.getRange("A2:P2").format = { fill: "#E5E7EB", font: { name: "Arial", size: 10, color: "#374151", italic: true }, wrapText: true };
 dashboard.getRange("A2").values = [[`${company.office} | ${company.scope} | ${company.week}`]];
 
-dashboard.getRange("A4:K5").values = [
+dashboard.getRange("A4:J5").values = [
   ["Tổng task", "", "Tỷ lệ hoàn thành", "", "Task bị chặn", "", "Task ưu tiên cao", "", "Tổng giờ dự kiến", ""],
   [null, "", null, "", null, "", null, "", null, ""],
 ];
@@ -351,14 +352,14 @@ dashboard.getRange("C5").formulas = [["=IFERROR(COUNTIF('03_PROJECT_TASKS'!L2:L4
 dashboard.getRange("E5").formulas = [["=COUNTIF('03_PROJECT_TASKS'!L2:L49,\"Bị chặn\")"]];
 dashboard.getRange("G5").formulas = [["=COUNTIF('03_PROJECT_TASKS'!J2:J49,\"Cao\")"]];
 dashboard.getRange("I5").formulas = [["=SUM('03_PROJECT_TASKS'!K2:K49)"]];
-dashboard.getRange("A4:K5").format = {
+dashboard.getRange("A4:J5").format = {
   fill: "#F8FAFC",
   font: { name: "Arial", size: 10, color: "#111827", bold: true },
   horizontalAlignment: "center",
   verticalAlignment: "center",
   borders: { preset: "all", style: "thin", color: "#CBD5E1" },
 };
-dashboard.getRange("A5:K5").format.font = { name: "Arial", size: 16, color: "#1F4E5F", bold: true };
+dashboard.getRange("A5:J5").format.font = { name: "Arial", size: 16, color: "#1F4E5F", bold: true };
 dashboard.getRange("C5").format.numberFormat = "0%";
 dashboard.getRange("I5").format.numberFormat = "0.0";
 
