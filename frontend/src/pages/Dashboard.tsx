@@ -20,6 +20,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Info,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -32,7 +34,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { apiFetch, BehaviorProfile, DigestResponse, FeedItem, FeedResult, getBehaviorProfile, getPersonalizedFeed, LAW_TYPE_LABELS, classifySituation, ClassifyResult } from '../lib/api';
+import { apiFetch, BehaviorProfile, DigestResponse, FeedItem, FeedResult, getBehaviorProfile, getPersonalizedFeed, LAW_TYPE_LABELS, classifySituation, ClassifyResult, NextBestAction, getNextBestActions } from '../lib/api';
 import { LawTypeBadge } from '../components/ui/Shared';
 
 const FEED_TYPE_ICON: Record<FeedItem['type'], React.ReactNode> = {
@@ -76,15 +78,27 @@ export function Dashboard() {
   const [classifying, setClassifying] = useState(false);
   const [classifyResult, setClassifyResult] = useState<ClassifyResult | null>(null);
   const [classifyError, setClassifyError] = useState('');
+  const [nextActions, setNextActions] = useState<NextBestAction[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
 
   async function handleQuickClassify() {
     if (!quickInput.trim()) return;
     setClassifying(true);
     setClassifyResult(null);
+    setNextActions([]);
     setClassifyError('');
     try {
       const result = await classifySituation(quickInput.trim());
       setClassifyResult(result);
+      // Fire-and-forget next-best-actions after classify
+      setActionsLoading(true);
+      getNextBestActions({
+        situation: quickInput.trim(),
+        domain: result.domain,
+        domain_confidence: result.domain_confidence,
+        warnings: result.law_references?.map(r => r.title) ?? [],
+        limit: 4,
+      }).then(actions => setNextActions(actions)).catch(() => {}).finally(() => setActionsLoading(false));
     } catch {
       setClassifyError('Không thể phân loại. Vui lòng thử lại.');
     } finally {
@@ -189,6 +203,34 @@ export function Dashboard() {
             >
               Xem hành trình pháp lý đầy đủ <ArrowRight size={12} />
             </button>
+
+            {/* Next Best Actions */}
+            {(actionsLoading || nextActions.length > 0) && (
+              <div className="pt-2 border-t border-white/10">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Zap size={10} className="text-legal-gold" />
+                  Bước tiếp theo đề xuất
+                  {actionsLoading && <Loader2 size={10} className="animate-spin ml-1" />}
+                </p>
+                {nextActions.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {nextActions.map(action => (
+                      <button
+                        key={action.action_id}
+                        onClick={() => navigate(action.action_url, { state: { situation: quickInput, domain: classifyResult.domain, summary: classifyResult.summary } })}
+                        className="flex items-start gap-2 p-2.5 bg-white/5 border border-white/10 rounded-xl text-left hover:border-legal-gold/40 hover:bg-white/8 transition-all group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold text-white group-hover:text-legal-gold transition-colors line-clamp-1">{action.title}</p>
+                          <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{action.reason}</p>
+                        </div>
+                        <ChevronRight size={12} className="text-slate-600 group-hover:text-legal-gold shrink-0 mt-0.5 transition-colors" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

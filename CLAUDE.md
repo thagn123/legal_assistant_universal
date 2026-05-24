@@ -10,7 +10,7 @@
 **Name:** Universal Legal Knowledge Assistant (LexAI / ULKA)
 **Stack:** Python 3.11 · FastAPI · MongoDB Atlas · sentence-transformers · OpenAI API · React 19 + TypeScript + Vite + Tailwind
 **Language:** Vietnamese legal domain (UI + domain vocabulary), codebase in English
-**Phase:** 17 — Backend-Persisted Analysis History + Toast Feedback (current)
+**Phase:** 18 — Next Best Actions on Dashboard + Export Analysis (current)
 **Repo branch:** `main`
 
 ---
@@ -620,4 +620,5 @@ MongoDB Atlas:
 | 14 | Analysis History + Dashboard Real Data + Bug Fixes: AnalysisHistory page (/history), localStorage save/load helpers in api.ts, Save button on Timeline/EvidenceGap/ClauseCoach, Dashboard chart wired to real behavior profile API, API_BASE default fixed to :8001, vite-env.d.ts added, AdminStats type conflict fixed |
 | 15 | Extended Save/History + Search + UX Improvements: AnalysisType extended to 8 types (similar_cases/action_plan/compliance_radar/risk_analysis), Save buttons on ClauseSearch/SimilarCases/Actions/ComplianceRadar, AnalysisHistory text search box, formatted per-type preview cards (no raw JSON), filter tabs auto-hide types with 0 items |
 | 16 | Save/History Coverage for All Feature Pages: AnalysisType extended to 11 types (+law_search/journey/contract_analysis), Save buttons on LawSearch/Journey/Risks(AI panel)/Contract, FormattedPreview cases for 3 new types, risk_analysis path fixed to /risks |
-| 17 | Backend-Persisted Analysis History + Toast Feedback (current): analysis_history SQLite table + 4 CRUD methods, /history API router (POST/GET/DELETE), api.ts history functions upgraded to async with localStorage cache + backend sync, AnalysisHistory.tsx async loading + skeleton, useToast hook + ToastContainer component, toast feedback on all 11 Save buttons |
+| 17 | Backend-Persisted Analysis History + Toast Feedback: analysis_history SQLite table + 4 CRUD methods, /history API router (POST/GET/DELETE), api.ts history functions upgraded to async with localStorage cache + backend sync, AnalysisHistory.tsx async loading + skeleton, useToast hook + ToastContainer component, toast feedback on all 11 Save buttons |
+| 18 | Next Best Actions on Dashboard + Export Analysis (current): getNextBestActions() in api.ts calling POST /recommendations/next-best-actions, Dashboard quick-classify fires NBA recommendations (4 action chips, navigate with prefill context), risk_analysis FormattedPreview case added to AnalysisHistory, Download JSON button on every HistoryCard |

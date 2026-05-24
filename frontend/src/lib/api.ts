@@ -739,6 +739,31 @@ export async function classifySituation(
 }
 
 // ---------------------------------------------------------------------------
+// Next Best Actions — POST /recommendations/next-best-actions
+// ---------------------------------------------------------------------------
+
+export interface NextBestActionRequest {
+  situation: string;
+  domain?: string;
+  position_score?: number;
+  domain_confidence?: number;
+  citations?: string[];
+  warnings?: string[];
+  recommended_actions?: string[];
+  risk_assessment?: Record<string, unknown>;
+  limit?: number;
+}
+
+export async function getNextBestActions(
+  req: NextBestActionRequest,
+): Promise<NextBestAction[]> {
+  return apiFetch<NextBestAction[]>('/recommendations/next-best-actions', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Risk Analysis — POST /analysis/risk
 // ---------------------------------------------------------------------------
 

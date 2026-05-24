@@ -25,6 +25,7 @@ import {
   BookOpen,
   Map,
   FileText,
+  Download,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -255,6 +256,34 @@ function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
         </div>
       );
 
+    case 'risk_analysis':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Điểm rủi ro:</span>{' '}
+            <span className={d.risk_score >= 70 ? 'text-red-400' : d.risk_score >= 40 ? 'text-yellow-400' : 'text-green-400'}>
+              {d.risk_score ?? 0}/100
+            </span>
+            {' '}·{' '}
+            <span className="capitalize text-slate-400">{d.risk_level ?? '—'}</span>
+          </p>
+          <p className="text-slate-400">{d.stage_label ?? '—'}</p>
+          {d.weaknesses?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Điểm yếu:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.weaknesses.slice(0, 3).map((w: string, i: number) => (
+                  <li key={i} className="text-red-300 list-disc line-clamp-1">{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.recommended_actions?.length > 0 && (
+            <p className="text-legal-gold">{d.recommended_actions.length} hành động khuyến nghị</p>
+          )}
+        </div>
+      );
+
     case 'contract_analysis':
       return (
         <div className="space-y-2 text-[11px]">
@@ -284,6 +313,18 @@ function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
         </pre>
       );
   }
+}
+
+// ── Download helper ───────────────────────────────────────────────────────────
+
+function downloadItem(item: AnalysisHistoryItem) {
+  const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${item.type}_${item.title.slice(0, 40).replace(/[^a-z0-9\s\-_]/gi, '').trim().replace(/\s+/g, '_')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── History card ──────────────────────────────────────────────────────────────
@@ -332,6 +373,13 @@ function HistoryCard({
             className="p-1.5 rounded-lg text-slate-400 hover:text-legal-gold hover:bg-legal-gold/10 transition-all"
           >
             <RotateCcw size={14} />
+          </button>
+          <button
+            onClick={() => downloadItem(item)}
+            title="Tải xuống JSON"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+          >
+            <Download size={14} />
           </button>
           <button
             onClick={() => setExpanded(v => !v)}
