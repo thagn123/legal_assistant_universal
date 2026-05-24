@@ -1205,7 +1205,7 @@ export async function getBehaviorProfile(): Promise<BehaviorProfile> {
   return apiFetch<BehaviorProfile>('/recommendations/behavior/profile');
 }
 
-// ── Analysis History (localStorage) ─────────────────────────────────────────
+// ── Analysis History (backend-persisted + localStorage cache) ────────────────
 
 export type AnalysisType =
   | 'timeline'
@@ -1233,30 +1233,62 @@ export interface AnalysisHistoryItem {
 const HISTORY_KEY = 'lexai_analysis_history';
 const MAX_HISTORY = 30;
 
-export function saveAnalysis(item: Omit<AnalysisHistoryItem, 'id' | 'savedAt'>): void {
-  const history = loadHistory();
-  const entry: AnalysisHistoryItem = {
-    ...item,
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    savedAt: new Date().toISOString(),
-  };
-  const updated = [entry, ...history].slice(0, MAX_HISTORY);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-}
-
-export function loadHistory(): AnalysisHistoryItem[] {
+function _loadLocalHistory(type?: AnalysisType): AnalysisHistoryItem[] {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    const all: AnalysisHistoryItem[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return type ? all.filter(h => h.type === type) : all;
   } catch {
     return [];
   }
 }
 
-export function deleteHistoryItem(id: string): void {
-  const updated = loadHistory().filter(h => h.id !== id);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+export async function saveAnalysis(item: Omit<AnalysisHistoryItem, 'id' | 'savedAt'>): Promise<void> {
+  const entry: AnalysisHistoryItem = {
+    ...item,
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    savedAt: new Date().toISOString(),
+  };
+  // Mirror to localStorage immediately (fast cache / offline fallback)
+  const cached = _loadLocalHistory();
+  localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...cached].slice(0, MAX_HISTORY)));
+  // Best-effort backend persist — never throws so callers stay simple
+  try {
+    await apiFetch<AnalysisHistoryItem>('/history', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    });
+  } catch {
+    // localStorage copy already written; backend unavailable is non-fatal
+  }
 }
 
-export function clearHistory(): void {
+export async function loadHistory(type?: AnalysisType): Promise<AnalysisHistoryItem[]> {
+  try {
+    const path = type ? `/history?type=${type}&limit=100` : '/history?limit=100';
+    const res = await apiFetch<{ items: AnalysisHistoryItem[]; total: number }>(path);
+    // Refresh localStorage cache with authoritative server data
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(res.items.slice(0, MAX_HISTORY)));
+    return res.items;
+  } catch {
+    return _loadLocalHistory(type);
+  }
+}
+
+export async function deleteHistoryItem(id: string): Promise<void> {
+  const updated = _loadLocalHistory().filter(h => h.id !== id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  try {
+    await apiFetch(`/history/${id}`, { method: 'DELETE' });
+  } catch {
+    // localStorage already updated
+  }
+}
+
+export async function clearHistory(): Promise<void> {
   localStorage.removeItem(HISTORY_KEY);
+  try {
+    await apiFetch('/history', { method: 'DELETE' });
+  } catch {
+    // localStorage already cleared
+  }
 }

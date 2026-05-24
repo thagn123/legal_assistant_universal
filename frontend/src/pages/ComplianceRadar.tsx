@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { getComplianceRadar, ComplianceItem, ComplianceRadarResult, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -150,6 +152,7 @@ export function ComplianceRadar() {
   const [result, setResult] = useState<ComplianceRadarResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleCheck() {
     setLoading(true);
@@ -181,6 +184,7 @@ export function ComplianceRadar() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -267,7 +271,7 @@ export function ComplianceRadar() {
                 </div>
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'compliance_radar', title: `${result.business_type_label} — ${result.transaction_type_label}`, summary: result.summary, data: result });
+                    saveAnalysis({ type: 'compliance_radar', title: `${result.business_type_label} — ${result.transaction_type_label}`, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

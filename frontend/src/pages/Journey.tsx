@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { buildJourney, JourneyResult, JourneyMilestone, saveAnalysis } from '../lib/api';
 import { getAnalysisContext } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -129,6 +131,7 @@ export function Journey() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleAnalyze(overrideSituation?: string) {
     const context = getAnalysisContext(location.state);
@@ -164,6 +167,7 @@ export function Journey() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -222,7 +226,7 @@ export function Journey() {
                 )}
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

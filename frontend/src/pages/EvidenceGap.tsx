@@ -21,6 +21,8 @@ import {
 import { getEvidenceGap, EvidenceGapResult, EvidenceItem, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
 import { getContextDomain, getContextSummary } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +144,7 @@ export function EvidenceGap() {
   const [result, setResult]       = useState<EvidenceGapResult | null>(null);
   const [error, setError]         = useState('');
   const [saved, setSaved]         = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleCheck() {
     if (!situation.trim()) return;
@@ -174,6 +177,7 @@ export function EvidenceGap() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -251,7 +255,7 @@ export function EvidenceGap() {
               <CoverageBar score={result.coverage_score} />
               <button
                 onClick={() => {
-                  saveAnalysis({ type: 'evidence_gap', title: situation.slice(0, 80), domain, summary: result.summary, data: result });
+                  saveAnalysis({ type: 'evidence_gap', title: situation.slice(0, 80), domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                   setSaved(true);
                 }}
                 disabled={saved}

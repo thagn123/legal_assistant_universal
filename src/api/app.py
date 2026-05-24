@@ -28,6 +28,7 @@ load_dotenv()  # reads .env from project root (no-op if absent)
 
 from src.api.admin_routes import admin_router
 from src.api.analysis_routes import analysis_router
+from src.api.history_routes import history_router
 from src.api.compliance_routes import compliance_router
 from src.api.contract_coach_routes import coach_router
 from src.api.guidance_routes import guidance_router
@@ -157,6 +158,7 @@ def create_app(
     app.include_router(coach_router)
     app.include_router(journey_router)
     app.include_router(feed_router)
+    app.include_router(history_router)
 
     return app
 

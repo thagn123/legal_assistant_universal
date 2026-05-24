@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { apiFetch, ContractAnalysisResult, API_BASE, getUserId, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { getAnalysisContext } from '../lib/analysisContext';
 
@@ -66,6 +68,7 @@ export function Contract() {
   const [extractError, setExtractError] = useState('');
   const [uploadedFilename, setUploadedFilename] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileExtract = useCallback(async (file: File) => {
@@ -174,6 +177,7 @@ export function Contract() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       <div className="space-y-2">
         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
           <FileText className="text-legal-gold" size={28} />
@@ -404,7 +408,7 @@ export function Contract() {
                 <button
                   onClick={() => {
                     const title = uploadedFilename || content.slice(0, 60) || 'Hợp đồng';
-                    saveAnalysis({ type: 'contract_analysis', title, summary: `Điểm tuân thủ: ${result.compliance_score}/100 · ${result.loai_hop_dong}`, data: result });
+                    saveAnalysis({ type: 'contract_analysis', title, summary: `Điểm tuân thủ: ${result.compliance_score}/100 · ${result.loai_hop_dong}`, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

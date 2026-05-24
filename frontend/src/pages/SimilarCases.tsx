@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { getSimilarCases, SimilarCaseItem, SimilarCasesResult, saveAnalysis } from '../lib/api';
 import { getContextSummary } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Similarity bar ────────────────────────────────────────────────────────────
 
@@ -142,6 +144,7 @@ export function SimilarCases() {
   const [result, setResult] = useState<SimilarCasesResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleSearch() {
     if (!situation.trim()) return;
@@ -161,6 +164,7 @@ export function SimilarCases() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -213,7 +217,7 @@ export function SimilarCases() {
             <span className="text-xs text-slate-400 italic flex-1 min-w-0 truncate">{result.summary}</span>
             <button
               onClick={() => {
-                saveAnalysis({ type: 'similar_cases', title: situation.slice(0, 80), summary: result.summary, data: result });
+                saveAnalysis({ type: 'similar_cases', title: situation.slice(0, 80), summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                 setSaved(true);
               }}
               disabled={saved}

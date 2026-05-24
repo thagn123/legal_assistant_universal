@@ -137,6 +137,18 @@ CREATE TABLE IF NOT EXISTS checklist_progress (
     updated_at    TEXT NOT NULL,
     PRIMARY KEY (user_id, checklist_id)
 );
+
+CREATE TABLE IF NOT EXISTS analysis_history (
+    item_id   TEXT NOT NULL,
+    user_id   TEXT NOT NULL,
+    type      TEXT NOT NULL,
+    title     TEXT NOT NULL,
+    domain    TEXT,
+    summary   TEXT NOT NULL DEFAULT '',
+    data_json TEXT NOT NULL DEFAULT '{}',
+    saved_at  TEXT NOT NULL,
+    PRIMARY KEY (user_id, item_id)
+);
 """
 
 
@@ -612,6 +624,106 @@ class StorageLayer:
                 (user_id, checklist_id, json.dumps(unique_items), _now()),
             )
             self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Analysis history (backend-persisted, user-scoped)
+    # ------------------------------------------------------------------
+
+    def save_analysis_history(
+        self,
+        user_id: str,
+        item_id: str,
+        type_: str,
+        title: str,
+        domain: Optional[str],
+        summary: str,
+        data_json: str,
+        saved_at: str,
+    ) -> None:
+        """Upsert one analysis history entry."""
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO analysis_history(item_id, user_id, type, title, domain, summary, data_json, saved_at)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(user_id, item_id) DO UPDATE SET
+                    title=excluded.title,
+                    domain=excluded.domain,
+                    summary=excluded.summary,
+                    data_json=excluded.data_json,
+                    saved_at=excluded.saved_at
+                """,
+                (item_id, user_id, type_, title, domain, summary, data_json, saved_at),
+            )
+            self._conn.commit()
+
+    def list_analysis_history(
+        self,
+        user_id: str,
+        type_filter: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict]:
+        """Return analysis history for a user, newest first."""
+        if type_filter:
+            with self._lock:
+                rows = self._conn.execute(
+                    """
+                    SELECT item_id, type, title, domain, summary, data_json, saved_at
+                    FROM analysis_history
+                    WHERE user_id=? AND type=?
+                    ORDER BY saved_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (user_id, type_filter, limit, offset),
+                ).fetchall()
+        else:
+            with self._lock:
+                rows = self._conn.execute(
+                    """
+                    SELECT item_id, type, title, domain, summary, data_json, saved_at
+                    FROM analysis_history
+                    WHERE user_id=?
+                    ORDER BY saved_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (user_id, limit, offset),
+                ).fetchall()
+        result = []
+        for r in rows:
+            try:
+                data = json.loads(r["data_json"])
+            except (json.JSONDecodeError, TypeError):
+                data = {}
+            result.append({
+                "id": r["item_id"],
+                "type": r["type"],
+                "title": r["title"],
+                "domain": r["domain"],
+                "summary": r["summary"],
+                "data": data,
+                "savedAt": r["saved_at"],
+            })
+        return result
+
+    def delete_analysis_history_item(self, user_id: str, item_id: str) -> bool:
+        """Delete one history item. Returns True if it existed."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM analysis_history WHERE user_id=? AND item_id=?",
+                (user_id, item_id),
+            )
+            self._conn.commit()
+        return cur.rowcount > 0
+
+    def clear_analysis_history(self, user_id: str) -> int:
+        """Delete all history for a user. Returns number of rows deleted."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM analysis_history WHERE user_id=?", (user_id,)
+            )
+            self._conn.commit()
+        return cur.rowcount
 
     def close(self) -> None:
         """Close the underlying SQLite connection (required on Windows before deleting the file)."""

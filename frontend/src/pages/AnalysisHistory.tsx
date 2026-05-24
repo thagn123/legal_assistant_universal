@@ -364,24 +364,29 @@ function HistoryCard({
 export function AnalysisHistory() {
   const navigate = useNavigate();
   const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AnalysisType | 'all'>('all');
   const [searchText, setSearchText] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
-    setItems(loadHistory());
+    setLoading(true);
+    loadHistory().then(data => {
+      setItems(data);
+      setLoading(false);
+    });
   }, []);
 
   function handleDelete(id: string) {
-    deleteHistoryItem(id);
     setItems(prev => prev.filter(i => i.id !== id));
+    deleteHistoryItem(id);
   }
 
   function handleClear() {
     if (!confirmClear) { setConfirmClear(true); return; }
-    clearHistory();
     setItems([]);
     setConfirmClear(false);
+    clearHistory();
   }
 
   function handleReopen(item: AnalysisHistoryItem) {
@@ -430,8 +435,23 @@ export function AnalysisHistory() {
         )}
       </div>
 
+      {/* Skeleton loader */}
+      {loading && (
+        <div className="space-y-3">
+          {[1, 2, 3].map(n => (
+            <div key={n} className="glass-card p-4 flex items-start gap-3 animate-pulse">
+              <div className="h-7 w-36 rounded-lg bg-white/8 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-3/4 rounded bg-white/8" />
+                <div className="h-3 w-full rounded bg-white/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Search box */}
-      {items.length > 0 && (
+      {!loading && items.length > 0 && (
         <div className="relative">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -453,41 +473,43 @@ export function AnalysisHistory() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={cn(
-            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-            filter === 'all'
-              ? 'bg-legal-gold text-legal-navy border-legal-gold'
-              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-          )}
-        >
-          Tất cả ({items.length})
-        </button>
-        {ALL_TYPES.filter(t => items.some(i => i.type === t)).map(t => {
-          const count = items.filter(i => i.type === t).length;
-          const cfg = TYPE_CONFIG[t];
-          return (
-            <button
-              key={t}
-              onClick={() => setFilter(t)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-                filter === t
-                  ? 'bg-legal-gold text-legal-navy border-legal-gold'
-                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-              )}
-            >
-              {cfg.icon}
-              {cfg.label} ({count})
-            </button>
-          );
-        })}
-      </div>
+      {!loading && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilter('all')}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+              filter === 'all'
+                ? 'bg-legal-gold text-legal-navy border-legal-gold'
+                : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+            )}
+          >
+            Tất cả ({items.length})
+          </button>
+          {ALL_TYPES.filter(t => items.some(i => i.type === t)).map(t => {
+            const count = items.filter(i => i.type === t).length;
+            const cfg = TYPE_CONFIG[t];
+            return (
+              <button
+                key={t}
+                onClick={() => setFilter(t)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+                  filter === t
+                    ? 'bg-legal-gold text-legal-navy border-legal-gold'
+                    : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                )}
+              >
+                {cfg.icon}
+                {cfg.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {!loading && (filtered.length === 0 ? (
         <div className="py-20 flex flex-col items-center text-center space-y-3 opacity-30">
           {items.length === 0 ? (
             <>
@@ -510,13 +532,13 @@ export function AnalysisHistory() {
             <HistoryCard key={item.id} item={item} onDelete={handleDelete} onReopen={handleReopen} />
           ))}
         </div>
-      )}
+      ))}
 
-      {/* Tips */}
-      {items.length > 0 && (
+      {/* Info: now backend-persisted */}
+      {!loading && items.length > 0 && (
         <div className="flex items-start gap-2 p-3 rounded-xl bg-white/3 border border-white/8 text-xs text-slate-500">
-          <AlertTriangle size={12} className="text-slate-600 mt-0.5 shrink-0" />
-          Lịch sử được lưu trong trình duyệt này. Xóa cache trình duyệt sẽ mất dữ liệu.
+          <CheckCircle2 size={12} className="text-green-500 mt-0.5 shrink-0" />
+          Lịch sử được đồng bộ lên máy chủ — an toàn khi xóa cache trình duyệt.
         </div>
       )}
     </div>

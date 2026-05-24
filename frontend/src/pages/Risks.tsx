@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { apiFetch, RiskAssessment, logInteraction, analyzeRisk, RiskAnalysisResult, saveAnalysis } from '../lib/api';
 import { getContextSummary } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Risk score gauge ──────────────────────────────────────────────────────────
 
@@ -98,6 +100,7 @@ function AiRiskPanel() {
   const [result, setResult] = useState<RiskAnalysisResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleAnalyze() {
     if (!situation.trim()) return;
@@ -117,6 +120,7 @@ function AiRiskPanel() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Input */}
       <div className="glass-card p-6 space-y-4">
         <label className="text-sm font-semibold text-white">Mô tả tình huống cần đánh giá rủi ro</label>
@@ -153,7 +157,7 @@ function AiRiskPanel() {
                 <p className="text-xs text-slate-400 italic flex-1">{result.summary}</p>
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'risk_analysis', title: situation.slice(0, 80), summary: result.summary, data: result });
+                    saveAnalysis({ type: 'risk_analysis', title: situation.slice(0, 80), summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

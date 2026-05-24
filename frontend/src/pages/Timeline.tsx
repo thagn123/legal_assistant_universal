@@ -19,6 +19,8 @@ import {
 import { getTimeline, TimelineResult, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
 import { getContextDomain, getContextSummary } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +111,7 @@ export function Timeline() {
   const [result, setResult]       = useState<TimelineResult | null>(null);
   const [error, setError]         = useState('');
   const [saved, setSaved]         = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleTrack() {
     if (!situation.trim()) return;
@@ -136,6 +139,7 @@ export function Timeline() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -235,7 +239,7 @@ export function Timeline() {
               </div>
               <button
                 onClick={() => {
-                  saveAnalysis({ type: 'timeline', title: situation.slice(0, 80), domain, summary: result.summary, data: result });
+                  saveAnalysis({ type: 'timeline', title: situation.slice(0, 80), domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                   setSaved(true);
                 }}
                 disabled={saved}
