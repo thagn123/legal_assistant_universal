@@ -55,40 +55,73 @@ interface ChatTurn {
 // ---------------------------------------------------------------------------
 
 const _CHITCHAT_STARTERS = [
-  'chào', 'hello', 'hi', 'xin chào', 'hey', 'alo',
-  'cảm ơn', 'cam on', 'thanks', 'thank you',
-  'bạn là ai', 'bạn là gì', 'mày là ai',
-  'ok', 'oke', 'okay', 'được rồi', 'tốt',
-  'xin lỗi', 'sorry',
+  'chao', 'xin chao', 'hello', 'hi', 'hey', 'alo',
+  'cam on', 'thanks', 'thank you',
+  'ban la ai', 'ban la gi', 'may la ai',
+  'ok', 'oke', 'okay', 'duoc roi', 'tot',
+  'xin loi', 'sorry',
 ];
 
 const _LEGAL_KW = [
-  'luật', 'điều', 'khoản', 'hợp đồng', 'đất', 'tòa', 'kiện',
-  'vi phạm', 'quyền', 'nghĩa vụ', 'tranh chấp', 'bồi thường',
-  'lao động', 'sa thải', 'nợ', 'tiền', 'thuê', 'mua', 'bán',
-  'thừa kế', 'di chúc', 'ly hôn', 'công ty', 'cổ đông',
+  'luat', 'dieu', 'khoan', 'hop dong', 'dat', 'toa', 'kien',
+  'vi pham', 'quyen', 'nghia vu', 'tranh chap', 'boi thuong',
+  'lao dong', 'sa thai', 'no', 'tien', 'thue', 'mua', 'ban',
+  'thua ke', 'di chuc', 'ly hon', 'con', 'nuoi con', 'tai san',
+  'cong ty', 'co dong', 'bao hiem', 'thue nha', 'lua dao', 'danh',
+  'khoi kien', 'khieu nai', 'to cao', 'dat coc', 'so do',
 ];
 
+function _foldText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ');
+}
+
+function _hasLegalSignal(text: string): boolean {
+  const t = _foldText(text);
+  return _LEGAL_KW.some(kw => t.includes(kw));
+}
+
 function _isChitchat(text: string): boolean {
-  const t = text.trim().toLowerCase();
+  const t = _foldText(text);
   if (t.length > 80) return false;
-  if (_LEGAL_KW.some(kw => t.includes(kw))) return false;
+  if (_hasLegalSignal(t)) return false;
   return _CHITCHAT_STARTERS.some(p => t === p || t.startsWith(p + ' ') || t.startsWith(p + '!') || t.startsWith(p + ','));
 }
 
+function _isLowSignalInput(text: string): boolean {
+  const t = _foldText(text);
+  if (!t) return true;
+  if (_hasLegalSignal(t)) return false;
+  const compact = t.replace(/[^a-z0-9]/g, '');
+  const words = t.split(' ').filter(Boolean);
+  if (compact.length < 4) return true;
+  if (/^[a-z]+$/.test(compact) && compact.length <= 12 && words.length <= 2) return true;
+  if (words.length <= 2 && compact.length <= 8) return true;
+  return false;
+}
+
 function _chitchatReply(text: string): string {
-  const t = text.trim().toLowerCase();
-  if (_LEGAL_KW.some(kw => t.includes(kw))) return '';
-  if (t.includes('cảm ơn') || t.includes('cam on') || t.includes('thanks')) {
+  const t = _foldText(text);
+  if (_hasLegalSignal(t)) return '';
+  if (t.includes('cam on') || t.includes('thanks')) {
     return 'Không có gì! Nếu bạn có câu hỏi pháp lý, tôi luôn sẵn sàng hỗ trợ.';
   }
-  if (t.includes('là ai') || t.includes('là gì') || t.includes('mày là')) {
-    return 'Tôi là LexAI — trợ lý pháp lý AI chuyên về luật Việt Nam. Tôi có thể giúp phân tích tình huống, trích dẫn điều luật và đề xuất hành động trong các lĩnh vực: đất đai, hợp đồng, lao động, doanh nghiệp, dân sự, hình sự và hành chính.';
+  if (t.includes('la ai') || t.includes('la gi')) {
+    return 'Tôi là LexAI, trợ lý pháp lý AI cho luật Việt Nam. Bạn có thể mô tả tình huống pháp lý, tôi sẽ phân tích quyền lợi, rủi ro, căn cứ và bước nên làm tiếp.';
   }
-  if (t.includes('xin lỗi') || t.includes('sorry')) {
-    return 'Không sao! Bạn cần tôi giúp gì về pháp lý không?';
+  if (t.includes('xin loi') || t.includes('sorry')) {
+    return 'Không sao. Bạn cần tôi hỗ trợ tình huống pháp lý nào?';
   }
-  return 'Xin chào! Tôi là LexAI, trợ lý pháp lý AI. Bạn hãy mô tả tình huống pháp lý — tôi sẽ phân tích quyền lợi, trích dẫn điều luật và đề xuất các bước thực hiện cụ thể.';
+  return 'Xin chào! Bạn hãy mô tả tình huống pháp lý cụ thể, tôi sẽ giúp phân tích căn cứ, rủi ro và đề xuất bước tiếp theo.';
+}
+
+function _lowSignalReply(): string {
+  return 'Tôi chưa thấy đủ thông tin pháp lý để phân tích. Bạn hãy mô tả rõ hơn: sự việc xảy ra khi nào, các bên là ai, bạn muốn đạt mục tiêu gì, và hiện có giấy tờ/chứng cứ nào.';
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +245,24 @@ export function Analyze() {
       const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
       persistConversation(activeSessionId, titleFromText(firstUserTurn), 'general', fullHistory, {
         source: 'chitchat',
+      });
+      return;
+    }
+
+    if (_isLowSignalInput(currentSituation)) {
+      const assistantTurn: ChatTurn = { role: 'assistant', content: _lowSignalReply() };
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(activeSessionId, titleFromText(firstUserTurn), 'general', fullHistory, {
+        source: 'input_guard',
+      });
+      logInteraction({
+        action_type: 'low_signal_input',
+        context: {
+          session_id: activeSessionId,
+          input_snippet: currentSituation.slice(0, 80),
+        },
       });
       return;
     }
