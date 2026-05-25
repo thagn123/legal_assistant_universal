@@ -69,3 +69,29 @@ def test_behavior_feedback_can_rerank_next_best_actions():
     assert next(item for item in personalized if item.action_id == "action_plan").score > next(
         item for item in baseline if item.action_id == "action_plan"
     ).score
+
+
+def test_divorce_custody_context_adds_goal_aware_metadata():
+    ctx = build_recommendation_context(
+        situation=(
+            "Toi muon ly hon, co hai con, muon nuoi con va giu tai san. "
+            "Thu nhap cua toi cao hon vo va can biet tai san chia the nao."
+        ),
+        domain="dan_su",
+        position_score=0.45,
+        domain_confidence=0.8,
+        citations=["Luat Hon nhan va Gia dinh 2014"],
+        warnings=["Can bo sung chung cu ve dieu kien nuoi con."],
+        recommended_actions=["Chuan bi ho so ly hon."],
+    )
+
+    results = NextBestActionRecommender().recommend(ctx, limit=5)
+    first = results[0]
+
+    assert "divorce" in first.detected_goals
+    assert "child_custody" in first.detected_goals
+    assert "asset_division" in first.detected_goals
+    assert first.user_position == "parent_seeking_custody"
+    assert any("con" in question.lower() for question in first.next_questions)
+    assert first.journey_steps
+    assert {"action_plan", "evidence_gap"}.intersection({item.action_id for item in results[:3]})

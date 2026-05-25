@@ -83,6 +83,10 @@ export interface NextBestAction {
     citations?: string[];
   };
   blocking_gaps: string[];
+  detected_goals?: string[];
+  user_position?: string;
+  next_questions?: string[];
+  journey_steps?: string[];
 }
 
 export interface AnalysisResponse {

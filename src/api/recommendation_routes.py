@@ -250,6 +250,10 @@ class NextBestActionOut(BaseModel):
     evidence: List[str]
     prefill: Dict[str, Any]
     blocking_gaps: List[str]
+    detected_goals: List[str] = Field(default_factory=list)
+    user_position: str = "general_user"
+    next_questions: List[str] = Field(default_factory=list)
+    journey_steps: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

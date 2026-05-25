@@ -1020,6 +1020,7 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
   ];
   const recommendations = result.next_best_actions?.length ? result.next_best_actions : fallbackModules;
   const visibleRecommendations = recommendations.filter(item => !dismissed[item.action_id]);
+  const goalMeta = recommendations.find(item => item.detected_goals?.length || item.next_questions?.length || item.journey_steps?.length);
   const impressionKey = `${result.session_id}:${recommendations.map(item => item.action_id).join('|')}`;
 
   useEffect(() => {
@@ -1089,6 +1090,60 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
           Mở hành trình
         </button>
       </div>
+
+      {goalMeta && (
+        <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr]">
+          <div className="rounded-xl border border-legal-gold/20 bg-legal-gold/5 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-legal-gold mb-2">
+              Hiểu nhu cầu của bạn
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(goalMeta.detected_goals || []).map(goal => (
+                <span key={goal} className="rounded-lg border border-legal-gold/20 bg-legal-gold/10 px-2 py-1 text-[10px] font-semibold text-legal-gold">
+                  {goalLabel(goal)}
+                </span>
+              ))}
+              {goalMeta.user_position && (
+                <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300">
+                  {positionLabel(goalMeta.user_position)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Câu hỏi nên bổ sung
+            </p>
+            <ul className="space-y-1.5">
+              {(goalMeta.next_questions || []).slice(0, 3).map((question, idx) => (
+                <li key={idx} className="flex gap-2 text-[11px] leading-relaxed text-slate-300">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-legal-gold/10 text-[9px] font-bold text-legal-gold">
+                    {idx + 1}
+                  </span>
+                  <span>{question}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {goalMeta?.journey_steps?.length ? (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Lộ trình đề xuất
+          </p>
+          <div className="grid gap-2 md:grid-cols-4">
+            {goalMeta.journey_steps.slice(0, 4).map((step, idx) => (
+              <div key={idx} className="rounded-lg border border-white/8 bg-white/5 p-2">
+                <span className="text-[9px] font-bold text-legal-gold">Bước {idx + 1}</span>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-300">{step}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
         {visibleRecommendations.map(item => {
@@ -1205,4 +1260,36 @@ function moduleIcon(module: string) {
     journey: Map,
   } as const;
   return icons[module as keyof typeof icons] || ListChecks;
+}
+
+function goalLabel(goal: string) {
+  const labels: Record<string, string> = {
+    divorce: 'Ly hôn',
+    child_custody: 'Quyền nuôi con',
+    asset_division: 'Chia tài sản',
+    asset_protection: 'Bảo vệ tài sản',
+    debt_recovery: 'Đòi nợ',
+    employment_termination: 'Chấm dứt lao động',
+    land_dispute: 'Tranh chấp đất',
+    contract_enforcement: 'Thực hiện hợp đồng',
+    complaint_or_lawsuit: 'Khiếu nại/khởi kiện',
+    risk_avoidance: 'Giảm rủi ro',
+    clarify_legal_goal: 'Làm rõ mục tiêu',
+  };
+  return labels[goal] || goal.replace(/_/g, ' ');
+}
+
+function positionLabel(position: string) {
+  const labels: Record<string, string> = {
+    parent_seeking_custody: 'Vị thế: cha/mẹ muốn nuôi con',
+    employer_or_company: 'Vị thế: doanh nghiệp/người sử dụng lao động',
+    employee: 'Vị thế: người lao động',
+    buyer: 'Vị thế: bên mua',
+    seller: 'Vị thế: bên bán',
+    creditor_or_claimant: 'Vị thế: người yêu cầu quyền lợi',
+    respondent: 'Vị thế: bên bị yêu cầu',
+    claimant_or_complainant: 'Vị thế: người khiếu nại/khởi kiện',
+    general_user: 'Vị thế: người cần tư vấn',
+  };
+  return labels[position] || position.replace(/_/g, ' ');
 }
