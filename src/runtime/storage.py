@@ -149,6 +149,37 @@ CREATE TABLE IF NOT EXISTS analysis_history (
     saved_at  TEXT NOT NULL,
     PRIMARY KEY (user_id, item_id)
 );
+
+CREATE TABLE IF NOT EXISTS interactions (
+    interaction_id TEXT PRIMARY KEY,
+    user_id        TEXT NOT NULL,
+    doc_id         TEXT NOT NULL DEFAULT '',
+    action_type    TEXT NOT NULL,
+    context_json   TEXT NOT NULL DEFAULT '{}',
+    chunk_id       TEXT,
+    timestamp      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_interactions_user_time
+    ON interactions(user_id, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_interactions_action
+    ON interactions(action_type);
+
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+    session_id    TEXT NOT NULL,
+    user_id       TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    domain        TEXT,
+    turns_json    TEXT NOT NULL DEFAULT '[]',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at    TEXT NOT NULL,
+    last_active   TEXT NOT NULL,
+    PRIMARY KEY (user_id, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_user_active
+    ON conversation_sessions(user_id, last_active DESC);
 """
 
 
@@ -721,6 +752,311 @@ class StorageLayer:
         with self._lock:
             cur = self._conn.execute(
                 "DELETE FROM analysis_history WHERE user_id=?", (user_id,)
+            )
+            self._conn.commit()
+        return cur.rowcount
+
+    # ------------------------------------------------------------------
+    # Interaction log (SQLite fallback for behavior recommendations)
+    # ------------------------------------------------------------------
+
+    def log_interaction(
+        self,
+        user_id: str,
+        doc_id: str,
+        action_type: str,
+        context: Optional[Dict] = None,
+        chunk_id: Optional[str] = None,
+    ) -> str:
+        """Record one user gesture/action for local behavior recommendations."""
+        interaction_id = str(uuid.uuid4())
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO interactions(interaction_id, user_id, doc_id, action_type, context_json, chunk_id, timestamp)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (
+                    interaction_id,
+                    user_id,
+                    doc_id or "",
+                    action_type,
+                    json.dumps(context or {}, ensure_ascii=False),
+                    chunk_id,
+                    _now(),
+                ),
+            )
+            self._conn.commit()
+        return interaction_id
+
+    def get_user_interaction_history(
+        self,
+        user_id: str,
+        days: int = 60,
+        limit: int = 200,
+    ) -> List[Dict]:
+        """Return recent interactions for one user, newest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT doc_id, action_type, context_json, chunk_id, timestamp
+                FROM interactions
+                WHERE user_id=?
+                ORDER BY timestamp DESC, rowid DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        cutoff = datetime.fromtimestamp(0, timezone.utc)
+        try:
+            from datetime import timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        except Exception:
+            pass
+
+        result = []
+        for row in rows:
+            ts = row["timestamp"]
+            try:
+                parsed = datetime.fromisoformat(ts)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                if parsed < cutoff:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            try:
+                context = json.loads(row["context_json"])
+            except (json.JSONDecodeError, TypeError):
+                context = {}
+            result.append({
+                "doc_id": row["doc_id"],
+                "action_type": row["action_type"],
+                "context": context,
+                "chunk_id": row["chunk_id"],
+                "timestamp": ts,
+            })
+        return result
+
+    def get_user_action_frequency(self, user_id: str) -> Dict[str, int]:
+        """Return action_type -> count for a user."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT action_type, COUNT(*) AS count
+                FROM interactions
+                WHERE user_id=?
+                GROUP BY action_type
+                """,
+                (user_id,),
+            ).fetchall()
+        return {row["action_type"]: int(row["count"]) for row in rows}
+
+    def get_user_active_hours(self, user_id: str) -> List[int]:
+        """Return hours of day when the user is most active."""
+        history = self.get_user_interaction_history(user_id, days=90, limit=500)
+        counts: Dict[int, int] = {}
+        for item in history:
+            try:
+                hour = datetime.fromisoformat(item["timestamp"]).hour
+            except (TypeError, ValueError):
+                continue
+            counts[hour] = counts.get(hour, 0) + 1
+        return [hour for hour, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+    def get_user_law_types_since(self, user_id: str, days: int = 7) -> List[str]:
+        """Return distinct law_type values from recent interactions."""
+        history = self.get_user_interaction_history(user_id, days=days, limit=300)
+        values = []
+        for item in history:
+            law_type = (item.get("context") or {}).get("law_type")
+            if law_type and law_type not in values:
+                values.append(law_type)
+        return values
+
+    def get_trending_law_types(self, limit: int = 5) -> List[str]:
+        """Return globally frequent law_type values from local interactions."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT context_json FROM interactions ORDER BY timestamp DESC LIMIT 1000"
+            ).fetchall()
+        counts: Dict[str, int] = {}
+        for row in rows:
+            try:
+                context = json.loads(row["context_json"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            law_type = context.get("law_type")
+            if law_type:
+                counts[law_type] = counts.get(law_type, 0) + 1
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        return [law_type for law_type, _ in ranked[:limit]]
+
+    def get_user_action_bigrams(self, user_id: str, limit: int = 20) -> List[Dict]:
+        """Return consecutive action pairs from the user's local interaction log."""
+        history = list(reversed(self.get_user_interaction_history(user_id, days=90, limit=500)))
+        counts: Dict[tuple[str, str], int] = {}
+        for first, second in zip(history, history[1:]):
+            key = (first.get("action_type", ""), second.get("action_type", ""))
+            if key[0] and key[1]:
+                counts[key] = counts.get(key, 0) + 1
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        return [
+            {"first_action": first, "second_action": second, "count": count}
+            for (first, second), count in ranked[:limit]
+        ]
+
+    def find_peer_users(self, user_id: str, top_domains: List[str], limit: int = 20) -> List[str]:
+        """SQLite fallback: peer discovery is unavailable locally."""
+        return []
+
+    def get_user_viewed_docs(self, user_id: str, limit: int = 100) -> List[str]:
+        """Return documents viewed by a user."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT DISTINCT doc_id
+                FROM interactions
+                WHERE user_id=? AND doc_id != ''
+                ORDER BY timestamp DESC, rowid DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        return [row["doc_id"] for row in rows]
+
+    def get_trending_content_for_peers(
+        self,
+        peer_user_ids: List[str],
+        exclude_doc_ids: List[str],
+        days: int = 14,
+        limit: int = 10,
+    ) -> List[Dict]:
+        """SQLite fallback: no peer graph, so return no peer content."""
+        return []
+
+    # ------------------------------------------------------------------
+    # Conversation sessions (backend-persisted chat history)
+    # ------------------------------------------------------------------
+
+    def save_conversation_session(
+        self,
+        user_id: str,
+        session_id: str,
+        title: str,
+        domain: Optional[str],
+        turns: List[Dict],
+        metadata: Optional[Dict] = None,
+    ) -> None:
+        """Upsert a full conversation session for a user."""
+        now = _now()
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT created_at FROM conversation_sessions WHERE user_id=? AND session_id=?",
+                (user_id, session_id),
+            ).fetchone()
+            created_at = existing["created_at"] if existing else now
+            self._conn.execute(
+                """
+                INSERT INTO conversation_sessions(session_id, user_id, title, domain, turns_json, metadata_json, created_at, last_active)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(user_id, session_id) DO UPDATE SET
+                    title=excluded.title,
+                    domain=excluded.domain,
+                    turns_json=excluded.turns_json,
+                    metadata_json=excluded.metadata_json,
+                    last_active=excluded.last_active
+                """,
+                (
+                    session_id,
+                    user_id,
+                    title[:200],
+                    domain,
+                    json.dumps(turns[-80:], ensure_ascii=False),
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    created_at,
+                    now,
+                ),
+            )
+            self._conn.commit()
+
+    def list_conversation_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
+        """Return recent conversation session summaries for a user."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT session_id, title, domain, turns_json, metadata_json, created_at, last_active
+                FROM conversation_sessions
+                WHERE user_id=?
+                ORDER BY last_active DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            try:
+                turns = json.loads(row["turns_json"])
+            except (json.JSONDecodeError, TypeError):
+                turns = []
+            result.append({
+                "id": row["session_id"],
+                "title": row["title"],
+                "domain": row["domain"],
+                "createdAt": row["created_at"],
+                "lastActive": row["last_active"],
+                "turnCount": len(turns) if isinstance(turns, list) else 0,
+                "turns": turns,
+            })
+        return result
+
+    def get_conversation_session(self, user_id: str, session_id: str) -> Optional[Dict]:
+        """Return one full conversation session for a user."""
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT session_id, title, domain, turns_json, metadata_json, created_at, last_active
+                FROM conversation_sessions
+                WHERE user_id=? AND session_id=?
+                """,
+                (user_id, session_id),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            turns = json.loads(row["turns_json"])
+        except (json.JSONDecodeError, TypeError):
+            turns = []
+        try:
+            metadata = json.loads(row["metadata_json"])
+        except (json.JSONDecodeError, TypeError):
+            metadata = {}
+        return {
+            "id": row["session_id"],
+            "title": row["title"],
+            "domain": row["domain"],
+            "turns": turns,
+            "metadata": metadata,
+            "createdAt": row["created_at"],
+            "lastActive": row["last_active"],
+        }
+
+    def delete_conversation_session(self, user_id: str, session_id: str) -> bool:
+        """Delete one conversation session."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM conversation_sessions WHERE user_id=? AND session_id=?",
+                (user_id, session_id),
+            )
+            self._conn.commit()
+        return cur.rowcount > 0
+
+    def clear_conversation_sessions(self, user_id: str) -> int:
+        """Delete all conversation sessions for a user."""
+        with self._lock:
+            cur = self._conn.execute(
+                "DELETE FROM conversation_sessions WHERE user_id=?",
+                (user_id,),
             )
             self._conn.commit()
         return cur.rowcount

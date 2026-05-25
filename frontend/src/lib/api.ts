@@ -219,6 +219,24 @@ export interface DigestResponse {
   }>;
 }
 
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content?: string;
+  result?: AnalysisResponse;
+  situation?: string;
+}
+
+export interface ConversationSession {
+  id: string;
+  title: string;
+  domain?: string;
+  turns: ConversationTurn[];
+  createdAt?: string;
+  lastActive?: string;
+  turnCount?: number;
+  metadata?: Record<string, any>;
+}
+
 // RESPONSE TRANSFORMERS
 
 function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
@@ -1228,6 +1246,45 @@ export interface BehaviorProfile {
 
 export async function getBehaviorProfile(): Promise<BehaviorProfile> {
   return apiFetch<BehaviorProfile>('/recommendations/behavior/profile');
+}
+
+// ── Conversation History (backend-persisted + localStorage cache) ────────────
+
+const CONVERSATION_KEY = 'lexai_sessions';
+const MAX_CONVERSATIONS = 20;
+
+function _loadLocalConversations(): ConversationSession[] {
+  try {
+    return JSON.parse(localStorage.getItem(CONVERSATION_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export async function saveConversationSession(session: ConversationSession): Promise<void> {
+  const cached = _loadLocalConversations();
+  localStorage.setItem(
+    CONVERSATION_KEY,
+    JSON.stringify([session, ...cached.filter(item => item.id !== session.id)].slice(0, MAX_CONVERSATIONS)),
+  );
+  try {
+    await apiFetch<ConversationSession>('/conversations', {
+      method: 'POST',
+      body: JSON.stringify(session),
+    });
+  } catch {
+    // localStorage copy already written; backend unavailable is non-fatal
+  }
+}
+
+export async function loadConversationSessions(): Promise<ConversationSession[]> {
+  try {
+    const res = await apiFetch<{ items: ConversationSession[]; total: number }>('/conversations?limit=50');
+    localStorage.setItem(CONVERSATION_KEY, JSON.stringify(res.items.slice(0, MAX_CONVERSATIONS)));
+    return res.items;
+  } catch {
+    return _loadLocalConversations();
+  }
 }
 
 // ── Analysis History (backend-persisted + localStorage cache) ────────────────

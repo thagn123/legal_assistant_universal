@@ -31,6 +31,7 @@ from src.api.analysis_routes import analysis_router
 from src.api.history_routes import history_router
 from src.api.compliance_routes import compliance_router
 from src.api.contract_coach_routes import coach_router
+from src.api.conversation_routes import conversation_router
 from src.api.guidance_routes import guidance_router
 from src.api.journey_routes import journey_router
 from src.api.recommendation_routes import agent_router, behavior_router, feed_router, intelligence_router, interact_router, rec_router
@@ -159,6 +160,7 @@ def create_app(
     app.include_router(journey_router)
     app.include_router(feed_router)
     app.include_router(history_router)
+    app.include_router(conversation_router)
 
     return app
 

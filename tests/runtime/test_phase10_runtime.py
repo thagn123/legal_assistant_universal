@@ -346,3 +346,70 @@ class TestChecklistProgressStorage:
     def test_checklist_progress_deduplicates_items(self, storage: StorageLayer):
         storage.save_checklist_progress("user_a", "checklist_1", ["a", "a", "b"])
         assert storage.get_checklist_progress("user_a", "checklist_1") == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Behavior + conversation memory (Phase 18)
+# ---------------------------------------------------------------------------
+
+
+class TestBehaviorAndConversationMemory:
+
+    def test_interaction_log_supports_profile_signals(self, storage: StorageLayer):
+        storage.log_interaction(
+            "user_behavior",
+            doc_id="",
+            action_type="situation_analysis",
+            context={"law_type": "dat_dai", "module": "analyze"},
+        )
+        storage.log_interaction(
+            "user_behavior",
+            doc_id="doc_1",
+            action_type="recommendation_click",
+            context={"law_type": "dat_dai", "module": "risks"},
+        )
+
+        history = storage.get_user_interaction_history("user_behavior")
+        assert len(history) == 2
+        assert history[0]["context"]["law_type"] == "dat_dai"
+        assert storage.get_user_action_frequency("user_behavior") == {
+            "recommendation_click": 1,
+            "situation_analysis": 1,
+        }
+        assert storage.get_user_law_types_since("user_behavior") == ["dat_dai"]
+
+    def test_interaction_bigrams_capture_user_habits(self, storage: StorageLayer):
+        storage.log_interaction("user_seq", "", "situation_analysis", {"law_type": "dat_dai"})
+        storage.log_interaction("user_seq", "", "risk_recommendation", {"law_type": "dat_dai"})
+        storage.log_interaction("user_seq", "", "situation_analysis", {"law_type": "dat_dai"})
+        storage.log_interaction("user_seq", "", "risk_recommendation", {"law_type": "dat_dai"})
+
+        bigrams = storage.get_user_action_bigrams("user_seq")
+        assert bigrams[0] == {
+            "first_action": "situation_analysis",
+            "second_action": "risk_recommendation",
+            "count": 2,
+        }
+
+    def test_conversation_sessions_round_trip_and_scope_by_user(self, storage: StorageLayer):
+        storage.save_conversation_session(
+            user_id="user_chat_a",
+            session_id="chat_001",
+            title="Tranh chấp đất đai",
+            domain="dat_dai",
+            turns=[
+                {"role": "user", "content": "Tôi cần tư vấn tranh chấp đất."},
+                {"role": "assistant", "content": "Có thể phân tích theo Luật Đất đai."},
+            ],
+            metadata={"source": "analyze"},
+        )
+
+        listed = storage.list_conversation_sessions("user_chat_a")
+        assert len(listed) == 1
+        assert listed[0]["turnCount"] == 2
+
+        fetched = storage.get_conversation_session("user_chat_a", "chat_001")
+        assert fetched is not None
+        assert fetched["title"] == "Tranh chấp đất đai"
+        assert fetched["metadata"] == {"source": "analyze"}
+        assert storage.get_conversation_session("user_chat_b", "chat_001") is None

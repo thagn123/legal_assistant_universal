@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace, NextBestAction } from '../lib/api';
+import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace, NextBestAction, loadConversationSessions, saveConversationSession } from '../lib/api';
 import { LawTypeBadge, InteractionButtons } from '../components/ui/Shared';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { cn } from '../lib/api';
@@ -129,6 +129,21 @@ export function Analyze() {
   const [selectedSession, setSelectedSession] = useState<typeof sessionHistory[0] | null>(null);
 
   useEffect(() => {
+    loadConversationSessions()
+      .then(items => {
+        if (!items.length) return;
+        setSessionHistory(items.map(item => ({
+          id: item.id,
+          title: item.title,
+          domain: item.domain || 'general',
+          date: item.lastActive ? new Date(item.lastActive).toLocaleDateString('vi-VN') : '',
+          turns: item.turns as ChatTurn[],
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
@@ -145,7 +160,26 @@ export function Analyze() {
     // Greetings / small-talk — respond locally without calling the API
     if (_isChitchat(currentSituation)) {
       const reply = _chitchatReply(currentSituation);
-      setHistory(prev => [...prev, { role: 'assistant', content: reply }]);
+      const assistantTurn: ChatTurn = { role: 'assistant', content: reply };
+      setHistory(prev => {
+        const fullHistory = [...prev, assistantTurn];
+        const sid = sessionId || `chat_${Date.now()}`;
+        const title = currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation;
+        saveConversationSession({
+          id: sid,
+          title,
+          domain: 'general',
+          turns: fullHistory,
+          metadata: { source: 'chitchat' },
+        });
+        setSessionHistory(prevSessions => {
+          const item = { id: sid, title, domain: 'general', date: new Date().toLocaleDateString('vi-VN'), turns: fullHistory };
+          const updated = [item, ...prevSessions.filter(s => s.id !== sid)].slice(0, 20);
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+        return fullHistory;
+      });
       return;
     }
 
@@ -174,8 +208,7 @@ export function Analyze() {
       setSessionId(data.session_id);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
-      const newTurns: ChatTurn[] = [userMessage, { role: 'assistant', result: data }];
-      setHistory(prev => [...prev, { role: 'assistant', result: data }]);
+      const assistantTurn: ChatTurn = { role: 'assistant', result: data };
       setIsAnalyzing(false);
       setCurrentStage(0);
 
@@ -185,12 +218,24 @@ export function Analyze() {
         title: currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation,
         domain: data.domain || 'general',
         date: new Date().toLocaleDateString('vi-VN'),
-        turns: newTurns,
+        turns: [userMessage, assistantTurn],
       };
-      setSessionHistory(prev => {
-        const updated = [newSession, ...prev.filter(s => s.id !== newSession.id)].slice(0, 20);
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-        return updated;
+      setHistory(prevTurns => {
+        const fullHistory = [...prevTurns, assistantTurn];
+        const sessionForBackend = { ...newSession, turns: fullHistory };
+        saveConversationSession({
+          id: sessionForBackend.id,
+          title: sessionForBackend.title,
+          domain: sessionForBackend.domain,
+          turns: fullHistory,
+          metadata: { source: 'analyze', traceId: data.trace_id },
+        });
+        setSessionHistory(prevSessions => {
+          const updated = [sessionForBackend, ...prevSessions.filter(s => s.id !== sessionForBackend.id)].slice(0, 20);
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+        return fullHistory;
       });
     } catch (e: any) {
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
@@ -934,7 +979,20 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
           return (
             <button
               key={item.action_id}
-              onClick={() => navigate(item.action_url, { state: navState })}
+              onClick={() => {
+                logInteraction({
+                  action_type: 'recommendation_click',
+                  doc_id: item.action_id,
+                  context: {
+                    module: item.module,
+                    law_type: result.domain,
+                    score: item.score,
+                    priority: item.priority,
+                    session_id: result.session_id,
+                  },
+                });
+                navigate(item.action_url, { state: navState });
+              }}
               className="group text-left rounded-xl border border-white/10 bg-white/5 p-3 hover:border-legal-gold/30 hover:bg-white/10 transition-all"
             >
               <div className="flex items-start gap-3">

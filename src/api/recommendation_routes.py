@@ -54,6 +54,11 @@ def _get_vector_storage(request: Request) -> VectorStorage:
     return vs
 
 
+def _get_behavior_source(request: Request):
+    """Return Mongo vector storage when available, otherwise SQLite storage."""
+    return getattr(request.app.state, "vector_storage", None) or get_storage(request)
+
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -174,9 +179,9 @@ class ChecklistRecOut(BaseModel):
 
 
 class InteractionLogRequest(BaseModel):
-    doc_id: str
+    doc_id: str = ""
     action_type: str                    # view | save | query | download
-    context: Dict[str, Any] = {}
+    context: Dict[str, Any] = Field(default_factory=dict)
     chunk_id: Optional[str] = None
 
 
@@ -483,15 +488,15 @@ def log_interaction(
 
     action_type: "view" | "save" | "query" | "download" | "situation_analysis"
     """
-    vs = _get_vector_storage(request)
-    vs.log_interaction(
+    source = _get_behavior_source(request)
+    source.log_interaction(
         user_id=user_id,
         doc_id=body.doc_id,
         action_type=body.action_type,
         context=body.context,
         chunk_id=body.chunk_id,
     )
-    return {"logged": True}
+    return {"logged": True, "source": "mongodb" if hasattr(source, "interactions") else "sqlite"}
 
 
 # ---------------------------------------------------------------------------
@@ -736,8 +741,8 @@ def get_behavior_profile(
     Includes recency-weighted law_type scores, action frequencies,
     active hours, and adjacent unexplored legal domains.
     """
-    vs = _get_vector_storage(request)
-    br = BehaviorRecommender(vs)
+    source = _get_behavior_source(request)
+    br = BehaviorRecommender(source)
     profile = br.build_user_profile(user_id)
     return {
         "user_id": profile.user_id,
@@ -766,8 +771,8 @@ def get_proactive_recommendations(
 
     Example: GET /recommendations/behavior/proactive?limit=5
     """
-    vs = _get_vector_storage(request)
-    br = BehaviorRecommender(vs)
+    source = _get_behavior_source(request)
+    br = BehaviorRecommender(source)
     results = br.recommend_proactive(user_id, limit=limit)
     return [
         BehaviorRecOut(
@@ -799,8 +804,8 @@ def get_next_action_recommendations(
     Example:
         {"last_action_type": "situation_analysis", "current_law_type": "dat_dai"}
     """
-    vs = _get_vector_storage(request)
-    br = BehaviorRecommender(vs)
+    source = _get_behavior_source(request)
+    br = BehaviorRecommender(source)
     results = br.recommend_next_action(
         user_id=user_id,
         last_action_type=body.last_action_type,
@@ -834,8 +839,8 @@ def get_peer_trending_recommendations(
 
     Example: GET /recommendations/behavior/peers?limit=5
     """
-    vs = _get_vector_storage(request)
-    br = BehaviorRecommender(vs)
+    source = _get_behavior_source(request)
+    br = BehaviorRecommender(source)
     results = br.recommend_from_peers(user_id, limit=limit)
     return [
         BehaviorRecOut(
@@ -865,8 +870,8 @@ def get_daily_digest(
 
     Intended for the dashboard home page widget.
     """
-    vs = _get_vector_storage(request)
-    br = BehaviorRecommender(vs)
+    source = _get_behavior_source(request)
+    br = BehaviorRecommender(source)
     return br.get_daily_digest(user_id)
 
 
@@ -1286,17 +1291,10 @@ def get_personalized_feed(
     Trả về feed cá nhân hoá dựa trên lịch sử tương tác của người dùng.
     Fallback về feed mặc định nếu chưa có đủ dữ liệu hành vi.
     """
-    vs = getattr(request.app.state, "vector_storage", None)
-    if vs is None:
-        return FeedResponse(
-            user_id=user_id,
-            feed_items=[FeedItem(**item) for item in _DEFAULT_FEED],
-            source="default",
-        )
-
     try:
-        br = BehaviorRecommender(vs)
-        proactive = br.get_proactive_recommendations(user_id, limit=10)
+        source = _get_behavior_source(request)
+        br = BehaviorRecommender(source)
+        proactive = br.recommend_proactive(user_id, limit=10)
 
         if not proactive:
             return FeedResponse(
@@ -1305,16 +1303,14 @@ def get_personalized_feed(
                 source="default",
             )
 
-        _TYPE_MAP = {
-            "law": "law",
-            "template": "template",
-            "checklist": "checklist",
-            "case": "case",
-            "topic": "topic",
-        }
         feed_items = []
         for rec in proactive[:8]:
-            rec_type = _TYPE_MAP.get(getattr(rec, "recommendation_type", "topic"), "topic")
+            rec_id = getattr(rec, "rec_id", "")
+            rec_type = "topic"
+            if "checklist" in rec_id:
+                rec_type = "checklist"
+            elif "template" in rec_id:
+                rec_type = "template"
             action_url = "/analyze"
             if rec_type == "template":
                 action_url = "/templates"
@@ -1323,7 +1319,7 @@ def get_personalized_feed(
 
             feed_items.append(FeedItem(
                 type=rec_type,
-                title=getattr(rec, "name", getattr(rec, "content", "Gợi ý pháp lý")),
+                title=getattr(rec, "title", getattr(rec, "name", "Gợi ý pháp lý")),
                 reason=getattr(rec, "reason", "Phù hợp với lịch sử của bạn"),
                 score=round(getattr(rec, "score", 0.7), 3),
                 action_url=action_url,
