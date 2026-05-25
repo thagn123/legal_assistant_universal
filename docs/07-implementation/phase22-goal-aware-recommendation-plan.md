@@ -192,6 +192,7 @@ Updated:
 Coverage added for:
 
 - divorce/custody/asset goal detection;
+- Vietnamese phrase `nhận nuôi` mapped to `child_custody`;
 - `parent_seeking_custody` position;
 - next questions;
 - journey steps;
@@ -206,7 +207,7 @@ python -m pytest tests\recommenders\test_next_best_action.py tests\api\test_reco
 # 7 passed, 1 warning
 
 python -m pytest -q
-# 143 passed, 4 warnings
+# 144 passed, 4 warnings
 
 cd frontend
 npm run lint

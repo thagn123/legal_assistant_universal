@@ -95,3 +95,20 @@ def test_divorce_custody_context_adds_goal_aware_metadata():
     assert any("con" in question.lower() for question in first.next_questions)
     assert first.journey_steps
     assert {"action_plan", "evidence_gap"}.intersection({item.action_id for item in results[:3]})
+
+
+def test_vietnamese_custody_phrase_nhan_nuoi_is_detected():
+    ctx = build_recommendation_context(
+        situation=(
+            "Tôi và vợ có 2 con. Tôi muốn ly hôn, muốn nhận nuôi 2 bé "
+            "và muốn giữ tài sản."
+        ),
+        domain="dan_su",
+        position_score=0.45,
+        domain_confidence=0.8,
+        citations=["Luật Hôn nhân và Gia đình 2014"],
+    )
+
+    results = NextBestActionRecommender().recommend(ctx, limit=4)
+    assert "child_custody" in results[0].detected_goals
+    assert results[0].user_position == "parent_seeking_custody"

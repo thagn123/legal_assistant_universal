@@ -473,7 +473,7 @@ def _build_goal_profile(ctx: RecommendationContext) -> GoalProfile:
 
     if _contains_any(text, ["ly hon", "hon nhan", "vo chong", "cham dut hon nhan"]):
         add("divorce")
-    if _contains_any(text, ["nuoi con", "quyen nuoi con", "gianh con", "cap duong", "con gai", "con trai"]):
+    if _contains_any(text, ["nuoi con", "nhan nuoi", "cham soc con", "giao con", "quyen nuoi con", "gianh con", "cap duong", "con gai", "con trai"]):
         add("child_custody")
     if _contains_any(text, ["chia tai san", "giu tai san", "tai san chung", "tai san rieng", "so huu tai san"]):
         add("asset_division")
