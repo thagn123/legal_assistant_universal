@@ -47,6 +47,7 @@ class NextBestActionRecommender:
         self,
         context: RecommendationContext,
         limit: int = 6,
+        behavior_scores: Optional[Dict[str, float]] = None,
     ) -> List[NextBestAction]:
         cleaned = _normalize_context(context)
         scored = [
@@ -60,6 +61,8 @@ class NextBestActionRecommender:
             self._checklist(cleaned),
             self._journey(cleaned),
         ]
+        if behavior_scores:
+            scored = [_apply_behavior_score(item, behavior_scores) for item in scored]
         ranked = [item for item in scored if item.score >= 0.34]
         ranked.sort(key=lambda item: (-item.score, item.action_id))
         return ranked[: max(1, limit)]
@@ -315,6 +318,36 @@ def _action(
             "citations": ctx.citations[:8],
         },
         blocking_gaps=blocking_gaps or [],
+    )
+
+
+def _apply_behavior_score(
+    item: NextBestAction,
+    behavior_scores: Dict[str, float],
+) -> NextBestAction:
+    """Adjust score using persisted demo feedback/click signals."""
+    boost = behavior_scores.get(item.action_id, 0.0) + behavior_scores.get(item.module, 0.0) * 0.5
+    if not boost:
+        return item
+    adjusted = round(max(0.0, min(item.score + boost, 0.98)), 3)
+    reason = item.reason
+    if boost > 0.015:
+        reason = f"{reason} Người dùng từng phản hồi tích cực với gợi ý tương tự."
+    elif boost < -0.015:
+        reason = f"{reason} Điểm đã giảm nhẹ do phản hồi trước đó."
+    return NextBestAction(
+        action_id=item.action_id,
+        title=item.title,
+        description=item.description,
+        module=item.module,
+        action_url=item.action_url,
+        category=item.category,
+        priority=_priority(adjusted),
+        score=adjusted,
+        reason=reason,
+        evidence=item.evidence,
+        prefill=item.prefill,
+        blocking_gaps=item.blocking_gaps,
     )
 
 

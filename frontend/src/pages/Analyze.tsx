@@ -32,6 +32,9 @@ import {
   Map,
   ListChecks,
   ClipboardList,
+  ThumbsUp,
+  ThumbsDown,
+  EyeOff,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useNavigate } from 'react-router-dom';
@@ -108,7 +111,9 @@ export function Analyze() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const [history, setHistory] = useState<ChatTurn[]>([]);
+  const historyRef = useRef<ChatTurn[]>([]);
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
@@ -127,6 +132,43 @@ export function Analyze() {
   }>>(loadStoredSessions);
 
   const [selectedSession, setSelectedSession] = useState<typeof sessionHistory[0] | null>(null);
+
+  const titleFromText = (text: string) => (
+    text.length > 64 ? `${text.slice(0, 64)}...` : text
+  );
+
+  const writeHistory = (turns: ChatTurn[]) => {
+    historyRef.current = turns;
+    setHistory(turns);
+  };
+
+  const startNewConversation = () => {
+    sessionIdRef.current = null;
+    setSessionId(null);
+    writeHistory([]);
+    setSelectedSession(null);
+    setAnalyzeError('');
+    setEvidenceChip(null);
+    setActiveTab('chat');
+  };
+
+  const persistConversation = (
+    id: string,
+    title: string,
+    domain: string,
+    turns: ChatTurn[],
+    metadata: Record<string, any>,
+  ) => {
+    const date = new Date().toLocaleDateString('vi-VN');
+    const item = { id, title, domain, date, turns };
+    saveConversationSession({ id, title, domain, turns, metadata });
+    setSessionHistory(prevSessions => {
+      const updated = [item, ...prevSessions.filter(s => s.id !== id)].slice(0, 20);
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setSelectedSession(prev => prev?.id === id ? item : prev);
+  };
 
   useEffect(() => {
     loadConversationSessions()
@@ -154,31 +196,22 @@ export function Analyze() {
 
     const currentSituation = situation;
     const userMessage: ChatTurn = { role: 'user', content: currentSituation };
-    setHistory(prev => [...prev, userMessage]);
+    const activeSessionId = sessionIdRef.current || sessionId || `chat_${Date.now()}`;
+    sessionIdRef.current = activeSessionId;
+    setSessionId(activeSessionId);
+    const historyWithUser = [...historyRef.current, userMessage];
+    writeHistory(historyWithUser);
     setSituation('');
 
     // Greetings / small-talk — respond locally without calling the API
     if (_isChitchat(currentSituation)) {
       const reply = _chitchatReply(currentSituation);
       const assistantTurn: ChatTurn = { role: 'assistant', content: reply };
-      setHistory(prev => {
-        const fullHistory = [...prev, assistantTurn];
-        const sid = sessionId || `chat_${Date.now()}`;
-        const title = currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation;
-        saveConversationSession({
-          id: sid,
-          title,
-          domain: 'general',
-          turns: fullHistory,
-          metadata: { source: 'chitchat' },
-        });
-        setSessionHistory(prevSessions => {
-          const item = { id: sid, title, domain: 'general', date: new Date().toLocaleDateString('vi-VN'), turns: fullHistory };
-          const updated = [item, ...prevSessions.filter(s => s.id !== sid)].slice(0, 20);
-          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-        return fullHistory;
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(activeSessionId, titleFromText(firstUserTurn), 'general', fullHistory, {
+        source: 'chitchat',
       });
       return;
     }
@@ -199,43 +232,28 @@ export function Analyze() {
           situation: currentSituation, 
           user_role: userRole, 
           law_type: lawType === 'all' ? null : lawType,
-          session_id: sessionId,
+          session_id: activeSessionId,
           top_k: 8
         })
       });
       clearInterval(stageInterval);
       setCurrentStage(7);
-      setSessionId(data.session_id);
+      const conversationId = activeSessionId || data.session_id || `chat_${Date.now()}`;
+      sessionIdRef.current = conversationId;
+      setSessionId(conversationId);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
       const assistantTurn: ChatTurn = { role: 'assistant', result: data };
       setIsAnalyzing(false);
       setCurrentStage(0);
 
-      // Persist session to localStorage
-      const newSession = {
-        id: data.session_id || `sess_${Date.now()}`,
-        title: currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation,
-        domain: data.domain || 'general',
-        date: new Date().toLocaleDateString('vi-VN'),
-        turns: [userMessage, assistantTurn],
-      };
-      setHistory(prevTurns => {
-        const fullHistory = [...prevTurns, assistantTurn];
-        const sessionForBackend = { ...newSession, turns: fullHistory };
-        saveConversationSession({
-          id: sessionForBackend.id,
-          title: sessionForBackend.title,
-          domain: sessionForBackend.domain,
-          turns: fullHistory,
-          metadata: { source: 'analyze', traceId: data.trace_id },
-        });
-        setSessionHistory(prevSessions => {
-          const updated = [sessionForBackend, ...prevSessions.filter(s => s.id !== sessionForBackend.id)].slice(0, 20);
-          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-        return fullHistory;
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(conversationId, titleFromText(firstUserTurn), data.domain || 'general', fullHistory, {
+        source: 'analyze',
+        traceId: data.trace_id,
+        backendSessionId: data.session_id,
       });
     } catch (e: any) {
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
@@ -268,7 +286,7 @@ export function Analyze() {
       {/* TABS */}
       <div className="flex bg-legal-navy/30 border-b border-legal-border px-8">
         <button 
-          onClick={() => setActiveTab('chat')}
+          onClick={startNewConversation}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
             activeTab === 'chat' ? "text-legal-gold" : "text-slate-500 hover:text-slate-300"
@@ -909,6 +927,8 @@ function RelatedModuleGrid({ result }: { result: AnalysisResponse }) {
 
 function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
   const navigate = useNavigate();
+  const [feedback, setFeedback] = useState<Record<string, 'useful' | 'not_useful'>>({});
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
   const context = {
     domain: result.domain,
     sessionId: result.session_id,
@@ -948,6 +968,58 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
     },
   ];
   const recommendations = result.next_best_actions?.length ? result.next_best_actions : fallbackModules;
+  const visibleRecommendations = recommendations.filter(item => !dismissed[item.action_id]);
+  const impressionKey = `${result.session_id}:${recommendations.map(item => item.action_id).join('|')}`;
+
+  useEffect(() => {
+    recommendations.forEach(item => {
+      logInteraction({
+        action_type: 'recommendation_impression',
+        doc_id: item.action_id,
+        context: {
+          action_id: item.action_id,
+          module: item.module,
+          law_type: result.domain,
+          score: item.score,
+          priority: item.priority,
+          session_id: result.session_id,
+        },
+      });
+    });
+  }, [impressionKey, result.domain, result.session_id]);
+
+  const sendFeedback = (item: NextBestAction, value: 'useful' | 'not_useful') => {
+    setFeedback(prev => ({ ...prev, [item.action_id]: value }));
+    logInteraction({
+      action_type: value === 'useful' ? 'recommendation_useful' : 'recommendation_not_useful',
+      doc_id: item.action_id,
+      context: {
+        action_id: item.action_id,
+        module: item.module,
+        law_type: result.domain,
+        feedback: value,
+        score: item.score,
+        priority: item.priority,
+        session_id: result.session_id,
+      },
+    });
+  };
+
+  const dismissRecommendation = (item: NextBestAction) => {
+    setDismissed(prev => ({ ...prev, [item.action_id]: true }));
+    logInteraction({
+      action_type: 'recommendation_dismiss',
+      doc_id: item.action_id,
+      context: {
+        action_id: item.action_id,
+        module: item.module,
+        law_type: result.domain,
+        score: item.score,
+        priority: item.priority,
+        session_id: result.session_id,
+      },
+    });
+  };
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
@@ -968,7 +1040,7 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-        {recommendations.map(item => {
+        {visibleRecommendations.map(item => {
           const Icon = moduleIcon(item.module);
           const navState = {
             ...context,
@@ -977,46 +1049,91 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
             citations: item.prefill?.citations || context.citations,
           };
           return (
-            <button
+            <div
               key={item.action_id}
-              onClick={() => {
-                logInteraction({
-                  action_type: 'recommendation_click',
-                  doc_id: item.action_id,
-                  context: {
-                    module: item.module,
-                    law_type: result.domain,
-                    score: item.score,
-                    priority: item.priority,
-                    session_id: result.session_id,
-                  },
-                });
-                navigate(item.action_url, { state: navState });
-              }}
-              className="group text-left rounded-xl border border-white/10 bg-white/5 p-3 hover:border-legal-gold/30 hover:bg-white/10 transition-all"
+              className="group rounded-xl border border-white/10 bg-white/5 hover:border-legal-gold/30 hover:bg-white/10 transition-all overflow-hidden"
             >
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
-                  <Icon size={16} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.category}</span>
-                    <span className={cn(
-                      'text-[9px] font-bold px-1.5 py-0.5 rounded border',
-                      item.priority === 'high' ? 'text-red-300 border-red-500/30 bg-red-500/10' :
-                      item.priority === 'medium' ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
-                      'text-slate-400 border-white/10 bg-white/5',
-                    )}>
-                      {Math.round(item.score * 100)}
-                    </span>
+              <button
+                type="button"
+                onClick={() => {
+                  logInteraction({
+                    action_type: 'recommendation_click',
+                    doc_id: item.action_id,
+                    context: {
+                      action_id: item.action_id,
+                      module: item.module,
+                      law_type: result.domain,
+                      score: item.score,
+                      priority: item.priority,
+                      session_id: result.session_id,
+                    },
+                  });
+                  navigate(item.action_url, { state: navState });
+                }}
+                className="w-full text-left p-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
+                    <Icon size={16} />
                   </div>
-                  <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
-                  <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
-                  {item.reason && <p className="text-[10px] text-slate-600 leading-snug mt-2">{item.reason}</p>}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.category}</span>
+                      <span className={cn(
+                        'text-[9px] font-bold px-1.5 py-0.5 rounded border',
+                        item.priority === 'high' ? 'text-red-300 border-red-500/30 bg-red-500/10' :
+                        item.priority === 'medium' ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
+                        'text-slate-400 border-white/10 bg-white/5',
+                      )}>
+                        {Math.round(item.score * 100)}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
+                    <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
+                    {item.reason && <p className="text-[10px] text-slate-600 leading-snug mt-2">{item.reason}</p>}
+                  </div>
+                </div>
+              </button>
+              <div className="flex items-center justify-between gap-2 border-t border-white/8 px-3 py-2 bg-legal-navy/20">
+                <span className="text-[10px] text-slate-600">Phản hồi để cá nhân hoá</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Gợi ý hữu ích"
+                    onClick={() => sendFeedback(item, 'useful')}
+                    className={cn(
+                      'p-1.5 rounded-lg border transition-all',
+                      feedback[item.action_id] === 'useful'
+                        ? 'text-green-300 border-green-500/40 bg-green-500/10'
+                        : 'text-slate-500 border-white/10 hover:text-green-300 hover:border-green-500/30',
+                    )}
+                  >
+                    <ThumbsUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Gợi ý chưa phù hợp"
+                    onClick={() => sendFeedback(item, 'not_useful')}
+                    className={cn(
+                      'p-1.5 rounded-lg border transition-all',
+                      feedback[item.action_id] === 'not_useful'
+                        ? 'text-red-300 border-red-500/40 bg-red-500/10'
+                        : 'text-slate-500 border-white/10 hover:text-red-300 hover:border-red-500/30',
+                    )}
+                  >
+                    <ThumbsDown size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Ẩn gợi ý này"
+                    onClick={() => dismissRecommendation(item)}
+                    className="p-1.5 rounded-lg border border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20 transition-all"
+                  >
+                    <EyeOff size={13} />
+                  </button>
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

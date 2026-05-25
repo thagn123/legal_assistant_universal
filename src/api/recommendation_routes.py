@@ -59,6 +59,46 @@ def _get_behavior_source(request: Request):
     return getattr(request.app.state, "vector_storage", None) or get_storage(request)
 
 
+def _next_best_action_behavior_scores(source: Any, user_id: str) -> Dict[str, float]:
+    """
+    Demo-friendly personalization from recommendation feedback signals.
+
+    Positive signals nudge a module up; dismiss/not-useful nudges it down.
+    The output is intentionally bounded so analysis quality remains primary.
+    """
+    try:
+        history = source.get_user_interaction_history(user_id, days=60, limit=500)
+    except Exception:
+        return {}
+
+    weights = {
+        "recommendation_impression": 0.003,
+        "recommendation_click": 0.045,
+        "recommendation_useful": 0.09,
+        "recommendation_not_useful": -0.11,
+        "recommendation_dismiss": -0.08,
+        "recommendation_feedback": 0.0,
+    }
+    scores: Dict[str, float] = {}
+    for entry in history:
+        action_type = entry.get("action_type", "")
+        context = entry.get("context") or {}
+        action_id = context.get("action_id") or entry.get("doc_id") or ""
+        module = context.get("module") or ""
+        delta = weights.get(action_type, 0.0)
+        if action_type == "recommendation_feedback":
+            feedback = context.get("feedback")
+            if feedback == "useful":
+                delta = 0.09
+            elif feedback == "not_useful":
+                delta = -0.11
+        for key, factor in ((action_id, 1.0), (module, 0.8)):
+            if key:
+                scores[key] = scores.get(key, 0.0) + delta * factor
+
+    return {key: round(max(-0.18, min(value, 0.18)), 3) for key, value in scores.items()}
+
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -271,6 +311,7 @@ def analyse_situation(
 @rec_router.post("/next-best-actions", response_model=List[NextBestActionOut])
 def recommend_next_best_actions(
     body: NextBestActionRequest,
+    request: Request,
     user_id: str = Depends(require_user),
 ) -> List[NextBestActionOut]:
     """
@@ -280,7 +321,6 @@ def recommend_next_best_actions(
     analysis context (domain, score, citations, warnings, risks) to recommend
     which module should be used next and why.
     """
-    _ = user_id  # reserved for future personalized weighting
     ctx = build_recommendation_context(
         situation=body.situation,
         domain=body.domain,
@@ -291,7 +331,8 @@ def recommend_next_best_actions(
         recommended_actions=body.recommended_actions,
         risk_assessment=body.risk_assessment,
     )
-    results = NextBestActionRecommender().recommend(ctx, limit=body.limit)
+    behavior_scores = _next_best_action_behavior_scores(_get_behavior_source(request), user_id)
+    results = NextBestActionRecommender().recommend(ctx, limit=body.limit, behavior_scores=behavior_scores)
     return [NextBestActionOut(**asdict(item)) for item in results]
 
 
@@ -1055,7 +1096,11 @@ def intelligence_analyze(
         )
         next_best_actions = [
             NextBestActionOut(**asdict(item))
-            for item in NextBestActionRecommender().recommend(ctx, limit=6)
+            for item in NextBestActionRecommender().recommend(
+                ctx,
+                limit=6,
+                behavior_scores=_next_best_action_behavior_scores(_get_behavior_source(request), user_id),
+            )
         ]
 
     # Update persistent user profile for cross-session personalization

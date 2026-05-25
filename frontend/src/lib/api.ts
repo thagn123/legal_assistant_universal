@@ -1261,11 +1261,39 @@ function _loadLocalConversations(): ConversationSession[] {
   }
 }
 
+function _conversationTime(session: ConversationSession): number {
+  const value = session.lastActive || session.createdAt || '';
+  const parsed = value ? Date.parse(value) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function _mergeConversations(
+  primary: ConversationSession[],
+  fallback: ConversationSession[],
+): ConversationSession[] {
+  const byId = new Map<string, ConversationSession>();
+  [...fallback, ...primary].forEach(session => {
+    const current = byId.get(session.id);
+    if (!current) {
+      byId.set(session.id, session);
+      return;
+    }
+    const sessionTurns = session.turns?.length || 0;
+    const currentTurns = current.turns?.length || 0;
+    const useSession = sessionTurns > currentTurns
+      || (sessionTurns === currentTurns && _conversationTime(session) >= _conversationTime(current));
+    byId.set(session.id, useSession ? { ...current, ...session } : { ...session, ...current });
+  });
+  return [...byId.values()]
+    .sort((a, b) => _conversationTime(b) - _conversationTime(a))
+    .slice(0, MAX_CONVERSATIONS);
+}
+
 export async function saveConversationSession(session: ConversationSession): Promise<void> {
   const cached = _loadLocalConversations();
   localStorage.setItem(
     CONVERSATION_KEY,
-    JSON.stringify([session, ...cached.filter(item => item.id !== session.id)].slice(0, MAX_CONVERSATIONS)),
+    JSON.stringify(_mergeConversations([session], cached)),
   );
   try {
     await apiFetch<ConversationSession>('/conversations', {
@@ -1278,12 +1306,14 @@ export async function saveConversationSession(session: ConversationSession): Pro
 }
 
 export async function loadConversationSessions(): Promise<ConversationSession[]> {
+  const local = _loadLocalConversations();
   try {
     const res = await apiFetch<{ items: ConversationSession[]; total: number }>('/conversations?limit=50');
-    localStorage.setItem(CONVERSATION_KEY, JSON.stringify(res.items.slice(0, MAX_CONVERSATIONS)));
-    return res.items;
+    const merged = _mergeConversations(res.items, local);
+    localStorage.setItem(CONVERSATION_KEY, JSON.stringify(merged));
+    return merged;
   } catch {
-    return _loadLocalConversations();
+    return local;
   }
 }
 
