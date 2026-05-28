@@ -22,7 +22,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +180,28 @@ CREATE TABLE IF NOT EXISTS conversation_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_conversation_user_active
     ON conversation_sessions(user_id, last_active DESC);
+
+CREATE TABLE IF NOT EXISTS community_case_patterns (
+    pattern_id           TEXT PRIMARY KEY,
+    summary              TEXT NOT NULL,
+    legal_domain         TEXT NOT NULL DEFAULT 'general',
+    user_goal_json       TEXT NOT NULL DEFAULT '[]',
+    resolution_summary   TEXT NOT NULL DEFAULT '',
+    recommended_steps_json TEXT NOT NULL DEFAULT '[]',
+    citations_json       TEXT NOT NULL DEFAULT '[]',
+    tags_json            TEXT NOT NULL DEFAULT '[]',
+    source_user_segment  TEXT NOT NULL DEFAULT '',
+    impressions          INTEGER NOT NULL DEFAULT 0,
+    clicks               INTEGER NOT NULL DEFAULT 0,
+    saves                INTEGER NOT NULL DEFAULT 0,
+    useful               INTEGER NOT NULL DEFAULT 0,
+    not_useful           INTEGER NOT NULL DEFAULT 0,
+    created_at           TEXT NOT NULL,
+    last_seen_at         TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_domain
+    ON community_case_patterns(legal_domain, useful DESC);
 """
 
 
@@ -934,6 +956,132 @@ class StorageLayer:
     ) -> List[Dict]:
         """SQLite fallback: no peer graph, so return no peer content."""
         return []
+
+    # ------------------------------------------------------------------
+    # Community case patterns (Phase 23 — SQLite fallback)
+    # ------------------------------------------------------------------
+
+    def save_community_case_pattern(
+        self,
+        pattern_id: str,
+        summary: str,
+        legal_domain: str,
+        user_goal: List[str],
+        resolution_summary: str,
+        recommended_steps: List[str],
+        citations: List[str],
+        tags: List[str],
+        source_user_segment: str = "",
+    ) -> bool:
+        """Upsert a community case pattern. Returns True if newly inserted."""
+        now = _now()
+        with self._lock:
+            existing = self._conn.execute(
+                "SELECT pattern_id FROM community_case_patterns WHERE pattern_id=?",
+                (pattern_id,),
+            ).fetchone()
+            if existing:
+                self._conn.execute(
+                    "UPDATE community_case_patterns SET last_seen_at=?, impressions=impressions+1 WHERE pattern_id=?",
+                    (now, pattern_id),
+                )
+                self._conn.commit()
+                return False
+            self._conn.execute(
+                """
+                INSERT INTO community_case_patterns(
+                    pattern_id, summary, legal_domain, user_goal_json,
+                    resolution_summary, recommended_steps_json,
+                    citations_json, tags_json, source_user_segment,
+                    impressions, clicks, saves, useful, not_useful,
+                    created_at, last_seen_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,1,0,0,0,0,?,?)
+                """,
+                (
+                    pattern_id, summary, legal_domain,
+                    json.dumps(user_goal, ensure_ascii=False),
+                    resolution_summary,
+                    json.dumps(recommended_steps, ensure_ascii=False),
+                    json.dumps(citations, ensure_ascii=False),
+                    json.dumps(tags, ensure_ascii=False),
+                    source_user_segment,
+                    now, now,
+                ),
+            )
+            self._conn.commit()
+            return True
+
+    def search_community_case_patterns(
+        self,
+        query: str,
+        domain: Optional[str] = None,
+        limit: int = 5,
+    ) -> List[Dict]:
+        """Keyword search over community case patterns."""
+        import re
+        keywords = [w for w in re.findall(r"[\wÀ-ỹ]+", query.lower()) if len(w) >= 3][:8]
+        if not keywords:
+            with self._lock:
+                rows = self._conn.execute(
+                    "SELECT * FROM community_case_patterns ORDER BY useful DESC, impressions DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        else:
+            like_clauses = " OR ".join(
+                ["summary LIKE ? OR resolution_summary LIKE ? OR tags_json LIKE ?"] * len(keywords)
+            )
+            params: List = []
+            for kw in keywords:
+                params.extend([f"%{kw}%", f"%{kw}%", f"%{kw}%"])
+            if domain and domain != "general":
+                like_clauses = f"({like_clauses}) AND legal_domain=?"
+                params.append(domain)
+            params.append(limit)
+            with self._lock:
+                rows = self._conn.execute(
+                    f"SELECT * FROM community_case_patterns WHERE {like_clauses} ORDER BY useful DESC LIMIT ?",
+                    params,
+                ).fetchall()
+
+        result = []
+        for row in rows:
+            d: Dict[str, Any] = dict(row)
+            for json_col, out_key in [
+                ("user_goal_json", "user_goal"),
+                ("recommended_steps_json", "recommended_steps"),
+                ("citations_json", "citations"),
+                ("tags_json", "tags"),
+            ]:
+                try:
+                    d[out_key] = json.loads(d.pop(json_col, "[]"))
+                except (json.JSONDecodeError, TypeError):
+                    d[out_key] = []
+            d["popularity"] = {
+                "impressions": d.pop("impressions", 0),
+                "clicks": d.pop("clicks", 0),
+                "saves": d.pop("saves", 0),
+                "useful": d.pop("useful", 0),
+                "not_useful": d.pop("not_useful", 0),
+            }
+            result.append(d)
+        return result
+
+    def increment_community_case_signal(
+        self,
+        pattern_id: str,
+        signal: str,
+    ) -> None:
+        """Increment a popularity counter for a community pattern."""
+        valid_signals = {"clicks", "saves", "useful", "not_useful", "impressions"}
+        if signal not in valid_signals:
+            return
+        now = _now()
+        with self._lock:
+            self._conn.execute(
+                f"UPDATE community_case_patterns SET {signal}={signal}+1, last_seen_at=? WHERE pattern_id=?",
+                (now, pattern_id),
+            )
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # Conversation sessions (backend-persisted chat history)

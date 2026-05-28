@@ -116,6 +116,8 @@ def embed_chunks_into_mongo(
     user_id: str,
     vector_storage,  # src.mongodb.mongo_storage.VectorStorage
     is_global: bool = False,
+    document_family: str = "",
+    document_type: str = "",
 ) -> int:
     """
     Generate embeddings for all chunks in *chunk_set* and upsert them
@@ -141,6 +143,8 @@ def embed_chunks_into_mongo(
             "language": getattr(chunk, "language", "vi"),
             "confidence": chunk.confidence,
             "hierarchy_path": getattr(chunk, "hierarchy_path", []),
+            "document_family": document_family,
+            "document_type": document_type,
         }
         # Always store chunk for keyword/BM25 search, embedding is optional
         vector_storage.upsert_chunk_vector(

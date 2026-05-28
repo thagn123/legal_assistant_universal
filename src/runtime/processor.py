@@ -125,12 +125,25 @@ def build_document_processor(
             chunks_produced = len(orch.last_chunk_set.chunks)
             logger.info("processor: saved %d chunks for doc_id=%s", chunks_produced, doc_id)
 
+            # Extract document family/type from pipeline result for metadata enrichment
+            doc_family = ""
+            doc_type = ""
+            last_doc = getattr(orch, "last_document", None)
+            if last_doc is not None:
+                meta = getattr(last_doc, "metadata", None)
+                if meta is not None:
+                    doc_family = getattr(meta, "document_family", "") or ""
+                    doc_type = getattr(meta, "document_type", "") or ""
+
             # Embed chunks into MongoDB for vector search (non-fatal if MongoDB unavailable)
             if mongo_ping():
                 try:
                     vec_storage = VectorStorage()
                     chunks_embedded = embed_chunks_into_mongo(
-                        orch.last_chunk_set, doc_id, user_id, vec_storage, is_global=is_global
+                        orch.last_chunk_set, doc_id, user_id, vec_storage,
+                        is_global=is_global,
+                        document_family=doc_family,
+                        document_type=doc_type,
                     )
                 except Exception as exc:
                     logger.warning("processor: MongoDB embedding failed for doc_id=%s: %s", doc_id, exc)

@@ -347,6 +347,11 @@ class NextBestActionOut(BaseModel):
     user_position: str = "general_user"
     next_questions: List[str] = Field(default_factory=list)
     journey_steps: List[str] = Field(default_factory=list)
+    # Phase 23 — personalization transparency
+    behavior_score: float = 0.0
+    personalization_reason: str = ""
+    personalization_explanation: str = ""
+    ranking_signals: Dict[str, float] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +435,31 @@ def recommend_next_best_actions(
     )
     behavior_scores = _next_best_action_behavior_scores(_get_behavior_source(request), user_id)
     results = NextBestActionRecommender().recommend(ctx, limit=body.limit, behavior_scores=behavior_scores)
-    return [NextBestActionOut(**asdict(item)) for item in results]
+
+    enriched: List[NextBestActionOut] = []
+    has_behavior = bool(behavior_scores)
+    for item in results:
+        d = asdict(item)
+        b_score = behavior_scores.get(item.action_id, 0.0) + behavior_scores.get(item.module, 0.0) * 0.5
+        b_score = round(max(-0.12, min(b_score, 0.18)), 4)
+        p_reason = ""
+        p_explanation = "Cá nhân hóa theo hồ sơ/hành vi của bạn" if has_behavior else ""
+        if b_score > 0.02:
+            p_reason = "Ưu tiên vì bạn đã phản hồi tích cực với gợi ý tương tự"
+        elif b_score < -0.02:
+            p_reason = "Điều chỉnh giảm theo phản hồi trước đó của bạn"
+        enriched.append(NextBestActionOut(
+            **d,
+            behavior_score=b_score,
+            personalization_reason=p_reason,
+            personalization_explanation=p_explanation,
+            ranking_signals={
+                "base_score": round(item.score - b_score, 4),
+                "behavior_boost": b_score,
+                "final_score": round(item.score, 4),
+            },
+        ))
+    return enriched
 
 
 @rec_router.post("/documents", response_model=List[DocumentRecOut])

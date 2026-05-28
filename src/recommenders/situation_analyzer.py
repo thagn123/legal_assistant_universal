@@ -119,16 +119,20 @@ class SituationAnalyzer:
         sit_id = situation_id or ("sit_" + str(uuid.uuid4())[:8])
 
         # ── 1. Log interaction (for collaborative filtering) ─────────────────
-        self._vs.log_interaction(
-            user_id=user_id,
-            doc_id="__situation__",
-            action_type="situation_analysis",
-            context={
-                "situation": situation[:300],
-                "law_type": law_type,
-                "user_role": user_role,
-            },
-        )
+        if self._vs is not None:
+            try:
+                self._vs.log_interaction(
+                    user_id=user_id,
+                    doc_id="__situation__",
+                    action_type="situation_analysis",
+                    context={
+                        "situation": situation[:300],
+                        "law_type": law_type,
+                        "user_role": user_role,
+                    },
+                )
+            except Exception:
+                pass
 
         # ── 2. Retrieve relevant law chunks from MongoDB ──────────────────────
         mongo_chunks = self._retrieve_chunks(situation, law_type)
@@ -200,20 +204,27 @@ class SituationAnalyzer:
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _retrieve_chunks(self, situation: str, law_type: Optional[str]):
+        if self._vs is None:
+            return []
         embedding = embed_text(situation)
-        if embedding:
-            chunks = self._vs.vector_search_chunks(
-                query_vector=embedding,
-                law_type=law_type,
-                limit=12,
-            )
-        else:
-            # Keyword fallback
-            keywords = [w for w in situation.split() if len(w) > 3][:8]
-            chunks = self._vs.keyword_search_chunks(keywords, limit=10)
-        return chunks
+        try:
+            if embedding:
+                chunks = self._vs.vector_search_chunks(
+                    query_vector=embedding,
+                    law_type=law_type,
+                    limit=12,
+                )
+            else:
+                # Keyword fallback
+                keywords = [w for w in situation.split() if len(w) > 3][:8]
+                chunks = self._vs.keyword_search_chunks(keywords, limit=10)
+            return chunks
+        except Exception:
+            return []
 
     def _count_similar(self, situation: str) -> int:
+        if self._vs is None:
+            return 0
         try:
             prefix = situation[:60].replace(".", "").strip()
             return self._vs.interactions.count_documents(

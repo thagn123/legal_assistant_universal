@@ -66,6 +66,7 @@ class VectorStorage:
         self.contract_clauses = db["contract_clauses"]
         self.user_profiles = db["user_profiles"]
         self.checklist_progress = db["user_checklist_progress"]
+        self.community_patterns = db["community_case_patterns"]
 
     # ── Chunk vectors ────────────────────────────────────────────────────────
 
@@ -1232,6 +1233,117 @@ class VectorStorage:
         except Exception as exc:
             logger.warning("vector_search_similar_clauses failed: %s", exc)
             return []
+
+    # ── Community case patterns ──────────────────────────────────────────────
+
+    def save_community_case_pattern(
+        self,
+        pattern_id: str,
+        summary: str,
+        legal_domain: str,
+        user_goal: List[str],
+        resolution_summary: str,
+        recommended_steps: List[str],
+        citations: List[str],
+        tags: List[str],
+        source_user_segment: str = "",
+    ) -> bool:
+        """
+        Upsert a community case pattern (anonymized).
+        Returns True if inserted as new, False if updated existing.
+        """
+        try:
+            existing = self.community_patterns.find_one({"pattern_id": pattern_id})
+            now = _now()
+            doc: Dict[str, Any] = {
+                "pattern_id": pattern_id,
+                "summary": summary,
+                "legal_domain": legal_domain,
+                "user_goal": user_goal,
+                "resolution_summary": resolution_summary,
+                "recommended_steps": recommended_steps,
+                "citations": citations,
+                "tags": tags,
+                "language": "vi",
+                "source": "user_search_anonymized",
+                "source_user_segment": source_user_segment,
+                "last_seen_at": now,
+            }
+            if existing:
+                self.community_patterns.update_one(
+                    {"pattern_id": pattern_id},
+                    {"$set": doc, "$inc": {"popularity.impressions": 1}},
+                )
+                return False
+            doc["created_at"] = now
+            doc["popularity"] = {
+                "impressions": 1,
+                "clicks": 0,
+                "saves": 0,
+                "useful": 0,
+                "not_useful": 0,
+            }
+            self.community_patterns.insert_one(doc)
+            return True
+        except Exception as exc:
+            logger.warning("save_community_case_pattern failed: %s", exc)
+            return False
+
+    def search_community_case_patterns(
+        self,
+        query: str,
+        domain: Optional[str] = None,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search community case patterns by keyword + domain filter.
+        Falls back gracefully when collection is empty or unavailable.
+        """
+        try:
+            keywords = [w for w in re.findall(r"[\wÀ-ỹ]+", query.lower(), re.UNICODE) if len(w) >= 3][:10]
+            if not keywords:
+                return []
+            regex_pattern = "|".join(re.escape(k) for k in keywords)
+            mongo_filter: Dict[str, Any] = {
+                "$or": [
+                    {"summary": {"$regex": regex_pattern, "$options": "i"}},
+                    {"tags": {"$regex": regex_pattern, "$options": "i"}},
+                    {"resolution_summary": {"$regex": regex_pattern, "$options": "i"}},
+                ]
+            }
+            if domain and domain != "general":
+                mongo_filter["legal_domain"] = domain
+            cursor = (
+                self.community_patterns
+                .find(mongo_filter, {"_id": 0})
+                .sort([("popularity.useful", -1), ("popularity.impressions", -1)])
+                .limit(limit)
+            )
+            return list(cursor)
+        except Exception as exc:
+            logger.warning("search_community_case_patterns failed: %s", exc)
+            return []
+
+    def increment_community_case_signal(
+        self,
+        pattern_id: str,
+        signal: str,
+    ) -> None:
+        """
+        Increment a popularity signal counter for a community pattern.
+        signal must be one of: clicks, saves, useful, not_useful, impressions.
+        """
+        valid_signals = {"clicks", "saves", "useful", "not_useful", "impressions"}
+        if signal not in valid_signals:
+            logger.warning("Unknown community case signal '%s'", signal)
+            return
+        try:
+            self.community_patterns.update_one(
+                {"pattern_id": pattern_id},
+                {"$inc": {f"popularity.{signal}": 1}, "$set": {"last_seen_at": _now()}},
+            )
+        except Exception as exc:
+            logger.warning("increment_community_case_signal failed for %s: %s", pattern_id, exc)
 
     # ── Index setup (run once on startup) ────────────────────────────────────
 

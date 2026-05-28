@@ -39,9 +39,107 @@ Usage:
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from src.retrieval.legal_aliases import canonical_term
+
+# ---------------------------------------------------------------------------
+# Cross-language alias dictionary (Phase 23)
+# ---------------------------------------------------------------------------
+
+# EN term → list of VI equivalents used in retrieval
+_EN_TO_VI: Dict[str, List[str]] = {
+    # Family / divorce
+    "divorce": ["ly hôn", "hôn nhân", "hôn nhân gia đình"],
+    "custody": ["quyền nuôi con", "nuôi con", "giám hộ"],
+    "child custody": ["quyền nuôi con", "nuôi con"],
+    "asset division": ["chia tài sản", "tài sản chung", "phân chia tài sản"],
+    "alimony": ["cấp dưỡng", "tiền cấp dưỡng"],
+    "marriage": ["hôn nhân", "kết hôn"],
+    "separation": ["ly thân", "ly hôn"],
+    # Labor
+    "termination": ["sa thải", "chấm dứt hợp đồng lao động", "thôi việc"],
+    "wrongful termination": ["sa thải trái pháp luật", "chấm dứt hợp đồng trái luật"],
+    "dismissal": ["sa thải", "buộc thôi việc"],
+    "severance": ["trợ cấp thôi việc", "trợ cấp mất việc"],
+    "social insurance": ["bảo hiểm xã hội", "bhxh"],
+    "labor contract": ["hợp đồng lao động"],
+    "overtime": ["làm thêm giờ", "tăng ca"],
+    "wage": ["lương", "tiền lương"],
+    "salary": ["lương", "tiền lương", "thu nhập"],
+    "notice period": ["thời gian báo trước", "thông báo trước"],
+    # Contract
+    "contract penalty": ["phạt vi phạm", "phạt hợp đồng", "điều khoản phạt"],
+    "penalty": ["phạt", "phạt vi phạm"],
+    "breach": ["vi phạm hợp đồng", "vi phạm"],
+    "deposit": ["đặt cọc", "tiền cọc"],
+    "contract": ["hợp đồng"],
+    "payment": ["thanh toán", "nghĩa vụ thanh toán"],
+    # Land
+    "land dispute": ["tranh chấp đất", "tranh chấp quyền sử dụng đất"],
+    "land use right": ["quyền sử dụng đất", "sổ đỏ"],
+    "property": ["tài sản", "bất động sản"],
+    "eviction": ["thu hồi đất", "giải phóng mặt bằng"],
+    # Corporate
+    "company": ["công ty", "doanh nghiệp"],
+    "bankruptcy": ["phá sản"],
+    "shareholder": ["cổ đông"],
+    # Criminal
+    "fraud": ["lừa đảo", "chiếm đoạt tài sản"],
+    "criminal": ["hình sự", "tội phạm"],
+    # Admin
+    "administrative complaint": ["khiếu nại hành chính", "khiếu nại"],
+    "appeal": ["kháng cáo", "kháng nghị"],
+    # General
+    "lawsuit": ["khởi kiện", "kiện", "tranh chấp"],
+    "compensation": ["bồi thường", "bồi thường thiệt hại"],
+    "rights": ["quyền lợi", "quyền"],
+    "evidence": ["chứng cứ", "bằng chứng"],
+}
+
+# VI term → EN description (for future bidirectional use)
+# Only entries not trivially derived from EN→VI above
+_VI_INDICATORS = {"tôi", "tại", "của", "và", "là", "có", "không", "được", "trong", "về"}
+
+
+def detect_language(text: str) -> str:
+    """
+    Lightweight language detector: returns 'vi' or 'en'.
+    Uses presence of Vietnamese diacritics or common stop words as signal.
+    """
+    # Any Vietnamese-specific Unicode characters → Vietnamese
+    vi_chars_re = re.compile(r"[àáâãèéêìíòóôõùúýăđêơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]", re.UNICODE)
+    if vi_chars_re.search(text.lower()):
+        return "vi"
+    words = set(text.lower().split())
+    if words & _VI_INDICATORS:
+        return "vi"
+    return "en"
+
+
+def expand_cross_language(query: str) -> Tuple[List[str], bool]:
+    """
+    Expand an English legal query into Vietnamese equivalents.
+
+    Returns:
+        (expanded_aliases, cross_language_used)
+
+    If query is Vietnamese, returns ([], False).
+    If query is English and matches known aliases, returns (vi_terms, True).
+    """
+    lang = detect_language(query)
+    if lang != "en":
+        return [], False
+
+    q_lower = query.lower()
+    collected: List[str] = []
+    for en_term, vi_terms in _EN_TO_VI.items():
+        if en_term in q_lower:
+            for vt in vi_terms:
+                if vt not in collected:
+                    collected.append(vt)
+
+    return collected, bool(collected)
 
 # ---------------------------------------------------------------------------
 # Roman numeral converter

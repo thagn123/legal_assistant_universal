@@ -1,0 +1,144 @@
+[
+  {
+    "id": "basic_vi_family_analysis",
+    "title": "Basic Vietnamese Legal Analysis",
+    "language": "vi",
+    "persona": "demo_user_family",
+    "route": "/analyze",
+    "api_path": "/intelligence/analyze",
+    "input": "Tôi muốn ly hôn, có hai con, tôi muốn nuôi cả hai bé và muốn biết tài sản chung sẽ được chia như thế nào.",
+    "required_assertions": [
+      "Luật Hôn nhân và gia đình",
+      "quyền nuôi con",
+      "tài sản chung",
+      "chia đôi"
+    ],
+    "scoring_rubric_keys": [
+      "legal_analysis",
+      "recommendation_engine",
+      "mvp_readiness"
+    ]
+  },
+  {
+    "id": "recommendation_click_and_retention",
+    "title": "Recommendation Click and Context Retention",
+    "language": "vi",
+    "persona": "demo_user_family",
+    "route": "/similar-cases",
+    "api_path": "/retrieval/similar-cases",
+    "input": "Tranh chấp ly hôn và giành quyền nuôi con dưới 36 tháng tuổi.",
+    "required_assertions": [
+      "tương đồng",
+      "con dưới 36 tháng",
+      "nghĩa vụ cấp dưỡng"
+    ],
+    "scoring_rubric_keys": [
+      "context_retention",
+      "similar_cases_explorer"
+    ]
+  },
+  {
+    "id": "same_query_different_persona",
+    "title": "Same Query Different Persona (Family vs SME)",
+    "language": "vi",
+    "persona": "demo_user_sme",
+    "route": "/analyze",
+    "api_path": "/recommendations/next-best-actions",
+    "input": "Tôi muốn ký hợp đồng thuê mặt bằng kinh doanh nhưng bên cho thuê yêu cầu đặt cọc trước 6 tháng tiền nhà.",
+    "required_assertions": [
+      "đặt cọc",
+      "thuê mặt bằng",
+      "rủi ro"
+    ],
+    "scoring_rubric_keys": [
+      "personalization",
+      "recommendation_quality"
+    ]
+  },
+  {
+    "id": "feedback_loop_nba",
+    "title": "Feedback Loop and NBA Adaptive Scoring",
+    "language": "vi",
+    "persona": "demo_user_family",
+    "route": "/recommendations/next-best-actions",
+    "api_path": "/recommendations/next-best-actions",
+    "input": "Tranh chấp về tài sản thừa kế đất đai giữa các anh chị em ruột.",
+    "required_assertions": [
+      "thừa kế",
+      "đất đai",
+      "next-best-action"
+    ],
+    "scoring_rubric_keys": [
+      "recommendation_quality",
+      "feedback_loop"
+    ]
+  },
+  {
+    "id": "community_similar_cases",
+    "title": "Community Similar Cases and PII Anonymization",
+    "language": "vi",
+    "persona": "demo_user_employee",
+    "route": "/similar-cases",
+    "api_path": "/retrieval/similar-cases",
+    "input": "Anh Trần Văn Nam làm việc tại Công ty ABC bị sa thải trái luật vào ngày 15/05/2026, điện thoại liên hệ 0987654321, email nam.tran@gmail.com.",
+    "required_assertions": [
+      "sa thải trái luật",
+      "bồi thường"
+    ],
+    "scoring_rubric_keys": [
+      "privacy_anonymization",
+      "community_cases"
+    ]
+  },
+  {
+    "id": "cross_language_query",
+    "title": "Cross-Language Legal Query",
+    "language": "en",
+    "persona": "demo_user_english",
+    "route": "/analyze",
+    "api_path": "/retrieval/similar-cases",
+    "input": "My employer terminated my labor contract without notice in Vietnam. What rights do I have?",
+    "required_assertions": [
+      "unilateral termination",
+      "severance allowance",
+      "labor law"
+    ],
+    "scoring_rubric_keys": [
+      "cross_language_retrieval",
+      "vietnamese_law_matching"
+    ]
+  },
+  {
+    "id": "dashboard_behavior_audit",
+    "title": "Dashboard Behavior Digest Audit",
+    "language": "vi",
+    "persona": "demo_user_family",
+    "route": "/dashboard",
+    "api_path": "/recommendations/behavior/digest",
+    "input": "",
+    "required_assertions": [
+      "profile",
+      "digest"
+    ],
+    "scoring_rubric_keys": [
+      "dashboard_visibility",
+      "behavioral_profiling"
+    ]
+  },
+  {
+    "id": "error_and_fallback_experience",
+    "title": "Error and Fallback Experience",
+    "language": "vi",
+    "persona": "demo_user_family",
+    "route": "/analyze",
+    "api_path": "/intelligence/analyze",
+    "input": "abc",
+    "required_assertions": [
+      "thân thiện"
+    ],
+    "scoring_rubric_keys": [
+      "error_resilience",
+      "fallback_ux"
+    ]
+  }
+]

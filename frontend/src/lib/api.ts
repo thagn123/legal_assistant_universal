@@ -1062,6 +1062,30 @@ export interface SimilarCaseItem {
   similarity_label: string;
   stage: string;
   stage_label: string;
+  // Phase 23
+  source_type?: string;
+  personalization_reason?: string;
+  ranking_signals?: Record<string, number>;
+}
+
+export interface CommunityCaseItem {
+  pattern_id: string;
+  summary: string;
+  resolution_summary: string;
+  recommended_steps: string[];
+  legal_domain: string;
+  domain_label: string;
+  tags: string[];
+  citations: string[];
+  similarity_score: number;
+  similarity_label: string;
+  popularity: {
+    impressions?: number;
+    clicks?: number;
+    saves?: number;
+    useful?: number;
+    not_useful?: number;
+  };
 }
 
 export interface SimilarCasesResult {
@@ -1072,9 +1096,17 @@ export interface SimilarCasesResult {
   query_stage: string;
   query_stage_label: string;
   similar_cases: SimilarCaseItem[];
+  official_cases: SimilarCaseItem[];
+  community_cases: CommunityCaseItem[];
   total: number;
   search_mode: string;
   summary: string;
+  // Phase 23
+  query_language?: string;
+  expanded_aliases?: string[];
+  cross_language_used?: boolean;
+  personalization_note?: string;
+  fallback_used?: boolean;
 }
 
 export async function getSimilarCases(
@@ -1082,11 +1114,38 @@ export async function getSimilarCases(
   facts: string[] = [],
   domainHint?: string,
   limit = 6,
+  includeCommunity = true,
 ): Promise<SimilarCasesResult> {
   return apiFetch<SimilarCasesResult>('/retrieval/similar-cases', {
     method: 'POST',
-    body: JSON.stringify({ situation, facts, domain_hint: domainHint, limit }),
+    body: JSON.stringify({
+      situation,
+      facts,
+      domain_hint: domainHint,
+      limit,
+      include_community: includeCommunity,
+      persist_anonymized: true,
+    }),
   });
+}
+
+// Phase 23 — log community case feedback signal
+export async function logCommunityCaseSignal(
+  patternId: string,
+  signal: 'clicks' | 'saves' | 'useful' | 'not_useful',
+): Promise<void> {
+  try {
+    await apiFetch<void>('/interactions/log', {
+      method: 'POST',
+      body: JSON.stringify({
+        doc_id: patternId,
+        action_type: `community_case_${signal}`,
+        context: { pattern_id: patternId, signal },
+      }),
+    });
+  } catch {
+    // non-blocking
+  }
 }
 
 // ---------------------------------------------------------------------------

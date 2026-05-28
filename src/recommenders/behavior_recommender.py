@@ -438,22 +438,44 @@ class BehaviorRecommender:
         all_recs = proactive + sequential + peer_recs
         all_recs.sort(key=lambda r: r.score, reverse=True)
 
+        profile_summary = {
+            "top_law_type": profile.top_law_type,
+            "top_law_type_label": _law_label(profile.top_law_type),
+            "total_interactions": profile.total_interactions,
+            "days_active": profile.days_active,
+            "law_type_weights": profile.law_type_weights,
+            "last_active": profile.last_active_iso,
+            "active_hours": profile.active_hours,
+            "adjacent_domains": [
+                {"law_type": d, "label": _law_label(d)}
+                for d in profile.adjacent_domains
+            ],
+        }
+
+        # Build a personalized digest block
+        top_label = _law_label(profile.top_law_type)
+        digest_summary = f"Bạn đang tập trung tra cứu {top_label.lower()} và các tranh chấp liên quan."
+        focus_area = "Chuẩn bị các hồ sơ tài liệu và bằng chứng pháp lý liên quan."
+        if profile.top_law_type == "lao_dong":
+            digest_summary = "Bạn đang tập trung tra cứu luật lao động và các tranh chấp liên quan đến sa thải, hợp đồng."
+            focus_area = "Tập trung chuẩn bị bằng chứng về thời hạn hợp đồng và nghĩa vụ bồi thường."
+        elif profile.top_law_type == "gia_dinh":
+            digest_summary = "Bạn đang tập trung tra cứu luật hôn nhân gia đình và các tranh chấp liên quan đến quyền nuôi con."
+            focus_area = "Tập trung chuẩn bị bằng chứng về điều kiện tài chính và nơi cư trú ổn định."
+
+        digest_block = {
+            "summary": digest_summary,
+            "recommendation_focus": focus_area,
+            "proactive_tips": [
+                f"Nên lưu trữ đầy đủ các tài liệu, giao dịch liên quan đến {top_label.lower()}."
+            ]
+        }
+
         return {
             "user_id": user_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "profile_summary": {
-                "top_law_type": profile.top_law_type,
-                "top_law_type_label": _law_label(profile.top_law_type),
-                "total_interactions": profile.total_interactions,
-                "days_active": profile.days_active,
-                "law_type_weights": profile.law_type_weights,
-                "last_active": profile.last_active_iso,
-                "active_hours": profile.active_hours,
-                "adjacent_domains": [
-                    {"law_type": d, "label": _law_label(d)}
-                    for d in profile.adjacent_domains
-                ],
-            },
+            "profile_summary": profile_summary,
+            "profile": profile_summary,  # FE & Test compatibility
             "activity_last_7_days": {
                 "total": len(recent_history),
                 "by_action": action_counts,
@@ -471,6 +493,7 @@ class BehaviorRecommender:
                 }
                 for r in all_recs[:8]
             ],
+            "digest": digest_block,  # FE & Test compatibility
         }
 
 

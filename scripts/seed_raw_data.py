@@ -82,6 +82,9 @@ def discover_files(root: Path) -> list[Path]:
             continue
         if p.suffix.lower() not in _EXTENSIONS:
             continue
+        # Skip Office temporary/lock files, e.g. "~$document.doc".
+        if p.name.startswith("~$"):
+            continue
         # Skip excluded dataset directories
         if any(ex in p.parts for ex in _EXCLUDE_DIRS):
             continue

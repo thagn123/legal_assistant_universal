@@ -53,6 +53,54 @@ from src.retrieval.canonical_references import CanonicalRefBuilder
 
 
 # ---------------------------------------------------------------------------
+# Document family / type auto-detection
+# ---------------------------------------------------------------------------
+
+# Priority-ordered detection rules: (family, type, keyword_patterns)
+# Scans first 8000 chars; first match wins.
+# ORDER MATTERS: more structurally distinctive document types must come first
+# so that a document referencing other types (e.g. a form citing a thông tư)
+# is classified by its own identity, not by references within its body.
+_DOC_DETECTION_RULES: List[Tuple[str, str, List[str]]] = [
+    # Forms / templates / annexes — checked first; these docs often cite laws
+    ("bieu_mau", "bieu_mau",    ["phụ lục", "phu luc"]),
+    ("bieu_mau", "bieu_mau",    ["biểu mẫu", "bieu mau", "mẫu số", "mau so"]),
+    # Contracts — checked before generic statute keywords
+    ("hop_dong", "hop_dong",    ["bên a:", "bên b:", "ben a:", "ben b:"]),
+    ("hop_dong", "hop_dong",    ["this agreement", "this contract", "party a:", "party b:"]),
+    ("hop_dong", "hop_dong",    ["hợp đồng", "hop dong"]),
+    # Vietnamese statutes — most unique indicators first
+    ("luat_phap", "bo_luat",    ["bộ luật", "bo luat"]),
+    ("luat_phap", "luat",       ["quốc hội ban hành", "căn cứ hiến pháp", "luật này quy định"]),
+    ("luat_phap", "nghi_dinh",  ["nghị định", "nghi dinh", "chính phủ ban hành"]),
+    ("luat_phap", "thong_tu",   ["bộ trưởng ban hành", "thông tư", "thong tu"]),
+    ("luat_phap", "quyet_dinh", ["quyết định", "quyet dinh"]),
+    ("luat_phap", "chi_thi",    ["chỉ thị", "chi thi"]),
+    ("luat_phap", "nghi_quyet", ["nghị quyết", "nghi quyet"]),
+    # English statutes
+    ("luat_phap", "bo_luat",    ["labor code", "civil code", "penal code", "criminal code"]),
+    ("luat_phap", "nghi_dinh",  ["decree no.", "government decree"]),
+    ("luat_phap", "thong_tu",   ["circular no.", "ministry circular"]),
+]
+
+
+def _detect_document_family_and_type(text: str) -> Tuple[str, str]:
+    """
+    Heuristic classifier: scan first 8000 chars for Vietnamese/English legal keywords.
+    Returns (document_family, document_type). Falls back to ("general", "general") when
+    no keyword matches.
+
+    document_family: broad category slug  (e.g. "luat_phap", "hop_dong", "bieu_mau")
+    document_type:   specific sub-type    (e.g. "nghi_dinh", "thong_tu", "bo_luat")
+    """
+    sample = text[:8000].lower()
+    for family, doc_type, keywords in _DOC_DETECTION_RULES:
+        if any(kw in sample for kw in keywords):
+            return family, doc_type
+    return "general", "general"
+
+
+# ---------------------------------------------------------------------------
 # Stage 4: Canonical structuring
 # ---------------------------------------------------------------------------
 
@@ -195,6 +243,16 @@ def stage_canonical_structuring(ctx: StageContext) -> StageOutput:
     else:
         avg_conf = 0.0
 
+    # Auto-detect document family/type from raw text when no override is set
+    if ctx.config.document_type_override:
+        doc_family = ctx.config.document_type_override
+        doc_type = ctx.config.document_type_override
+    else:
+        raw_text_sample = " ".join(
+            rb.get("raw_text", "") for rb in raw_blocks[:40]
+        )
+        doc_family, doc_type = _detect_document_family_and_type(raw_text_sample)
+
     document = CanonicalDocument(
         document_id=ctx.document_id,
         schema_version=cfg.schema_version,
@@ -203,8 +261,8 @@ def stage_canonical_structuring(ctx: StageContext) -> StageOutput:
         file_type=file_type,
         metadata=DocumentMetadata(
             languages=profile_langs,
-            document_family=ctx.config.document_type_override or "",
-            document_type=ctx.config.document_type_override or "",
+            document_family=doc_family,
+            document_type=doc_type,
         ),
         profile=profile,
         pages=pages,

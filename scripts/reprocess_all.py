@@ -103,8 +103,19 @@ for idx, doc in enumerate(zero_docs, 1):
             continue
 
         chunk_count = len(orch.last_chunk_set.chunks)
+        doc_family = ""
+        doc_type = ""
+        last_doc = getattr(orch, "last_document", None)
+        if last_doc is not None:
+            meta = getattr(last_doc, "metadata", None)
+            if meta is not None:
+                doc_family = getattr(meta, "document_family", "") or ""
+                doc_type = getattr(meta, "document_type", "") or ""
+
         stored = embed_chunks_into_mongo(
-            orch.last_chunk_set, doc_id, user_id, vec_storage, is_global=is_global
+            orch.last_chunk_set, doc_id, user_id, vec_storage, is_global=is_global,
+            document_family=doc_family,
+            document_type=doc_type,
         )
         print(f"  OK: {chunk_count} chunks produced, {stored} stored in MongoDB")
         results.append((filename, stored, "ok"))

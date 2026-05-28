@@ -676,10 +676,52 @@ def _get_chunk_language(document: CanonicalDocument) -> str:
     return langs[0] if langs else "en"
 
 
+def _detect_law_type(document: CanonicalDocument) -> str:
+    """
+    Detect the legal domain of the document based on its blocks' content.
+    Returns a law_type slug: 'dat_dai', 'gia_dinh', 'dan_su', 'hop_dong', 'lao_dong', or 'general'.
+    """
+    sample = " ".join(
+        (b.clean_text or b.raw_text or "") for b in document.blocks[:40]
+    ).lower()
+
+    _KEYWORDS = [
+        ("dat_dai", ["đất đai", "quyền sử dụng đất", "sổ đỏ", "sổ hồng", "đất ruộng", "quy hoạch"]),
+        ("gia_dinh", ["hôn nhân", "gia đình", "ly hôn", "tảo hôn", "cha mẹ", "con cái", "tài sản chung"]),
+        ("dan_su", ["dân sự", "bồi thường", "tranh chấp", "nguyên đơn", "bị đơn", "thừa kế", "di chúc"]),
+        ("hop_dong", ["hợp đồng", "thỏa thuận", "ký kết", "bên mua", "bên bán", "bên thuê"]),
+        ("lao_dong", ["lao động", "người lao động", "người sử dụng lao động", "hợp đồng lao động", "bảo hiểm"]),
+    ]
+    for slug, keywords in _KEYWORDS:
+        if any(kw in sample for kw in keywords):
+            return slug
+    return "general"
+
+
 def _choose_chunk_strategy(
     profile: DocumentProfile, document: CanonicalDocument
 ) -> str:
-    """Implement the chunking decision tree from docs."""
+    """Implement the chunking decision tree from docs, enriched with domain-specific rules."""
+    doc_family = getattr(document.metadata, "document_family", "") or ""
+    doc_type = getattr(document.metadata, "document_type", "") or ""
+    law_type = _detect_law_type(document)
+
+    # 1. Forms / templates / annexes -> MIXED_GROUP to preserve form layout
+    if doc_family == "bieu_mau" or doc_type == "bieu_mau":
+        return ChunkingStrategy.MIXED_GROUP
+
+    # 2. Contracts -> Priority to LEGAL_AWARE (or TABLE_AWARE if tables exist)
+    if doc_family == "hop_dong" or doc_type == "hop_dong" or law_type == "hop_dong":
+        if profile.has_tables or profile.table_density > 0.05:
+            return ChunkingStrategy.TABLE_AWARE
+        return ChunkingStrategy.LEGAL_AWARE
+
+    # 3. Land law, family law, civil law -> Force STRUCTURAL if structure exists to avoid context fragmentation
+    if law_type in ("dat_dai", "gia_dinh", "dan_su"):
+        if document.has_structure() or document.articles:
+            return ChunkingStrategy.STRUCTURAL
+
+    # Default fallback to original decision tree
     structure_score = 0.8 if document.has_structure() else 0.3
     if structure_score >= 0.7 and profile.table_density <= 0.2 and profile.image_density <= 0.2:
         return (
