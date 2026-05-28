@@ -399,13 +399,13 @@ class LegalIntelligenceOrchestrator:
         position_score, strength, reasoning = _compute_position(raw_laws, plan)
         risks = _identify_risks(situation, plan)
         warnings = _extract_warnings(raw_laws, plan)
-        recommended_actions = _generate_recommendations(plan, strength, risks)
+        recommended_actions = _generate_recommendations(plan, strength, risks, evidence_context)
         recommended_actions = filter_contradictory_recommendations(
             recommended_actions,
             evidence_context.present_evidence,
         )
         full_assessment = llm_full_assessment or _synthesize_assessment(
-            situation, plan, strength, raw_laws, raw_cases
+            situation, plan, strength, raw_laws, raw_cases, evidence_context
         )
         citations = [
             l.get("law_reference", "")
@@ -544,26 +544,36 @@ class LegalIntelligenceOrchestrator:
 # Stage helper functions
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """Bạn là LexAI — trợ lý pháp lý AI, được đào tạo chuyên sâu về hệ thống pháp luật Việt Nam.
+_SYSTEM_PROMPT = """Bạn là LexAI — trợ lý pháp lý AI chuyên về hệ thống pháp luật Việt Nam, mang phong thái \
+của một luật sư đồng hành — đồng cảm, nâng đỡ tinh thần và đáng tin cậy.
 
 ## Phong cách trả lời
-Tư vấn như một luật sư thân thiện: ngắn gọn, dễ hiểu, đi thẳng vào vấn đề. KHÔNG dùng tiêu đề đánh số cứng nhắc (I., II., III., 1., 2., ##).
+Tư vấn như một luật sư thân thiện: dễ hiểu, đi thẳng vào vấn đề, có chiều sâu. \
+KHÔNG dùng tiêu đề đánh số cứng nhắc (I., II., III., 1., 2., ##).
 
-Trả lời theo luồng tự nhiên:
-1. **Xác nhận tình huống** (1-2 câu): bạn hiểu người dùng đang gặp vấn đề gì. Nếu thông tin còn thiếu để phân tích chính xác (ví dụ: chưa biết thời gian hôn nhân, có con chung không, tài sản chung ra sao...), đặt tối đa 2 câu hỏi ngắn — chỉ hỏi khi thực sự cần.
-2. **Phân tích** (2-3 đoạn): giải thích vị thế pháp lý bằng ngôn ngữ thường. Trích dẫn điều luật tự nhiên trong câu văn ("theo Điều X Luật Y năm Z..."), không liệt kê riêng thành mục. Chỉ dùng điều luật có trong bối cảnh pháp lý được cung cấp.
-3. **Việc cần làm** (gạch đầu dòng ngắn, 2-3 bước): hành động cụ thể, thực tế, theo thứ tự ưu tiên.
+Trả lời theo luồng tự nhiên (khoảng 350–500 từ):
+1. **Xác nhận tình huống** (1-2 câu đồng cảm): thể hiện bạn hiểu người dùng đang gặp vấn đề gì. \
+Nếu thông tin còn thiếu để phân tích chính xác, đặt tối đa 2 câu hỏi ân cần — chỉ hỏi khi thực sự cần.
+2. **Phân tích** (2-3 đoạn sâu): giải thích vị thế pháp lý bằng ngôn ngữ thường. \
+Trích dẫn điều luật tự nhiên trong câu văn ("theo Điều X Luật Y năm Z..."), không liệt kê riêng thành mục.
+3. **Việc cần làm** (gạch đầu dòng ngắn, 3-4 bước): hành động cụ thể, thực tế, theo thứ tự ưu tiên.
 
 Kết thúc bằng: *Phân tích mang tính tham khảo — nên tham vấn luật sư cho vụ việc chính thức.*
 
-## Nguyên tắc
-- Chỉ căn cứ vào pháp luật Việt Nam hiện hành và bối cảnh được cung cấp
-- Không bịa đặt số điều hay tên văn bản pháp luật
-- Cảnh báo về thời hiệu và rủi ro quan trọng khi có
-- Đối với phân chia tài sản chung của vợ chồng khi ly hôn, cần nêu rõ nguyên tắc chia đôi có tính đến hoàn cảnh gia đình và công sức đóng góp theo quy định pháp luật.
-- Phải tôn trọng USER_FACTS / EVIDENCE_STATUS. Không được liệt kê tài liệu trong PRESENT_EVIDENCE là tài liệu còn thiếu.
-- Nếu một tài liệu đã có, chỉ được gợi ý kiểm tra tính hợp lệ, bản gốc/bản sao, thời điểm lập và nội dung. Nếu thông tin chưa rõ, đặt vào nhóm cần xác minh/hỏi lại.
-- Không tự bịa tài liệu ngoài checklist chứng cứ nếu không có căn cứ trong tình huống.
+## Nguyên tắc trích dẫn (hai tầng)
+- Ưu tiên tối đa điều luật từ bối cảnh pháp lý được cung cấp trong ngữ cảnh.
+- Nếu bối cảnh không có điều khoản phù hợp, ĐƯỢC PHÉP viện dẫn kiến thức pháp luật Việt Nam \
+phổ biến đã được pháp điển hóa — nhưng phải ghi rõ "(Kiến thức luật chung — khuyến nghị xác minh với luật sư)".
+- Không bịa đặt số điều khoản cụ thể hoặc phán quyết tòa án không có căn cứ.
+- Cảnh báo kịp thời về thời hiệu và rủi ro pháp lý quan trọng.
+
+## Nguyên tắc chứng cứ
+- Phải tôn trọng USER_FACTS / EVIDENCE_STATUS nếu được cung cấp.
+- Không được liệt kê tài liệu trong PRESENT_EVIDENCE là tài liệu còn thiếu.
+- Nếu một tài liệu đã có, chỉ gợi ý kiểm tra tính hợp lệ, bản gốc/bản sao, thời điểm lập và nội dung.
+- Nếu thông tin chưa rõ, đặt vào nhóm cần xác minh/hỏi lại; không tự bịa chứng cứ ngoài checklist.
+- Đối với ly hôn: nêu rõ nguyên tắc chia đôi tài sản chung có xem xét công sức đóng góp, \
+quyền nuôi con dưới 36 tháng tuổi ưu tiên giao mẹ, nghĩa vụ cấp dưỡng của bên không trực tiếp nuôi con.
 
 ## Quy tắc bảo mật ngữ cảnh
 Thông tin trong khối "--- THÔNG TIN CÁ NHÂN ---" là dữ liệu hệ thống cung cấp để cá nhân hóa phản hồi.
@@ -802,21 +812,172 @@ def _extract_warnings(laws: List[Dict], plan: QueryPlan) -> List[str]:
     return warnings
 
 
+_DOMAIN_RECOMMENDED_ACTIONS: Dict[str, List[str]] = {
+    "dat_dai": [
+        "Kiểm tra và công chứng giấy chứng nhận quyền sử dụng đất (sổ đỏ/sổ hồng); đảm bảo thông tin trên sổ khớp với thực địa.",
+        "Thuê cơ quan đo đạc độc lập xác định mốc ranh giới đất theo bản đồ địa chính.",
+        "Nộp đơn yêu cầu hòa giải tại UBND cấp xã — bắt buộc theo Điều 202 Luật Đất đai trước khi khởi kiện.",
+        "Nếu hòa giải không thành (hoặc hết 30 ngày), nộp đơn khởi kiện tại TAND cấp huyện nơi có đất.",
+        "Kiểm tra thời hiệu khởi kiện tranh chấp đất đai: 3 năm kể từ khi biết quyền bị xâm phạm.",
+    ],
+    "hop_dong": [
+        "Thu thập toàn bộ bằng chứng vi phạm: hợp đồng gốc, email, tin nhắn, biên bản bàn giao, hóa đơn thanh toán.",
+        "Gửi thông báo vi phạm bằng văn bản có xác nhận nhận (bưu điện hoặc email với dấu nhận).",
+        "Tính toán thiệt hại thực tế và mức phạt vi phạm theo điều khoản hợp đồng đã ký.",
+        "Cân nhắc thương lượng/hòa giải trước khi khởi kiện để tiết kiệm thời gian và chi phí.",
+        "Khởi kiện tại tòa có thẩm quyền trong thời hiệu: 2 năm (thương mại), 3 năm (dân sự).",
+    ],
+    "lao_dong": [
+        "Thu thập hợp đồng lao động, phụ lục, bảng lương, quyết định sa thải/kỷ luật và sổ BHXH.",
+        "Nộp đơn khiếu nại lên Phòng Lao động — Thương binh và Xã hội trong vòng 1 năm từ ngày phát sinh tranh chấp.",
+        "Tham gia hòa giải qua Hội đồng hòa giải lao động cơ sở (bắt buộc với một số loại tranh chấp).",
+        "Khởi kiện ra TAND cấp huyện nếu hòa giải không thành.",
+    ],
+    "gia_dinh": [
+        "Nộp đơn yêu cầu ly hôn tại TAND cấp huyện nơi bị đơn cư trú, kèm giấy đăng ký kết hôn.",
+        "Chuẩn bị tài liệu chứng minh điều kiện chăm sóc con: thu nhập, chỗ ở, thời gian dành cho con.",
+        "Lập danh sách tài sản chung và riêng kèm chứng từ để phân chia theo thỏa thuận hoặc quyết định tòa.",
+        "Tham gia hòa giải tại tòa (miễn phí và bắt buộc) trước khi tòa ra phán quyết chính thức.",
+    ],
+    "dan_su": [
+        "Xác định thời hiệu khởi kiện: thường 3 năm kể từ ngày biết quyền bị xâm phạm (Điều 429 BLDS 2015).",
+        "Thu thập bằng chứng về quyền sở hữu, thừa kế: di chúc, giấy khai sinh, hợp đồng, biên lai.",
+        "Lập biên bản ghi nhận tình trạng tài sản hiện tại có chữ ký các bên hoặc nhân chứng.",
+        "Nộp đơn khởi kiện tại TAND cấp huyện nơi bị đơn cư trú.",
+    ],
+    "doanh_nghiep": [
+        "Kiểm tra điều lệ công ty và biên bản họp HĐQT/HĐTV để xác định thẩm quyền và trình tự đúng.",
+        "Thu thập bằng chứng vi phạm nghĩa vụ của cổ đông/thành viên (biên bản họp, email, hợp đồng).",
+        "Triệu tập cuộc họp bất thường theo đúng thủ tục nếu cần ra quyết định khẩn.",
+        "Khởi kiện tại Tòa kinh tế TAND nếu tranh chấp nội bộ không tự giải quyết được.",
+    ],
+    "hinh_su": [
+        "Liên hệ luật sư bào chữa ngay — người bị tạm giữ có quyền có luật sư từ lần đầu hỏi cung.",
+        "Không khai báo bất kỳ điều gì khi chưa có mặt luật sư — đây là quyền hợp pháp theo BLTTHS 2015.",
+        "Yêu cầu cơ quan điều tra cung cấp quyết định khởi tố và các tài liệu tố tụng liên quan.",
+    ],
+    "hanh_chinh": [
+        "Nộp đơn khiếu nại lần đầu đến người ban hành quyết định trong vòng 90 ngày kể từ ngày nhận quyết định.",
+        "Nếu không đồng ý với kết quả khiếu nại lần đầu, tiếp tục khiếu nại lần hai hoặc khởi kiện ra tòa hành chính.",
+        "Thu thập đầy đủ quyết định hành chính, biên bản làm việc và các văn bản liên quan.",
+    ],
+}
+
+
 def _generate_recommendations(
-    plan: QueryPlan, strength: str, risks: List[str]
+    plan: QueryPlan,
+    strength: str,
+    risks: List[str],
+    evidence_context: Any = None,
 ) -> List[str]:
     actions: List[str] = []
-    if strength == "Yếu":
-        actions.append("Tư vấn ngay với luật sư chuyên môn trước khi thực hiện bất kỳ hành động pháp lý nào.")
+
+    # Domain-specific primary actions (most relevant, situation-grounded)
+    domain_acts = _DOMAIN_RECOMMENDED_ACTIONS.get(plan.detected_domain, [])
+    actions.extend(domain_acts[:3])
+
+    # Evidence gap: add actions only for HIGH-priority missing items not already covered
+    if evidence_context and evidence_context.missing_evidence:
+        high_missing = [
+            e for e in evidence_context.missing_evidence if e.priority == "high"
+        ][:2]
+        for e in high_missing:
+            candidate = f"Thu thập và bổ sung: {e.title}."
+            if candidate not in actions:
+                actions.append(candidate)
+
+    # Risk-triggered action
     if risks:
-        actions.append("Khắc phục các rủi ro pháp lý đã phát hiện trước khi tiến hành vụ kiện.")
-    if "tranh_chap" in plan.dispute_type:
-        actions.append("Thu thập đầy đủ tài liệu, hợp đồng, biên lai và bằng chứng liên quan.")
-        actions.append("Cân nhắc hòa giải trước khi khởi kiện để tiết kiệm thời gian và chi phí.")
-    if plan.detected_domain == "dat_dai":
-        actions.append("Kiểm tra tính hợp pháp của giấy tờ đất và đối chiếu với bản đồ địa chính.")
-    actions.append("Theo dõi thời hiệu khởi kiện để không bỏ lỡ quyền lợi pháp lý.")
-    return actions[:5]
+        actions.append(
+            "Khắc phục ngay các rủi ro pháp lý đã phát hiện — "
+            "đặc biệt là giao dịch chưa công chứng hoặc thiếu chứng từ thanh toán."
+        )
+
+    # Strength-dependent safety net
+    if strength == "Yếu":
+        actions.append(
+            "Tư vấn luật sư chuyên ngành trước khi thực hiện bất kỳ hành động pháp lý nào "
+            "để tránh sai sót về thủ tục."
+        )
+
+    # Universal: statute of limitations reminder
+    actions.append(
+        "Kiểm tra thời hiệu khởi kiện và ghi nhớ: "
+        "quyền khởi kiện sẽ bị mất nếu quá thời hạn mà không có hành động."
+    )
+
+    return actions[:6]
+
+
+_DOMAIN_INTROS = {
+    "dat_dai": (
+        "Tranh chấp đất đai là một trong những vụ kiện phổ biến và phức tạp nhất tại Việt Nam — "
+        "nhưng pháp luật đất đai có quy trình rõ ràng để bảo vệ người có giấy tờ hợp lệ."
+    ),
+    "hop_dong": (
+        "Tranh chấp hợp đồng đòi hỏi phân tích kỹ các điều khoản đã ký kết và bằng chứng vi phạm — "
+        "bên nào giữ được hồ sơ đầy đủ hơn thường có lợi thế lớn trước tòa."
+    ),
+    "lao_dong": (
+        "Người lao động tại Việt Nam được pháp luật bảo vệ mạnh mẽ — "
+        "Bộ luật Lao động 2019 quy định rõ quyền khiếu nại và quy trình bồi thường khi bị sa thải trái luật."
+    ),
+    "gia_dinh": (
+        "Pháp luật hôn nhân và gia đình Việt Nam bảo vệ quyền lợi của cả hai bên và đặc biệt ưu tiên "
+        "lợi ích tốt nhất của con trẻ trong mọi quyết định về quyền nuôi con."
+    ),
+    "dan_su": (
+        "Tranh chấp dân sự và thừa kế cần được xử lý đúng hạn vì có giới hạn thời hiệu khởi kiện — "
+        "thường 3 năm kể từ khi biết quyền bị xâm phạm theo Bộ luật Dân sự 2015."
+    ),
+    "doanh_nghiep": (
+        "Tranh chấp nội bộ doanh nghiệp cần được giải quyết theo đúng trình tự pháp lý và điều lệ công ty — "
+        "sai sót về thủ tục họp và biểu quyết có thể vô hiệu hóa các quyết định quan trọng."
+    ),
+    "hinh_su": (
+        "Vụ việc liên quan đến pháp luật hình sự đòi hỏi sự hỗ trợ của luật sư bào chữa ngay từ giai đoạn đầu — "
+        "mỗi giai đoạn tố tụng có quyền và thời hạn cụ thể cần nắm rõ."
+    ),
+    "hanh_chinh": (
+        "Khiếu nại quyết định hành chính có quy trình bắt buộc với thời hạn nghiêm ngặt — "
+        "Luật Khiếu nại 2011 quy định rõ trình tự khiếu nại lần đầu, lần hai và khởi kiện ra tòa hành chính."
+    ),
+}
+
+_DOMAIN_KEY_ACTIONS = {
+    "dat_dai": (
+        "Bước ưu tiên nhất: nộp đơn yêu cầu hòa giải tại UBND cấp xã — "
+        "đây là thủ tục bắt buộc theo Điều 202 Luật Đất đai trước khi có thể khởi kiện ra tòa."
+    ),
+    "hop_dong": (
+        "Bước ưu tiên nhất: gửi thông báo vi phạm bằng văn bản có xác nhận nhận (bưu điện hoặc email có dấu nhận) — "
+        "đây là căn cứ pháp lý quan trọng chứng minh bạn đã thực hiện đúng nghĩa vụ thông báo."
+    ),
+    "lao_dong": (
+        "Bước ưu tiên nhất: nộp đơn khiếu nại lên Phòng Lao động — Thương binh và Xã hội "
+        "trong vòng 1 năm kể từ ngày phát sinh tranh chấp — đừng để quá thời hiệu."
+    ),
+    "gia_dinh": (
+        "Bước ưu tiên nhất: nộp đơn tại TAND cấp huyện nơi bị đơn cư trú, kèm giấy đăng ký kết hôn và "
+        "giấy khai sinh của con — tòa sẽ tiến hành hòa giải trước khi ra phán quyết."
+    ),
+    "dan_su": (
+        "Bước ưu tiên nhất: xác định thời hiệu khởi kiện (thường 3 năm) và thu thập ngay "
+        "các tài liệu chứng minh quyền sở hữu hoặc quan hệ thừa kế hợp pháp."
+    ),
+    "doanh_nghiep": (
+        "Bước ưu tiên nhất: kiểm tra điều lệ công ty và biên bản họp HĐQT/HĐTV để xác định "
+        "trình tự pháp lý đúng — sai sót về thủ tục có thể làm vô hiệu toàn bộ quyết định."
+    ),
+    "hinh_su": (
+        "Bước ưu tiên nhất: liên hệ luật sư bào chữa ngay — người bị tạm giữ/tạm giam "
+        "có quyền có luật sư từ lần đầu tiên bị hỏi cung theo Bộ luật Tố tụng Hình sự 2015."
+    ),
+    "hanh_chinh": (
+        "Bước ưu tiên nhất: nộp đơn khiếu nại lần đầu đến người đã ban hành quyết định "
+        "trong vòng 90 ngày kể từ ngày nhận quyết định hành chính."
+    ),
+}
 
 
 def _synthesize_assessment(
@@ -825,23 +986,88 @@ def _synthesize_assessment(
     strength: str,
     laws: List[Dict],
     cases: List[Dict],
+    evidence_context: Any = None,
 ) -> str:
     domain_labels = {
         "dat_dai": "đất đai", "hop_dong": "hợp đồng", "lao_dong": "lao động",
         "doanh_nghiep": "doanh nghiệp", "dan_su": "dân sự",
-        "hinh_su": "hình sự", "hanh_chinh": "hành chính",
-        "gia_dinh": "gia đình",
+        "hinh_su": "hình sự", "hanh_chinh": "hành chính", "gia_dinh": "gia đình",
     }
     domain_name = domain_labels.get(plan.detected_domain, plan.detected_domain.replace("_", " "))
-    law_refs = [l.get("law_reference", "") for l in laws[:3] if l.get("law_reference")]
-    law_str = ", ".join(law_refs) if law_refs else "các quy định pháp luật hiện hành"
-    case_ref = f" Tìm thấy {len(cases)} án lệ tương tự có thể tham khảo." if cases else ""
-    asset_str = " Nguyên tắc phân chia tài sản chung của vợ chồng khi ly hôn mặc định là chia đôi có xem xét công sức đóng góp." if (plan.detected_domain in ("gia_dinh", "dan_su") and "ly hôn" in situation.lower()) else ""
 
-    return (
-        f"Tình huống pháp lý liên quan đến lĩnh vực {domain_name}. "
-        f"Vị thế pháp lý được đánh giá là: {strength}. "
-        f"Căn cứ pháp lý chính: {law_str}.{case_ref}{asset_str} "
-        f"Khuyến nghị thu thập đầy đủ bằng chứng và tham khảo ý kiến luật sư "
-        f"trước khi thực hiện các bước pháp lý tiếp theo."
+    # Intro — domain-specific empathetic opener
+    intro = _DOMAIN_INTROS.get(
+        plan.detected_domain,
+        f"Tình huống của bạn liên quan đến lĩnh vực pháp lý {domain_name} tại Việt Nam.",
     )
+
+    # Position paragraph
+    law_refs = [l.get("law_reference", "") for l in laws[:4] if l.get("law_reference")]
+    law_str = ", ".join(law_refs[:3]) if law_refs else "các quy định pháp luật hiện hành"
+    if strength == "Mạnh":
+        position_para = (
+            f"Dựa trên thông tin bạn cung cấp, vị thế pháp lý của bạn được đánh giá là **Mạnh** — "
+            f"hệ thống tìm thấy {len(laws)} văn bản pháp luật liên quan trực tiếp. "
+            f"Căn cứ pháp lý chính bao gồm: {law_str}. "
+            f"Đây là nền tảng tốt để bảo vệ quyền lợi của bạn."
+        )
+    elif strength == "Trung bình":
+        position_para = (
+            f"Vị thế pháp lý của bạn ở mức **Trung bình** — có cơ sở pháp lý ban đầu "
+            f"nhưng cần bổ sung thêm bằng chứng để củng cố lập luận trước tòa. "
+            f"Căn cứ tìm được: {law_str}. "
+            f"Chất lượng hồ sơ chứng cứ sẽ quyết định kết quả cuối cùng."
+        )
+    else:
+        position_para = (
+            f"Vị thế pháp lý hiện tại của bạn còn **Yếu** — cần thu thập thêm tài liệu "
+            f"và củng cố chứng cứ trước khi thực hiện các bước pháp lý. "
+            + (f"Một số văn bản liên quan đã tìm thấy: {law_str}. " if law_refs else "")
+            + "Tư vấn với luật sư chuyên ngành sẽ giúp xác định hướng đi phù hợp nhất."
+        )
+
+    # Evidence snapshot (if available)
+    evidence_para = ""
+    if evidence_context:
+        present_titles = [e.title for e in evidence_context.present_evidence[:3]]
+        high_missing = [e.title for e in evidence_context.missing_evidence if e.priority == "high"][:2]
+        if present_titles:
+            evidence_para = f"Bạn đã có sẵn: {', '.join(present_titles)} — đây là lợi thế quan trọng. "
+        if high_missing:
+            evidence_para += f"Ưu tiên bổ sung ngay: {', '.join(high_missing)}."
+
+    # Cases
+    case_para = (
+        f"Trong hệ thống có {len(cases)} vụ án tương tự có thể tham khảo kết quả và chiến lược xử lý."
+        if cases else ""
+    )
+
+    # Family law asset division note
+    asset_note = ""
+    sit_lower = situation.lower()
+    if plan.detected_domain in ("gia_dinh", "dan_su") and any(
+        kw in sit_lower for kw in ("ly hôn", "ly hon", "tài sản chung", "chia tài sản")
+    ):
+        asset_note = (
+            "Lưu ý quan trọng: theo Điều 59 Luật Hôn nhân và Gia đình 2014, tài sản chung về nguyên tắc "
+            "chia đôi nhưng Tòa sẽ xem xét công sức đóng góp thực tế và hoàn cảnh của từng bên. "
+            "Con dưới 36 tháng tuổi được ưu tiên giao cho mẹ nuôi dưỡng theo Điều 81."
+        )
+
+    # Key action
+    key_action = _DOMAIN_KEY_ACTIONS.get(
+        plan.detected_domain,
+        "Bước quan trọng nhất: tư vấn luật sư chuyên ngành để xác định chiến lược pháp lý phù hợp với tình huống cụ thể của bạn.",
+    )
+
+    parts = [intro, position_para]
+    if evidence_para:
+        parts.append(evidence_para)
+    if asset_note:
+        parts.append(asset_note)
+    if case_para:
+        parts.append(case_para)
+    parts.append(key_action)
+    parts.append("*Phân tích mang tính tham khảo — nên tham vấn luật sư cho vụ việc chính thức.*")
+
+    return "\n\n".join(parts)
