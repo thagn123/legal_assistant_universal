@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+import re
+from dataclasses import dataclass
+from typing import Dict, List
 
 
 @dataclass
@@ -130,16 +131,147 @@ _DOMAIN_ADVICE = {
     "general": "Hãy xác định rõ lĩnh vực pháp lý của vụ việc để nhận được danh sách chứng cứ cụ thể hơn.",
 }
 
+# Phrase-level aliases per category — covers short Vietnamese terms that word-splitting misses.
+# "sổ đỏ" (2+2 chars) would be filtered by len>3 word split, so must be matched as a phrase here.
+_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+    "certificate":    ["sổ đỏ", "sổ hồng", "gcnqsd", "giấy chứng nhận quyền sử dụng đất",
+                       "giấy chứng nhận qsd", "sổ đỏ/sổ hồng"],
+    "payment":        ["biên lai", "chứng từ thanh toán", "hoá đơn", "hoa don", "biên nhận",
+                       "chuyển khoản", "bien lai"],
+    "title":          ["giấy chuyển nhượng", "giấy tay", "văn bản chuyển nhượng",
+                       "hợp đồng mua bán đất", "giấy mua bán"],
+    "confirmation":   ["xác nhận ubnd", "xác nhận ủy ban", "ubnd xã", "ubnd phường",
+                       "xác nhận của ubnd"],
+    "map":            ["bản đồ địa chính", "sơ đồ thửa đất", "bản đồ thửa", "địa chính"],
+    "witness":        ["nhân chứng", "người làm chứng", "người chứng kiến"],
+    "notarized":      ["công chứng", "hợp đồng công chứng", "văn phòng công chứng"],
+    "photo":          ["ảnh chụp", "hình ảnh", "video hiện trạng"],
+    "notice":         ["thông báo tranh chấp", "đơn thông báo", "văn bản thông báo"],
+    # lao_dong
+    "contract":       ["hợp đồng lao động", "hdlđ", "hợp đồng làm việc", "hợp đồng thử việc",
+                       "hợp đồng gốc", "bản hợp đồng"],
+    "termination":    ["quyết định sa thải", "quyết định chấm dứt", "thông báo sa thải",
+                       "quyết định nghỉ việc", "sa thải", "chấm dứt hợp đồng"],
+    "salary":         ["bảng lương", "phiếu lương", "bảng công", "bảng chấm công",
+                       "slip lương", "phiếu công"],
+    "insurance":      ["sổ bảo hiểm", "sổ bhxh", "bhxh", "bảo hiểm xã hội",
+                       "sổ bảo hiểm xã hội"],
+    "rules":          ["nội quy lao động", "nội quy công ty", "quy chế lao động"],
+    "disciplinary":   ["biên bản kỷ luật", "biên bản họp kỷ luật", "quyết định kỷ luật"],
+    "attendance":     ["chấm công", "bảng chấm công", "thẻ chấm công", "log chấm công"],
+    # dan_su / gia_dinh
+    "will":           ["di chúc", "văn bản chia thừa kế", "thoả thuận thừa kế",
+                       "phân chia di sản", "di sản"],
+    "family":         ["giấy khai sinh", "khai sinh", "giấy đăng ký kết hôn",
+                       "đăng ký kết hôn", "giấy tờ gia đình"],
+    "identity":       ["cccd", "cmnd", "căn cước công dân", "chứng minh nhân dân",
+                       "hộ chiếu", "giấy tờ tuỳ thân"],
+    "ownership":      ["chứng nhận sở hữu", "giấy sở hữu", "chứng từ sở hữu"],
+    "marriage":       ["đăng ký kết hôn", "giấy đăng ký kết hôn", "hôn thú", "kết hôn"],
+    "birth":          ["giấy khai sinh", "khai sinh", "giấy sinh"],
+    "divorce":        ["đơn ly hôn", "thoả thuận ly hôn", "quyết định ly hôn", "ly hôn"],
+    "assets":         ["sổ đỏ", "sổ tiết kiệm", "đăng ký xe", "đăng ký ô tô",
+                       "tài sản chung", "tài sản hôn nhân"],
+    "abuse":          ["bạo lực gia đình", "hành vi bạo lực", "chứng cứ bạo lực"],
+    "custody":        ["quyền nuôi con", "nuôi dưỡng con", "chăm sóc con"],
+    # hinh_su
+    "police_report":  ["biên bản công an", "biên bản ghi nhận", "tường trình công an",
+                       "báo cáo công an"],
+    "forensic":       ["giám định pháp y", "kết luận giám định", "biên bản giám định"],
+    "physical":       ["tang vật", "vật chứng", "hiện vật", "tang vật vụ án"],
+    "testimony":      ["lời khai", "nhân chứng khai", "lời khai nhân chứng"],
+    "video":          ["camera", "video", "clip", "ghi hình", "ảnh ghi lại"],
+    "dna":            ["giám định adn", "dấu vân tay", "adn", "xét nghiệm adn"],
+    "medical":        ["bệnh án", "giấy chứng thương", "hồ sơ y tế", "bệnh viện"],
+    "digital":        ["thiết bị điện tử", "điện thoại", "máy tính", "trích xuất dữ liệu"],
+    # hanh_chinh
+    "decision":       ["quyết định hành chính", "quyết định của ubnd", "quyết định xử phạt"],
+    "complaint":      ["đơn khiếu nại", "đơn tố cáo", "đơn khiếu kiện", "đơn kiện"],
+    "response":       ["văn bản trả lời", "công văn trả lời", "trả lời khiếu nại"],
+    "damage":         ["thiệt hại", "tổn thất", "chứng cứ thiệt hại"],
+    "admin_docs":     ["giấy phép", "đăng ký hành chính", "hồ sơ hành chính"],
+    "legal_basis":    ["căn cứ pháp lý", "điều khoản vi phạm", "quy định vi phạm"],
+    # doanh_nghiep
+    "registration":   ["đăng ký kinh doanh", "đăng ký doanh nghiệp", "giấy phép kinh doanh",
+                       "mst", "mã số thuế"],
+    "charter":        ["điều lệ công ty", "điều lệ doanh nghiệp"],
+    "resolution":     ["biên bản họp hđqt", "nghị quyết hđqt", "biên bản đhđcđ",
+                       "nghị quyết đại hội", "biên bản họp"],
+    "share_transfer": ["chuyển nhượng cổ phần", "hợp đồng chuyển nhượng cổ phần",
+                       "góp vốn", "chuyển nhượng vốn"],
+    "financial":      ["báo cáo tài chính", "kiểm toán", "bctc"],
+    "shareholders":   ["danh sách cổ đông", "danh sách thành viên", "sổ cổ đông"],
+    "tax":            ["hồ sơ thuế", "khai thuế", "nộp thuế", "quyết toán thuế"],
+    "proxy":          ["văn bản uỷ quyền", "giấy uỷ quyền", "uỷ quyền"],
+    # general
+    "core_document":  ["hợp đồng", "tài liệu gốc", "văn bản gốc", "chứng từ"],
+    "prior_complaint":["đơn khiếu nại trước", "tố cáo trước đó", "đã khiếu nại"],
+    "communication":  ["email", "tin nhắn", "zalo", "messenger", "chat", "trao đổi"],
+    "income":         ["thu nhập", "lương", "bảng lương", "sao kê tài khoản"],
+    "health":         ["khám sức khoẻ", "bệnh viện", "giấy y tế"],
+    "appendix":       ["phụ lục hợp đồng", "phụ lục", "điều khoản bổ sung"],
+    "delivery":       ["biên bản bàn giao", "bàn giao hàng", "biên bản nghiệm thu"],
+    "inspection":     ["biên bản giám định", "giám định chất lượng", "kiểm tra chất lượng"],
+    "guarantee":      ["bảo lãnh", "thư bảo lãnh", "ký quỹ"],
+}
+
+# Regex patterns to extract "I already have X" claims from the situation narrative.
+_HAS_CLAIM_PATTERNS = [
+    r"(?:tôi|mình|chúng tôi)\s+(?:đã\s+)?(?:có|sẵn có|đang có|đang giữ|giữ|lưu giữ)\s+([^,.\n]{4,80})",
+    r"(?:đã có|hiện có|sẵn có|đang có|hiện đang có)\s+([^,.\n]{4,80})",
+    r"(?:có sẵn|đã lưu giữ|đang lưu giữ)\s+([^,.\n]{4,80})",
+    r"(?:tôi|mình)\s+(?:vẫn|đang)\s+(?:giữ|có)\s+([^,.\n]{4,80})",
+]
+
+
+def _extract_claimed_evidence(situation: str) -> List[str]:
+    """Extract evidence the user claims to already possess from the situation narrative."""
+    claimed: List[str] = []
+    for pattern in _HAS_CLAIM_PATTERNS:
+        for m in re.finditer(pattern, situation, re.IGNORECASE):
+            val = m.group(1).strip().rstrip(".,;")
+            if val:
+                claimed.append(val)
+    return claimed
+
+
+def _phrase_in_text(text: str, phrases: List[str]) -> bool:
+    """Return True if any phrase appears verbatim in text (case-insensitive)."""
+    text_l = text.lower()
+    return any(p.lower() in text_l for p in phrases)
+
+
+def _bigrams(words: List[str]) -> List[str]:
+    return [f"{words[i]} {words[i+1]}" for i in range(len(words) - 1)]
+
 
 def _keywords_match(fact: str, item: EvidenceItem) -> bool:
     fact_lower = fact.lower()
+
+    # 1. Category alias phrases — covers short terms like "sổ đỏ", "di chúc", "bhxh"
+    if item.category and item.category in _CATEGORY_KEYWORDS:
+        if _phrase_in_text(fact_lower, _CATEGORY_KEYWORDS[item.category]):
+            return True
+
     item_lower = item.item.lower()
-    item_category = item.category.lower()
 
+    # 2. Full item name substring match
+    if item_lower in fact_lower:
+        return True
+
+    # 3. Bigram match on content words (len > 2) from item name
+    content_words = [w for w in item_lower.split() if len(w) > 2 and w not in ("/", "-", "(", ")")]
+    if len(content_words) >= 2:
+        for bg in _bigrams(content_words):
+            if bg in fact_lower:
+                return True
+
+    # 4. Word-fragment fallback (original logic) — for single-word or long items
     key_fragments = [w for w in item_lower.split() if len(w) > 3]
-    if item_category:
-        key_fragments.append(item_category)
-
+    if item.category:
+        key_fragments.append(item.category)
+    if not key_fragments:
+        return False
     matches = sum(1 for kw in key_fragments if kw in fact_lower)
     return matches >= max(1, len(key_fragments) // 3)
 
@@ -152,7 +284,12 @@ class EvidenceGapDetector:
         situation: str = "",
     ) -> EvidenceGapResult:
         checklist = _CHECKLISTS.get(domain, _CHECKLISTS["general"])
-        facts_lower = [f.lower() for f in facts]
+
+        # Merge explicit facts with evidence claimed in the situation narrative
+        claimed = _extract_claimed_evidence(situation)
+        all_facts = facts + claimed
+
+        facts_lower = [f.lower() for f in all_facts]
         all_facts_text = " ".join(facts_lower) + " " + situation.lower()
 
         strong_evidence: List[str] = []
@@ -160,14 +297,14 @@ class EvidenceGapDetector:
         missing_evidence: List[EvidenceItem] = []
 
         for item in checklist:
-            matched_facts = [f for f in facts if _keywords_match(f, item)]
+            matched_facts = [f for f in all_facts if _keywords_match(f, item)]
             if matched_facts:
                 if item.priority == "high":
                     strong_evidence.extend(matched_facts)
                 else:
                     weak_evidence.extend(matched_facts)
             else:
-                # Check broader situation text as a fallback weak signal
+                # Broader fallback: check full situation text (catches inline mentions)
                 if _keywords_match(all_facts_text, item):
                     weak_evidence.append(item.item)
                 else:
