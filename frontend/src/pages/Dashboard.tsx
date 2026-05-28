@@ -22,6 +22,9 @@ import {
   Info,
   ChevronRight,
   Loader2,
+  Database,
+  Target,
+  CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -36,6 +39,7 @@ import {
 } from 'recharts';
 import { apiFetch, BehaviorProfile, DigestResponse, FeedItem, FeedResult, getBehaviorProfile, getPersonalizedFeed, LAW_TYPE_LABELS, classifySituation, ClassifyResult, NextBestAction, getNextBestActions } from '../lib/api';
 import { LawTypeBadge } from '../components/ui/Shared';
+import { setStoredSituation } from '../lib/analysisContext';
 
 const FEED_TYPE_ICON: Record<FeedItem['type'], React.ReactNode> = {
   law:       <BookOpen size={14} className="text-blue-400" />,
@@ -65,6 +69,77 @@ const DOMAIN_LABELS: Record<string, string> = {
   hanh_chinh: 'Hành chính', gia_dinh: 'Gia đình', general: 'Chưa xác định',
 };
 
+type LocalDashboardStats = {
+  sessions: number;
+  conversationTurns: number;
+  savedAnalyses: number;
+  daysActive: number;
+  lastActive?: string;
+  domainCounts: Record<string, number>;
+};
+
+const SESSION_STORAGE_KEY = 'lexai_sessions';
+const HISTORY_STORAGE_KEY = 'lexai_analysis_history';
+
+function parseJsonArray<T>(key: string): T[] {
+  try {
+    const value = localStorage.getItem(key);
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function deriveLocalStats(): LocalDashboardStats {
+  const sessions = parseJsonArray<any>(SESSION_STORAGE_KEY);
+  const analyses = parseJsonArray<any>(HISTORY_STORAGE_KEY);
+  const domainCounts: Record<string, number> = {};
+  const activeDays = new Set<string>();
+  let conversationTurns = 0;
+  let lastActive = '';
+
+  const touchDate = (value?: string) => {
+    if (!value) return;
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return;
+    const iso = new Date(parsed).toISOString();
+    activeDays.add(iso.slice(0, 10));
+    if (!lastActive || parsed > Date.parse(lastActive)) lastActive = iso;
+  };
+
+  const touchDomain = (domain?: string) => {
+    if (domain && domain !== 'general') {
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+    }
+  };
+
+  for (const session of sessions) {
+    const turns = Array.isArray(session.turns) ? session.turns : [];
+    conversationTurns += turns.length;
+    touchDomain(session.domain || session.metadata?.domain);
+    touchDate(session.lastActive || session.createdAt || session.date);
+  }
+
+  for (const item of analyses) {
+    touchDomain(item.domain || item.data?.domain || item.data?.query_domain || item.data?.detected_domain);
+    touchDate(item.savedAt);
+  }
+
+  return {
+    sessions: sessions.length,
+    conversationTurns,
+    savedAnalyses: analyses.length,
+    daysActive: activeDays.size,
+    lastActive,
+    domainCounts,
+  };
+}
+
+function toPercent(value: number): string {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
   const [digest, setDigest] = useState<DigestResponse | null>(null);
@@ -72,6 +147,7 @@ export function Dashboard() {
   const [proactive, setProactive] = useState<any[]>([]);
   const [feed, setFeed] = useState<FeedItem[] | null>(null);
   const [feedLoading, setFeedLoading] = useState(true);
+  const [localStats, setLocalStats] = useState<LocalDashboardStats>(() => deriveLocalStats());
 
   // Quick classify widget state
   const [quickInput, setQuickInput] = useState('');
@@ -83,6 +159,7 @@ export function Dashboard() {
 
   async function handleQuickClassify() {
     if (!quickInput.trim()) return;
+    setStoredSituation(quickInput);
     setClassifying(true);
     setClassifyResult(null);
     setNextActions([]);
@@ -107,6 +184,7 @@ export function Dashboard() {
   }
 
   useEffect(() => {
+    setLocalStats(deriveLocalStats());
     apiFetch<DigestResponse>('/recommendations/behavior/digest').then(setDigest).catch(() => {});
     getBehaviorProfile().then(setProfile).catch(() => {});
     apiFetch<any[]>('/recommendations/behavior/proactive?limit=4').then(setProactive).catch(() => {});
@@ -116,13 +194,58 @@ export function Dashboard() {
       .finally(() => setFeedLoading(false));
   }, []);
 
-  const chartData = profile
-    ? Object.entries(profile.law_type_weights)
-        .map(([domain, w]) => ({ name: LAW_TYPE_LABELS[domain] ?? domain, value: Math.round(w * 100) }))
-        .filter(d => d.value > 0)
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 7)
-    : [];
+  const mergedWeights: Record<string, number> = {
+    ...(digest?.law_type_weights || {}),
+    ...(profile?.law_type_weights || {}),
+  };
+  if (Object.keys(mergedWeights).length === 0) {
+    const maxCount = Math.max(...Object.values(localStats.domainCounts), 1);
+    for (const [domain, count] of Object.entries(localStats.domainCounts)) {
+      mergedWeights[domain] = count / maxCount;
+    }
+  }
+
+  const chartData = Object.entries(mergedWeights)
+    .map(([domain, w]) => ({ name: LAW_TYPE_LABELS[domain] ?? DOMAIN_LABELS[domain] ?? domain, value: Math.round(w * 100) }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 7);
+
+  const totalInteractions = Math.max(
+    digest?.total_interactions || 0,
+    profile?.total_interactions || 0,
+    localStats.conversationTurns + localStats.savedAnalyses,
+  );
+  const daysActive = Math.max(digest?.days_active || 0, profile?.days_active || 0, localStats.daysActive);
+  const topDomain = digest?.top_domain && digest.top_domain !== 'general'
+    ? digest.top_domain
+    : profile?.top_domain && profile.top_domain !== 'general'
+      ? profile.top_domain
+      : Object.entries(localStats.domainCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'general';
+  const recommendationScores = [
+    ...(digest?.recommendations || []).map(r => r.score),
+    ...(feed || []).map(item => item.score),
+    ...proactive.map(item => Number(item.score || 0)),
+  ].filter(score => Number.isFinite(score) && score > 0);
+  const averageRecommendationScore = recommendationScores.length
+    ? recommendationScores.reduce((sum, score) => sum + score, 0) / recommendationScores.length
+    : 0;
+  const profileCoverage = (
+    Math.min(totalInteractions, 20) / 20 * 0.45
+    + Math.min(Object.keys(mergedWeights).length, 4) / 4 * 0.3
+    + Math.min(daysActive, 7) / 7 * 0.25
+  );
+  const lastActiveLabel = digest?.last_active_date && digest.last_active_date !== 'N/A'
+    ? digest.last_active_date
+    : localStats.lastActive
+      ? new Date(localStats.lastActive).toLocaleDateString('vi-VN')
+      : 'Chưa có';
+  const recCount = (digest?.recommendations.length || 0) + (feed?.length || 0);
+  const dataSource = totalInteractions > 0
+    ? profile?.total_interactions || digest?.total_interactions
+      ? 'Backend behavior + lịch sử cục bộ'
+      : 'Lịch sử cục bộ'
+    : 'Chưa có dữ liệu';
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500">
@@ -133,7 +256,7 @@ export function Dashboard() {
             <Scale className="text-legal-gold" size={28} />
             LexAI — Trợ Lý Pháp Lý Thông Minh
           </h2>
-          <p className="text-slate-400 mt-1">Hôm nay LexAI có {digest?.recommendations.length || 0} khuyến nghị mới dựa trên hành vi của bạn.</p>
+          <p className="text-slate-400 mt-1">Hôm nay LexAI có {recCount} gợi ý từ dữ liệu hành vi và lịch sử phân tích thực tế.</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -244,30 +367,50 @@ export function Dashboard() {
               Tổng quan hoạt động
             </h3>
             {digest && (
-              <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Cập nhật: {digest.last_active_date}</span>
+              <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Cập nhật: {lastActiveLabel}</span>
             )}
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Tương tác" value={digest?.total_interactions || 0} icon={<Clock size={16} />} />
-            <StatCard label="Ngày hoạt động" value={digest?.days_active || 0} icon={<TrendingUp size={16} />} />
-            <StatCard label="Lĩnh vực chính" value={LAW_TYPE_LABELS[digest?.top_domain || ''] || '...'} icon={<Scale size={16} />} />
-            <StatCard label="Tỷ lệ phù hợp" value="92%" icon={<Sparkles size={16} />} />
+            <StatCard label="Tương tác thật" value={totalInteractions} icon={<Clock size={16} />} />
+            <StatCard label="Ngày hoạt động" value={daysActive} icon={<CalendarDays size={16} />} />
+            <StatCard label="Lĩnh vực chính" value={LAW_TYPE_LABELS[topDomain] || DOMAIN_LABELS[topDomain] || 'Chưa có'} icon={<Scale size={16} />} />
+            <StatCard label="Độ phủ hồ sơ" value={toPercent(profileCoverage)} icon={<Target size={16} />} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <MiniMetric label="Phiên hội thoại" value={localStats.sessions} />
+            <MiniMetric label="Kết quả đã lưu" value={localStats.savedAnalyses} />
+            <MiniMetric label="Điểm gợi ý TB" value={averageRecommendationScore ? toPercent(averageRecommendationScore) : 'Chưa đủ'} />
+          </div>
+
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-slate-400">
+            <Database size={13} className="text-legal-gold" />
+            <span>Nguồn số liệu: {dataSource}. Không còn dùng tỷ lệ demo cố định.</span>
           </div>
 
           <div className="space-y-4">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Khuyến nghị xếp hạng</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {digest?.recommendations.map((rec) => (
-                <div key={rec.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all cursor-pointer group">
+              {(digest?.recommendations || []).length > 0 ? digest?.recommendations.map((rec) => (
+                <button
+                  key={rec.id}
+                  type="button"
+                  onClick={() => navigate(rec.law_type ? '/law-search' : '/profile', { state: { domain: rec.law_type || topDomain } })}
+                  className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all cursor-pointer group text-left"
+                >
                   <div className="flex items-start justify-between mb-2">
                     <span className="px-2 py-0.5 bg-legal-gold/20 text-legal-gold rounded text-[10px] font-bold">{(rec.score * 100).toFixed(0)}%</span>
                     <ArrowRight size={14} className="text-slate-600 group-hover:text-legal-gold" />
                   </div>
                   <h4 className="text-sm font-bold text-white line-clamp-1">{rec.title}</h4>
                   <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 italic">"{rec.reason}"</p>
+                </button>
+              )) : (
+                <div className="col-span-2 rounded-xl border border-dashed border-white/10 bg-white/5 p-5 text-sm text-slate-500">
+                  Chưa đủ lịch sử để xếp hạng khuyến nghị. Hãy phân tích một tình huống hoặc lưu kết quả để Dashboard bắt đầu có số liệu.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -279,7 +422,7 @@ export function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                <XAxis type="number" hide />
+                <XAxis type="number" hide domain={[0, 100]} />
                 <YAxis 
                   dataKey="name" 
                   type="category" 
@@ -315,12 +458,22 @@ export function Dashboard() {
             <div key={item.id} className="glass-card p-6 min-w-[320px] max-w-[320px] flex flex-col shrink-0 hover:border-legal-gold/50 transition-all">
               <div className="flex items-center justify-between mb-4">
                 <LawTypeBadge type={item.law_type} />
-                <button className="text-[10px] text-legal-gold font-bold uppercase tracking-widest hover:underline">{item.action_hint} ↗</button>
+                <button
+                  type="button"
+                  onClick={() => navigate(item.action_url || '/analyze')}
+                  className="text-[10px] text-legal-gold font-bold uppercase tracking-widest hover:underline"
+                >
+                  {item.action_hint} ↗
+                </button>
               </div>
               <h4 className="font-bold text-white mb-2 leading-tight">{item.title}</h4>
               <p className="text-xs text-slate-400 line-clamp-2">{item.reason}</p>
               <div className="mt-auto pt-6">
-                <button className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold hover:bg-white/10 transition-all">
+                <button
+                  type="button"
+                  onClick={() => navigate(item.action_url || '/analyze')}
+                  className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-bold hover:bg-white/10 transition-all"
+                >
                   Chi tiết
                 </button>
               </div>
@@ -392,6 +545,15 @@ function StatCard({ label, value, icon }: { label: string; value: string | numbe
         <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
       </div>
       <p className="text-lg font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-bold text-white">{value}</p>
     </div>
   );
 }

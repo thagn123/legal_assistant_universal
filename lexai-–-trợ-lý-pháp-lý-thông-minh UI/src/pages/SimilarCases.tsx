@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   GitCompare,
   Loader2,
@@ -133,28 +134,78 @@ function QueryBadge({ label, value }: { label: string; value: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const MIN_QUERY_LENGTH = 10;
+
+function getSearchModeLabel(mode: string) {
+  if (mode === 'vector') return 'Ngữ nghĩa';
+  if (mode === 'demo_fallback') return 'Dữ liệu demo';
+  return 'Từ khóa';
+}
+
 export function SimilarCases() {
-  const [situation, setSituation] = useState('');
+  const location = useLocation();
+  const [situation, setSituation] = useState(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    return state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SimilarCasesResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
+  // Pre-fill and auto-run when navigated with context
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    const initialSituation = (state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '').trim();
+    if (initialSituation.length >= MIN_QUERY_LENGTH) {
+      setSituation(initialSituation);
+      sessionStorage.setItem('lexai_current_situation', initialSituation);
+
+      const runAuto = async () => {
+        setLoading(true);
+        setResult(null);
+        setError('');
+        setSaved(false);
+        try {
+          const r = await getSimilarCases(initialSituation);
+          setResult(r);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Không thể kết nối máy chủ. Vui lòng thử lại.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      runAuto();
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
   async function handleSearch() {
-    if (!situation.trim()) return;
+    const query = situation.trim();
+    if (!query) {
+      setError('Nhập mô tả tình huống để tìm vụ việc tương tự.');
+      return;
+    }
+    if (query.length < MIN_QUERY_LENGTH) {
+      setError(`Mô tả cần ít nhất ${MIN_QUERY_LENGTH} ký tự để kết quả có ý nghĩa.`);
+      return;
+    }
+    sessionStorage.setItem('lexai_current_situation', query);
     setLoading(true);
     setResult(null);
     setError('');
     setSaved(false);
     try {
-      const r = await getSimilarCases(situation.trim());
+      const r = await getSimilarCases(query);
       setResult(r);
-    } catch {
-      setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không thể kết nối máy chủ. Vui lòng thử lại.');
     } finally {
       setLoading(false);
     }
   }
+
+  const canSearch = situation.trim().length >= MIN_QUERY_LENGTH && !loading;
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -174,7 +225,10 @@ export function SimilarCases() {
         <label className="text-sm font-semibold text-white">Mô tả tình huống của bạn</label>
         <textarea
           value={situation}
-          onChange={e => setSituation(e.target.value)}
+          onChange={e => {
+            setSituation(e.target.value);
+            if (error) setError('');
+          }}
           onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSearch(); }}
           placeholder="Ví dụ: Tôi bị công ty sa thải không báo trước, không trả lương tháng cuối và không chi trả trợ cấp thôi việc..."
           rows={3}
@@ -183,7 +237,7 @@ export function SimilarCases() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleSearch}
-            disabled={loading || !situation.trim()}
+            disabled={!canSearch}
             className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy font-bold rounded-xl disabled:opacity-40 hover:scale-105 active:scale-95 transition-all text-sm"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <GitCompare size={16} />}
@@ -206,7 +260,7 @@ export function SimilarCases() {
           <div className="glass-card p-4 flex flex-wrap gap-x-6 gap-y-2 items-center">
             <QueryBadge label="Lĩnh vực" value={result.query_domain_label} />
             <QueryBadge label="Giai đoạn" value={result.query_stage_label} />
-            <QueryBadge label="Tìm kiếm" value={result.search_mode === 'vector' ? 'Ngữ nghĩa' : 'Từ khóa'} />
+            <QueryBadge label="Tìm kiếm" value={getSearchModeLabel(result.search_mode)} />
             <span className="text-xs text-slate-400 italic flex-1 min-w-0 truncate">{result.summary}</span>
             <button
               onClick={() => {
@@ -242,6 +296,7 @@ export function SimilarCases() {
         <div className="py-20 flex flex-col items-center text-center space-y-3 opacity-30">
           <GitCompare size={64} className="text-slate-500" />
           <p className="text-sm font-bold text-slate-500">Nhập tình huống để tìm vụ việc có điểm tương đồng</p>
+          <p className="text-xs text-slate-600">Cần tối thiểu {MIN_QUERY_LENGTH} ký tự để tránh kết quả nhầm từ câu hỏi quá ngắn.</p>
         </div>
       )}
     </div>

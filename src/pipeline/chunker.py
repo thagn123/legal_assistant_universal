@@ -728,6 +728,17 @@ def _block_text(b) -> str:
 
 def _build_path(article: Article, document: CanonicalDocument) -> List[str]:
     path = []
+    
+    doc_title = (document.metadata.title or document.source_filename or "").strip()
+    if doc_title:
+        import os
+        doc_title_clean = os.path.basename(doc_title)
+        for ext in (".pdf", ".docx", ".txt", ".html"):
+            if doc_title_clean.lower().endswith(ext):
+                doc_title_clean = doc_title_clean[:-len(ext)]
+        if doc_title_clean:
+            path.append(doc_title_clean)
+
     if article.parent_section_id:
         for sec in document.sections:
             if sec.section_id == article.parent_section_id:

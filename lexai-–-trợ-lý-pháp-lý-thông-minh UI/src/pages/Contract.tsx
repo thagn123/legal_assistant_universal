@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -44,8 +45,39 @@ const analysis_stages = [
   { id: 6, name: 'Validation' },
 ];
 
+interface IsolatedTextAreaProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}
+
+function IsolatedTextArea({ value, onChange, placeholder, rows = 3, className }: IsolatedTextAreaProps) {
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  return (
+    <textarea
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onChange(text)}
+      placeholder={placeholder}
+      rows={rows}
+      className={className}
+    />
+  );
+}
+
 export function Contract() {
-  const [content, setContent] = useState('');
+  const location = useLocation();
+  const [content, setContent] = useState(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    return state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
   const [type, setType] = useState('thue_nha');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
@@ -56,6 +88,17 @@ export function Contract() {
   const [uploadedFilename, setUploadedFilename] = useState('');
   const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pre-fill when navigated with context
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    const initialSituation = state?.situation || state?.prefill?.situation;
+    if (initialSituation) {
+      setContent(initialSituation);
+      sessionStorage.setItem('lexai_current_situation', initialSituation);
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
 
   const handleFileExtract = useCallback(async (file: File) => {
     setExtractError('');
@@ -130,8 +173,13 @@ export function Contract() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   const handleAnalyze = async () => {
     if (!content.trim()) return;
+    sessionStorage.setItem('lexai_current_situation', content.trim());
 
     setResult(null);
     setIsAnalyzing(true);
@@ -163,7 +211,13 @@ export function Contract() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="space-y-2">
+      {/* Print Header */}
+      <div className="hidden print:block print-header">
+        <h1 className="text-2xl font-bold text-slate-800">LexAI — BÁO CÁO PHÂN TÍCH HỢP ĐỒNG</h1>
+        <p className="text-xs text-slate-500 mt-1">Dự án Universal Legal Knowledge Assistant (ULKA) · Trích xuất từ LexAI Intelligence</p>
+      </div>
+
+      <div className="space-y-2 no-print">
         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
           <FileText className="text-legal-gold" size={28} />
           Rà soát hợp đồng thông minh
@@ -172,7 +226,7 @@ export function Contract() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
+        <div className={cn("lg:col-span-2 space-y-6", result ? "no-print" : "")}>
           <div className="glass-card p-8 space-y-6">
             <div className="space-y-4">
               {/* FILE UPLOAD ZONE */}
@@ -225,9 +279,9 @@ export function Contract() {
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nội dung hợp đồng</label>
                 <span className="text-[10px] text-slate-500 font-mono">{content.length} ký tự</span>
               </div>
-              <textarea
+              <IsolatedTextArea
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={setContent}
                 placeholder="Dán nội dung hợp đồng vào đây — hệ thống sẽ phân tích theo pháp luật Việt Nam..."
                 className="w-full h-[400px] bg-legal-navy/50 border border-white/10 rounded-xl p-6 text-sm font-mono text-slate-300 focus:border-legal-gold focus:ring-1 focus:ring-legal-gold transition-all resize-none leading-relaxed"
               />
@@ -387,9 +441,14 @@ export function Contract() {
                      </div>
                    ))}
                 </div>
-                <button onClick={downloadReport} className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-3 transition-all">
-                  <Download size={16} /> Tải báo cáo phân tích
-                </button>
+                <div className="grid grid-cols-2 gap-3 no-print">
+                  <button onClick={downloadReport} className="py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all">
+                    <Download size={14} /> File .TXT
+                  </button>
+                  <button onClick={handlePrint} className="py-3 bg-legal-gold text-legal-navy hover:bg-legal-gold-light rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-legal-gold/10">
+                    <FileText size={14} /> Xuất PDF
+                  </button>
+                </div>
                 <button
                   onClick={() => {
                     const title = uploadedFilename || content.slice(0, 60) || 'Hợp đồng';
@@ -397,7 +456,7 @@ export function Contract() {
                     setSaved(true);
                   }}
                   disabled={saved}
-                  className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-60 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30"
+                  className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-60 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 no-print"
                 >
                   {saved ? <><Check size={16} className="text-green-400" /> Đã lưu vào lịch sử</> : <><Bookmark size={16} /> Lưu vào lịch sử</>}
                 </button>
@@ -406,7 +465,7 @@ export function Contract() {
 
            {/* TOOL CALLS */}
            {result && (
-             <div className="glass-card p-6 space-y-6">
+             <div className="glass-card p-6 space-y-6 no-print">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <Zap className="text-legal-success" size={14} fill="currentColor" />

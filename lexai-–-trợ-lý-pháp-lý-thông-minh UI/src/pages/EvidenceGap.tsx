@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Search,
   Loader2,
@@ -129,19 +130,81 @@ function EvidenceStrengthSection({
   );
 }
 
+interface IsolatedTextAreaProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}
+
+function IsolatedTextArea({ value, onChange, placeholder, rows = 3, className }: IsolatedTextAreaProps) {
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  return (
+    <textarea
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onChange(text)}
+      placeholder={placeholder}
+      rows={rows}
+      className={className}
+    />
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function EvidenceGap() {
-  const [situation, setSituation] = useState('');
-  const [domain, setDomain]       = useState('general');
+  const location = useLocation();
+  const [situation, setSituation] = useState(() => {
+    return location.state?.situation || location.state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
+  const [domain, setDomain]       = useState(() => {
+    return location.state?.prefill?.domain || 'general';
+  });
   const [factsText, setFactsText] = useState('');
   const [loading, setLoading]     = useState(false);
   const [result, setResult]       = useState<EvidenceGapResult | null>(null);
   const [error, setError]         = useState('');
   const [saved, setSaved]         = useState(false);
 
+  // Pre-fill and auto-run when navigated with context
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string; domain?: string } } | null;
+    const initialSituation = state?.situation || state?.prefill?.situation;
+    if (initialSituation) {
+      setSituation(initialSituation);
+      sessionStorage.setItem('lexai_current_situation', initialSituation);
+      const dom = state?.prefill?.domain || 'general';
+      setDomain(dom);
+      
+      const runAuto = async () => {
+        setLoading(true);
+        setResult(null);
+        setError('');
+        setSaved(false);
+        try {
+          const r = await getEvidenceGap(initialSituation.trim(), dom, []);
+          setResult(r);
+        } catch {
+          setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      runAuto();
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
   async function handleCheck() {
     if (!situation.trim()) return;
+    sessionStorage.setItem('lexai_current_situation', situation.trim());
     setLoading(true);
     setResult(null);
     setError('');
@@ -171,8 +234,14 @@ export function EvidenceGap() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      {/* Print Header */}
+      <div className="hidden print:block print-header">
+        <h1 className="text-2xl font-bold text-slate-800">LexAI — BÁO CÁO RÀ SOÁT CHỨNG CỨ</h1>
+        <p className="text-xs text-slate-500 mt-1">Dự án Universal Legal Knowledge Assistant (ULKA) · Phân tích độ phủ & danh mục chứng cứ</p>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 no-print">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
           <FileSearch size={20} className="text-legal-gold" />
         </div>
@@ -183,12 +252,12 @@ export function EvidenceGap() {
       </div>
 
       {/* Input card */}
-      <div className="glass-card p-6 space-y-4">
+      <div className={cn("glass-card p-6 space-y-4", result ? "no-print" : "")}>
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Mô tả tình huống</label>
-          <textarea
+          <IsolatedTextArea
             value={situation}
-            onChange={e => setSituation(e.target.value)}
+            onChange={setSituation}
             placeholder="Ví dụ: Tôi mua đất bằng giấy tay năm 2020, bên bán đang đòi lại..."
             rows={3}
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 transition-colors"
@@ -212,9 +281,9 @@ export function EvidenceGap() {
             <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Chứng cứ đã có (mỗi dòng một mục)
             </label>
-            <textarea
+            <IsolatedTextArea
               value={factsText}
-              onChange={e => setFactsText(e.target.value)}
+              onChange={setFactsText}
               placeholder={'Ví dụ:\nGiấy tờ mua bán viết tay\nBiên lai chuyển khoản'}
               rows={3}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 transition-colors"
@@ -246,16 +315,24 @@ export function EvidenceGap() {
           <div className="glass-card p-5 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <CoverageBar score={result.coverage_score} />
-              <button
-                onClick={() => {
-                  saveAnalysis({ type: 'evidence_gap', title: situation.slice(0, 80), domain, summary: result.summary, data: result });
-                  setSaved(true);
-                }}
-                disabled={saved}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
-              >
-                {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu kết quả</>}
-              </button>
+              <div className="flex gap-2 no-print">
+                <button
+                  onClick={() => {
+                    saveAnalysis({ type: 'evidence_gap', title: situation.slice(0, 80), domain, summary: result.summary, data: result });
+                    setSaved(true);
+                  }}
+                  disabled={saved}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-white/5 border-white/10 text-slate-400 hover:text-legal-gold hover:border-legal-gold/30 disabled:opacity-60"
+                >
+                  {saved ? <><Check size={12} className="text-green-400" /> Đã lưu</> : <><Bookmark size={12} /> Lưu kết quả</>}
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-legal-gold text-legal-navy hover:bg-legal-gold-light shadow-lg shadow-legal-gold/10"
+                >
+                  In / Xuất PDF
+                </button>
+              </div>
             </div>
             <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
             <div className="flex gap-4 text-xs flex-wrap">

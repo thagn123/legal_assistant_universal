@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   UserCircle,
   TrendingUp,
@@ -44,6 +45,7 @@ const ROLE_OPTIONS = [
 const ROLE_STORAGE_KEY = 'lexai_user_role';
 
 export function Profile() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [peers, setPeers] = useState<any[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>(() => localStorage.getItem(ROLE_STORAGE_KEY) || '');
@@ -109,7 +111,11 @@ export function Profile() {
            </div>
         </div>
 
-        <button className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
+        <button
+          type="button"
+          onClick={() => document.getElementById('role-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="px-8 py-3 bg-white/5 border border-white/10 rounded-xl font-bold text-sm hover:bg-white/10 transition-all"
+        >
            Chỉnh sửa hồ sơ
         </button>
       </div>
@@ -227,7 +233,11 @@ export function Profile() {
                  </div>
                  <h4 className="font-bold text-white text-lg">{LAW_TYPE_LABELS[d]}</h4>
                  <p className="text-xs text-slate-400 mt-2 mb-6">Mở rộng hồ sơ năng lực pháp lý của bạn ở mảng {LAW_TYPE_LABELS[d].toLowerCase()}.</p>
-                 <button className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline">
+                 <button
+                    type="button"
+                    onClick={() => navigate('/law-search', { state: { domain: d, situation: LAW_TYPE_LABELS[d] } })}
+                    className="mt-auto flex items-center gap-2 text-xs font-bold text-legal-gold hover:underline"
+                 >
                     Khám phá ngay <ArrowRight size={14} />
                  </button>
               </div>
@@ -236,7 +246,7 @@ export function Profile() {
       </div>
 
       {/* ROLE SELECTION */}
-      <div className="glass-card p-8 space-y-6">
+      <div id="role-section" className="glass-card p-8 space-y-6 scroll-mt-24">
         <div className="flex items-center gap-2">
           <Briefcase className="text-legal-gold" size={20} />
           <h3 className="text-lg font-bold text-white">Vai trò của bạn</h3>

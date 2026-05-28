@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Gavel,
   Loader2,
@@ -166,6 +166,33 @@ const SAMPLE_CLAUSES = [
   'Mọi quyền sở hữu trí tuệ phát sinh trong quá trình thực hiện hợp đồng thuộc về Bên A, Bên B không bảo lưu bất kỳ quyền nào.',
 ];
 
+interface IsolatedTextAreaProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}
+
+function IsolatedTextArea({ value, onChange, placeholder, rows = 3, className }: IsolatedTextAreaProps) {
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  return (
+    <textarea
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onChange(text)}
+      placeholder={placeholder}
+      rows={rows}
+      className={className}
+    />
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ClauseCoach() {
@@ -211,9 +238,9 @@ export function ClauseCoach() {
           <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
             Điều khoản cần phân tích
           </label>
-          <textarea
+          <IsolatedTextArea
             value={clauseText}
-            onChange={e => setClauseText(e.target.value)}
+            onChange={setClauseText}
             placeholder="Dán điều khoản hợp đồng vào đây..."
             rows={5}
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 transition-colors"

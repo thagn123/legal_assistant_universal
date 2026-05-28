@@ -31,7 +31,12 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-6">
-        <button className="relative text-slate-400 hover:text-white transition-colors">
+        <button
+          type="button"
+          onClick={() => window.alert('Chưa có thông báo mới. LexAI sẽ hiển thị nhắc việc và cập nhật hồ sơ tại đây.')}
+          className="relative text-slate-400 hover:text-white transition-colors"
+          aria-label="Mở thông báo"
+        >
           <Bell size={20} />
           <span className="absolute top-0 right-0 w-2 h-2 bg-legal-danger rounded-full border-2 border-legal-navy" />
         </button>

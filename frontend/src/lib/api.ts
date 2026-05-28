@@ -215,10 +215,21 @@ export interface DigestResponse {
   total_interactions: number;
   days_active: number;
   last_active_date: string;
+  law_type_weights?: Record<string, number>;
+  active_hours?: number[];
+  source?: string;
+  activity_last_7_days?: {
+    total: number;
+    by_action: Record<string, number>;
+  };
   recommendations: Array<{
     id: string;
+    type?: string;
+    law_type?: string | null;
     title: string;
     reason: string;
+    description?: string;
+    action_hint?: string;
     score: number;
   }>;
 }
@@ -403,7 +414,7 @@ function transformProfile(raw: any): UserProfile {
 }
 
 function transformDigest(raw: any): DigestResponse {
-  const profile = raw.profile || raw;
+  const profile = raw.profile_summary || raw.profile || raw;
   let lastActive = 'N/A';
   const isoStr = profile.last_active_iso || profile.last_active || raw.last_active_date;
   if (isoStr) {
@@ -418,10 +429,18 @@ function transformDigest(raw: any): DigestResponse {
     total_interactions: profile.total_interactions ?? raw.total_interactions ?? 0,
     days_active: profile.days_active ?? raw.days_active ?? 0,
     last_active_date: lastActive,
+    law_type_weights: profile.law_type_weights || raw.law_type_weights || {},
+    active_hours: profile.active_hours || raw.active_hours || [],
+    source: raw.source || (raw.profile_summary ? 'behavior' : undefined),
+    activity_last_7_days: raw.activity_last_7_days,
     recommendations: (raw.recommendations || []).slice(0, 6).map((r: any, i: number) => ({
       id: r.rec_id || r.id || `rec-${i}`,
+      type: r.rec_type || r.type,
+      law_type: r.law_type ?? null,
       title: r.title || '',
       reason: r.reason || '',
+      description: r.description || '',
+      action_hint: r.action_hint || '',
       score: r.score ?? 0,
     })),
   };
@@ -484,15 +503,25 @@ function applyTransform(path: string, method: string, raw: any): any {
 }
 
 // REAL API INTERFACE
+export function friendlyApiError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return 'Khong the ket noi may chu. Vui long kiem tra API va thu lai.';
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-ID': getUserId(),
-      ...(options.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-ID': getUserId(),
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error('Khong the ket noi backend LexAI. Neu ban dang test tren Vercel, hay kiem tra VITE_API_URL va trang thai API.');
+  }
 
   if (!res.ok) {
     let detail = res.statusText;
@@ -547,14 +576,19 @@ export interface AdminStats {
 
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const adminKey = getAdminKey() || '';
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'X-Admin-Key': adminKey,
-      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(options.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'X-Admin-Key': adminKey,
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error('Khong the ket noi backend LexAI. Kiem tra VITE_API_URL hoac API dang chay.');
+  }
 
   if (!res.ok) {
     let detail = res.statusText;

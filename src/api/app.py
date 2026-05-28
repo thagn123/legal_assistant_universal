@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -114,15 +115,25 @@ def create_app(
     # Tests can inject a deterministic bundle_provider; in that mode MongoDB is
     # intentionally skipped so in-process API tests stay isolated and fast.
     should_use_mongodb = use_mongodb and bundle_provider is None
+    app.state.mongodb_enabled = should_use_mongodb
     if should_use_mongodb:
         if mongo_ping():
             logger.info("MongoDB connected — initialising VectorStorage.")
             vs = VectorStorage()
-            vs.setup_indexes()
+            if os.getenv("LEXAI_SETUP_MONGO_INDEXES", "0") == "1":
+                try:
+                    vs.setup_indexes()
+                except Exception as exc:
+                    logger.warning("MongoDB index setup failed; continuing with runtime fallbacks: %s", exc)
+            else:
+                logger.info("MongoDB startup index setup skipped. Set LEXAI_SETUP_MONGO_INDEXES=1 to create indexes.")
             app.state.vector_storage = vs
 
             from src.memory.session_store import SessionStore
-            SessionStore().setup_indexes()
+            try:
+                SessionStore().setup_indexes()
+            except Exception as exc:
+                logger.warning("MongoDB session index setup failed; continuing without startup indexes: %s", exc)
 
             # Seed data is pre-loaded; skip auto-seed at startup to avoid
             # SentenceTransformer model-load segfault on first import.

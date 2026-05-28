@@ -24,7 +24,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { getActionPlan, ActionPlanResult, ActionItem, saveAnalysis } from '../lib/api';
-import { getContextSummary } from '../lib/analysisContext';
+import { useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -203,7 +203,7 @@ function PrioritySection({
 
 export function Actions() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => getContextSummary(location.state));
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ActionPlanResult | null>(null);
   const [error, setError] = useState('');

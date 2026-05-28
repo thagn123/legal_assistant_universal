@@ -268,6 +268,35 @@ class BehaviorRecommender:
                     action_hint=f"Tìm hiểu các văn bản pháp lý cơ bản về {_law_label(lt)}",
                 ))
 
+        # ── Web Search Alert: Cost-free DuckDuckGo live updates ────────────────
+        if profile.top_law_type and profile.top_law_type != "general":
+            from src.utils.web_search import search_duckduckgo_free
+            
+            domain_label = _law_label(profile.top_law_type)
+            search_query = f"\"mới nhất\" site:thuvienphapluat.vn \"{domain_label}\""
+            try:
+                search_results = search_duckduckgo_free(search_query, limit=2)
+                for j, res in enumerate(search_results):
+                    title = res["title"]
+                    if " - Thư Viện Pháp Luật" in title:
+                        title = title.replace(" - Thư Viện Pháp Luật", "")
+                    if "Thư Viện Pháp Luật" in title:
+                        title = title.replace("Thư Viện Pháp Luật", "")
+                    title = title.strip(" -|")
+                    
+                    recs.append(BehaviorRecommendation(
+                        rec_id=f"web_alert_{profile.top_law_type}_{j}",
+                        rec_type="proactive",
+                        title=f"Cập nhật: {title[:75]}...",
+                        description=res["snippet"] or f"Tin tức trực tuyến mới nhận về lĩnh vực {domain_label}.",
+                        law_type=profile.top_law_type,
+                        score=round(max(0.65, 0.85 - j * 0.1), 3),
+                        reason=f"Phát hiện tin tức pháp lý trực tuyến mới liên quan đến lĩnh vực quan tâm nhất của bạn ({domain_label}).",
+                        action_hint=f"Xem nguồn: {res['url']}",
+                    ))
+            except Exception as e:
+                logger.warning("Failed to fetch proactive web alert: %s", e)
+
         recs.sort(key=lambda r: r.score, reverse=True)
         return recs[:limit]
 

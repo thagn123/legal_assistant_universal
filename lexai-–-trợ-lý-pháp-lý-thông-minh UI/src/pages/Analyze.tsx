@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Search,
   ChevronRight,
@@ -91,9 +92,70 @@ const stages_list = [
   { id: 7, name: 'Persist' },
 ];
 
+interface ChatInputProps {
+  onAnalyze: (text: string) => void;
+  isAnalyzing: boolean;
+  evidenceUploading: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  handleFileAttach: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, handleFileAttach }: ChatInputProps) {
+  const [text, setText] = useState('');
+
+  const handleSubmit = () => {
+    if (!text.trim() || isAnalyzing) return;
+    onAnalyze(text);
+    setText('');
+  };
+
+  return (
+    <div className="relative group">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit();
+          }
+        }}
+        placeholder="Nhập câu hỏi hoặc tình huống pháp lý..."
+        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-28 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
+        rows={2}
+      />
+      <div className="absolute right-4 bottom-4 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isAnalyzing || evidenceUploading}
+          title="Đính kèm tài liệu bổ sung"
+          className="w-9 h-9 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all"
+        >
+          {evidenceUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isAnalyzing || !text.trim()}
+          className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+        >
+          <Send size={20} />
+        </button>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.docx,.doc,.txt"
+        className="hidden"
+        onChange={handleFileAttach}
+      />
+    </div>
+  );
+}
+
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
-  const [situation, setSituation] = useState('');
   const [userRole, setUserRole] = useState('nguyen_don');
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -125,13 +187,12 @@ export function Analyze() {
     }
   }, [history, isAnalyzing, activeTab, selectedSession]);
 
-  const handleAnalyze = async () => {
-    if (!situation.trim()) return;
+  const handleAnalyze = async (text: string) => {
+    if (!text.trim()) return;
 
-    const currentSituation = situation;
+    const currentSituation = text;
     const userMessage: ChatTurn = { role: 'user', content: currentSituation };
     setHistory(prev => [...prev, userMessage]);
-    setSituation('');
 
     // Greetings / small-talk — respond locally without calling the API
     if (_isChitchat(currentSituation)) {
@@ -324,7 +385,11 @@ export function Analyze() {
                         {turn.content}
                       </div>
                     ) : turn.result ? (
-                      <AIResponseCard result={turn.result} />
+                      <AIResponseCard 
+                        result={turn.result} 
+                        onSelectQuestion={handleAnalyze} 
+                        userSituation={idx > 0 ? history[idx - 1]?.content : ''} 
+                      />
                     ) : turn.content ? (
                       <AssistantBubble content={turn.content} />
                     ) : null}
@@ -363,7 +428,11 @@ export function Analyze() {
                           {turn.content}
                         </div>
                       ) : turn.result ? (
-                        <AIResponseCard result={turn.result} />
+                        <AIResponseCard 
+                          result={turn.result} 
+                          onSelectQuestion={handleAnalyze} 
+                          userSituation={idx > 0 ? selectedSession.turns[idx - 1]?.content : ''} 
+                        />
                       ) : turn.content ? (
                         <AssistantBubble content={turn.content} />
                       ) : null}
@@ -422,45 +491,13 @@ export function Analyze() {
             </div>
           )}
 
-          <div className="relative group">
-            <textarea
-              value={situation}
-              onChange={(e) => setSituation(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleAnalyze();
-                }
-              }}
-              placeholder="Nhập câu hỏi hoặc tình huống pháp lý..."
-              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-28 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
-              rows={2}
-            />
-            <div className="absolute right-4 bottom-4 flex items-center gap-2">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isAnalyzing || evidenceUploading}
-                title="Đính kèm tài liệu bổ sung"
-                className="w-9 h-9 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all"
-              >
-                {evidenceUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
-              </button>
-              <button
-                onClick={handleAnalyze}
-                disabled={isAnalyzing || !situation.trim()}
-                className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.doc,.txt"
-              className="hidden"
-              onChange={handleFileAttach}
-            />
-          </div>
+          <ChatInput
+            onAnalyze={handleAnalyze}
+            isAnalyzing={isAnalyzing}
+            evidenceUploading={evidenceUploading}
+            fileInputRef={fileInputRef}
+            handleFileAttach={handleFileAttach}
+          />
         </div>
       </div>
           )}
@@ -543,9 +580,37 @@ function AssistantBubble({ content }: { content: string }) {
   );
 }
 
-function AIResponseCard({ result }: { result: AnalysisResponse }) {
+function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: AnalysisResponse; onSelectQuestion?: (text: string) => void; userSituation?: string }) {
+  const navigate = useNavigate();
   const [expandedAction, setExpandedAction] = useState<number | null>(null);
   const totalMs = result.stage_timings.reduce((a, b) => a + b.duration_ms, 0);
+
+  const MODULE_ROUTE_MAP: Record<string, { path: string; name: string }> = {
+    evidence_gap: { path: '/evidence-gap', name: 'Phát hiện thiếu chứng cứ' },
+    evidence: { path: '/evidence-gap', name: 'Phát hiện thiếu chứng cứ' },
+    timeline: { path: '/timeline', name: 'Tiến độ & Thời hiệu' },
+    contract: { path: '/contract', name: 'Rà soát hợp đồng' },
+    risks: { path: '/risks', name: 'Phân tích rủi ro' },
+    compliance: { path: '/compliance-radar', name: 'Compliance Radar' },
+    journey: { path: '/journey', name: 'Hành trình vụ việc' },
+    templates: { path: '/templates', name: 'Mẫu văn bản pháp lý' },
+    similar_cases: { path: '/similar-cases', name: 'Vụ việc tương tự' },
+    cases: { path: '/similar-cases', name: 'Vụ việc tương tự' },
+    law_search: { path: '/law-search', name: 'Tra cứu Luật' },
+    laws: { path: '/law-search', name: 'Tra cứu Luật' },
+    checklists: { path: '/checklists', name: 'Liên kết tuân thủ' },
+    checklist: { path: '/checklists', name: 'Liên kết tuân thủ' },
+    actions: { path: '/actions', name: 'Hành động khuyến nghị' },
+    action_plan: { path: '/actions', name: 'Hành động khuyến nghị' },
+  };
+
+  const nbas = result.next_best_actions || [];
+  const firstAction = nbas.find(n => (n.journey_steps && n.journey_steps.length > 0) || (n.next_questions && n.next_questions.length > 0));
+  
+  const journeySteps = firstAction?.journey_steps || [];
+  const nextQuestions = firstAction?.next_questions || [];
+  const detectedGoals = firstAction?.detected_goals || [];
+  const userPosition = firstAction?.user_position || '';
 
   return (
     <div className="w-full max-w-4xl glass-card overflow-hidden border-l-4 border-l-legal-gold shadow-2xl animate-in fade-in slide-in-from-left-4 duration-500">
@@ -698,6 +763,126 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
           </div>
         )}
 
+        {/* Dynamic Case Journey Timeline / Personalized Roadmap (Phase 2/3) */}
+        {journeySteps.length > 0 && (
+          <div className="space-y-4 bg-white/[0.02] border border-white/10 rounded-2xl p-5 shadow-inner">
+            <div className="flex items-center gap-2">
+              <Clock className="text-legal-gold" size={16} />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Hành trình giải quyết vụ việc (Lộ trình đề xuất)</span>
+            </div>
+            
+            {detectedGoals.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-[10px] text-slate-400 font-medium">Mục tiêu nhận diện:</span>
+                {detectedGoals.map((g, i) => (
+                  <span key={i} className="text-[9px] font-bold bg-legal-gold/20 text-legal-gold border border-legal-gold/30 px-2 py-0.5 rounded-full uppercase">
+                    {g}
+                  </span>
+                ))}
+                {userPosition && (
+                  <>
+                    <span className="text-[10px] text-slate-500">|</span>
+                    <span className="text-[9px] font-bold bg-white/10 text-slate-300 border border-white/20 px-2 py-0.5 rounded-full uppercase">
+                      {userPosition}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/10">
+              {journeySteps.map((step, idx) => (
+                <div key={idx} className="relative group">
+                  {/* Stepper Dot */}
+                  <div className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full bg-slate-900 border-2 border-slate-700 group-hover:border-legal-gold group-hover:bg-legal-gold/20 transition-all flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-legal-gold" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-mono text-slate-500 font-bold">BƯỚC {idx + 1}</span>
+                    <p className="text-xs text-slate-300 group-hover:text-white transition-colors">{step}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Next Best Actions Dynamic Recommendations Grid (Phase 2/3) */}
+        {nbas.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Zap className="text-legal-gold" size={16} fill="currentColor" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Hành động Phù hợp Tiếp theo (Next Best Actions)</span>
+              <span className="text-[10px] text-slate-500">(LexAI đề xuất dựa trên vụ việc)</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {nbas.map((nba) => {
+                const rawPath = nba.action_url || '';
+                let path = rawPath;
+                if (rawPath === '/laws') path = '/law-search';
+                if (rawPath === '/checklist') path = '/checklists';
+
+                const routeInfo = MODULE_ROUTE_MAP[nba.module] || { path: path || '#', name: nba.title };
+                return (
+                  <div 
+                    key={nba.action_id}
+                    className="p-5 bg-white/5 border border-white/10 rounded-2xl flex flex-col justify-between hover:border-legal-gold/40 hover:bg-white/[0.08] transition-all relative overflow-hidden group"
+                  >
+                    {/* Top border color matching priority */}
+                    <div className={cn(
+                      "absolute top-0 left-0 right-0 h-1",
+                      nba.priority === 'urgent' ? 'bg-red-500' :
+                      nba.priority === 'high' ? 'bg-orange-500' :
+                      nba.priority === 'medium' ? 'bg-yellow-500' : 'bg-slate-500'
+                    )} />
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={cn(
+                          "text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
+                          nba.priority === 'urgent' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                          nba.priority === 'high' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                          nba.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                          'bg-white/10 text-slate-400'
+                        )}>
+                          {nba.priority === 'urgent' ? 'Khẩn cấp' : nba.priority === 'high' ? 'Ưu tiên cao' : nba.priority === 'medium' ? 'Ưu tiên vừa' : 'Khuyến nghị'}
+                        </span>
+                        
+                        <span className="text-[10px] font-mono font-bold text-legal-gold uppercase tracking-wider">{routeInfo.name}</span>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-white leading-snug group-hover:text-legal-gold transition-colors">{nba.title}</h4>
+                      <p className="text-xs text-slate-400 leading-relaxed">{nba.description}</p>
+                      
+                      {nba.reason && (
+                        <p className="text-[11px] text-slate-500 italic bg-white/[0.02] border border-white/5 p-2 rounded-lg leading-relaxed mt-2">
+                          <span className="font-bold text-legal-gold not-italic mr-1">Lý do đề xuất:</span>
+                          {nba.reason}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+                      <span className="text-[9px] text-slate-500 uppercase tracking-widest font-mono">Độ tự tin: {(nba.score * 100).toFixed(0)}%</span>
+                      <button
+                        onClick={() => {
+                          logInteraction({ action_type: 'nba_click', context: { action_id: nba.action_id, target: routeInfo.path } });
+                          navigate(routeInfo.path, { state: { prefill: nba.prefill, situation: userSituation || result.position_reasoning || result.full_assessment || '' } });
+                        }}
+                        className="px-3 py-1.5 bg-legal-gold text-legal-navy text-xs font-bold rounded-lg hover:scale-105 active:scale-95 transition-all shadow-md flex items-center gap-1"
+                      >
+                        Bắt đầu
+                        <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Warnings */}
         {result.warnings.length > 0 && (
           <div className="space-y-2">
@@ -729,6 +914,28 @@ function AIResponseCard({ result }: { result: AnalysisResponse }) {
               ))}
             </div>
           </details>
+        )}
+
+        {/* Proactive Prompts Chips */}
+        {nextQuestions.length > 0 && onSelectQuestion && (
+          <div className="space-y-2 pt-4 border-t border-white/10">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <Zap size={10} className="text-legal-gold" />
+              Bạn có thể muốn hỏi tiếp theo (Proactive Prompts):
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {nextQuestions.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => onSelectQuestion(q)}
+                  className="text-xs px-3.5 py-2 bg-white/5 hover:bg-legal-gold/10 border border-white/10 hover:border-legal-gold/30 rounded-full text-slate-300 hover:text-white transition-all text-left flex items-center gap-2 group animate-in fade-in duration-200"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-legal-gold opacity-60 group-hover:scale-125 transition-all" />
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Reasoning trace */}

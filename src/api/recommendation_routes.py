@@ -44,14 +44,16 @@ agent_router = APIRouter(prefix="/agent", tags=["agent"])
 # ---------------------------------------------------------------------------
 
 
-def _get_vector_storage(request: Request) -> VectorStorage:
+def _get_vector_storage(request: Request) -> Optional[VectorStorage]:
+    if getattr(request.app.state, "mongodb_enabled", True) is False:
+        return None
     vs = getattr(request.app.state, "vector_storage", None)
-    if vs is None:
-        raise HTTPException(
-            status_code=503,
-            detail="MongoDB vector storage is not available. Start MongoDB and restart the server.",
-        )
-    return vs
+    if vs is not None:
+        return vs
+    try:
+        return VectorStorage()
+    except Exception:
+        return None
 
 
 def _get_behavior_source(request: Request):
@@ -225,6 +227,97 @@ class InteractionLogRequest(BaseModel):
     chunk_id: Optional[str] = None
 
 
+def _fallback_documents(query: str, law_type: Optional[str], limit: int) -> List[DocumentRecOut]:
+    domain = law_type or "dan_su"
+    return [
+        DocumentRecOut(
+            doc_id="demo_doc_hngd_2014",
+            law_type=domain,
+            snippet="Demo fallback: Luat Hon nhan va Gia dinh - can cu ve ly hon, nuoi con, cap duong va chia tai san chung.",
+            vector_score=0.62,
+            collab_score=0.0,
+            final_score=0.62,
+            reason="MongoDB/vector search chua san sang; tra tai lieu demo phu hop de luong UX khong bi dut.",
+        ),
+        DocumentRecOut(
+            doc_id="demo_doc_civil_2015",
+            law_type="dan_su",
+            snippet="Demo fallback: Bo luat Dan su - can cu ve giao dich, nghia vu, boi thuong va dat coc.",
+            vector_score=0.51,
+            collab_score=0.0,
+            final_score=0.51,
+            reason=f"Phu hop voi truy van: {query[:80] or 'phan tich phap ly tong quat'}.",
+        ),
+    ][:limit]
+
+
+def _fallback_templates(limit: int) -> List[TemplateRecOut]:
+    return [
+        TemplateRecOut(
+            template_id="demo_template_notice",
+            name="Thong bao/yeu cau bang van ban",
+            industry="general",
+            contract_type="general",
+            description="Mau thong bao giup xac lap moc thoi gian, yeu cau phan hoi va bao toan chung cu.",
+            key_clauses=["Noi dung yeu cau", "Thoi han phan hoi", "Tai lieu kem theo"],
+            related_laws=["Bo luat Dan su", "Bo luat To tung dan su"],
+            vector_score=0.58,
+            download_hint="Dung lam khung demo, can luat su ra soat truoc khi gui chinh thuc.",
+        )
+    ][:limit]
+
+
+def _fallback_risks(limit: int) -> List[RiskRecOut]:
+    return [
+        RiskRecOut(
+            risk_id="demo_risk_evidence_gap",
+            name="Thieu chung cu va moc thoi gian",
+            severity="trung_binh",
+            description="Ho so chua du chung cu co the lam giam do tin cay cua danh gia va kha nang bao ve yeu cau.",
+            indicators=["Chua co tai lieu goc", "Chua co timeline ro", "Chua co van ban trao doi"],
+            mitigation=["Luu tin nhan/email", "Lap bang thoi gian su viec", "Tai len tai lieu vao ho so"],
+            related_law_types=["dan_su", "lao_dong", "dat_dai"],
+            source="demo_fallback",
+            score=0.56,
+        )
+    ][:limit]
+
+
+def _fallback_checklists(limit: int) -> List[ChecklistRecOut]:
+    return [
+        ChecklistRecOut(
+            checklist_id="demo_checklist_case_file",
+            name="Checklist ho so vu viec MVP",
+            business_type="general",
+            transaction_type="general",
+            description="Bo muc toi thieu de nguoi dung tiep tuc thao tac khi database chua san sang.",
+            items=[
+                ChecklistItemOut(item_id="timeline", category="Chung cu", description="Lap timeline su viec theo ngay/thang.", required=True, related_law="", deadline_note="Lam ngay"),
+                ChecklistItemOut(item_id="documents", category="Tai lieu", description="Tap hop hop dong, bien nhan, email, tin nhan, anh chup.", required=True, related_law="", deadline_note="Trong 3 ngay"),
+                ChecklistItemOut(item_id="goal", category="Muc tieu", description="Ghi ro ket qua mong muon: thu tien, cham dut, nuoi con, giu tai san...", required=True, related_law="", deadline_note="Truoc khi nop don/gui thong bao"),
+            ],
+            related_laws=[],
+            priority=1,
+        )
+    ][:limit]
+
+
+def _fallback_cases(situation: str, law_type: Optional[str], limit: int) -> List[CaseRecOut]:
+    return [
+        CaseRecOut(
+            case_id="demo_case_general",
+            title="Vu viec demo co tinh huong tuong tu",
+            situation_summary=situation[:240] or "Tinh huong phap ly tong quat",
+            outcome="Can doi chieu chung cu, moc thoi gian va can cu phap ly truoc khi ket luan.",
+            result="Tham khao",
+            law_type=law_type or "general",
+            key_laws=["Can cu phap ly se duoc bo sung khi database san sang"],
+            lesson="Uu tien bo sung chung cu va dung module ke hoach hanh dong de tach cac buoc can lam.",
+            similarity_score=0.5,
+        )
+    ][:limit]
+
+
 class NextBestActionRequest(BaseModel):
     situation: str
     domain: Optional[str] = None
@@ -350,13 +443,18 @@ def recommend_documents(
     Hybrid document recommendations: vector search + collaborative filtering.
     """
     vs = _get_vector_storage(request)
+    if vs is None:
+        return _fallback_documents(body.query, body.law_type, body.limit)
     recommender = DocumentRecommender(vs)
-    results = recommender.recommend(
-        user_id=user_id,
-        query=body.query,
-        law_type=body.law_type,
-        limit=body.limit,
-    )
+    try:
+        results = recommender.recommend(
+            user_id=user_id,
+            query=body.query,
+            law_type=body.law_type,
+            limit=body.limit,
+        )
+    except Exception:
+        return _fallback_documents(body.query, body.law_type, body.limit)
     return [
         DocumentRecOut(
             doc_id=r.doc_id,
@@ -384,15 +482,20 @@ def recommend_templates(
         {"context": "thuê văn phòng 2 năm tại Hà Nội", "industry": "bat_dong_san"}
     """
     vs = _get_vector_storage(request)
+    if vs is None:
+        return _fallback_templates(body.limit)
     recommender = TemplateRecommender(vs)
-    results = recommender.recommend(
-        context=body.context,
-        industry=body.industry,
-        contract_type=body.contract_type,
-        template_type=body.template_type,
-        limit=body.limit,
-        user_id=user_id,
-    )
+    try:
+        results = recommender.recommend(
+            context=body.context,
+            industry=body.industry,
+            contract_type=body.contract_type,
+            template_type=body.template_type,
+            limit=body.limit,
+            user_id=user_id,
+        )
+    except Exception:
+        return _fallback_templates(body.limit)
     return [
         TemplateRecOut(
             template_id=r.template_id,
@@ -426,6 +529,8 @@ def recommend_risks(
     Both can be combined (results are merged and deduplicated).
     """
     vs = _get_vector_storage(request)
+    if vs is None:
+        return _fallback_risks(body.limit)
     recommender = RiskRecommender(vs)
 
     results = []
@@ -485,13 +590,18 @@ def recommend_checklists(
         {"business_type": "tnhh", "transaction_type": "thanh_lap_cong_ty"}
     """
     vs = _get_vector_storage(request)
+    if vs is None:
+        return _fallback_checklists(body.limit)
     recommender = ChecklistRecommender(vs)
-    results = recommender.recommend(
-        business_type=body.business_type,
-        transaction_type=body.transaction_type,
-        user_id=user_id,
-        limit=body.limit,
-    )
+    try:
+        results = recommender.recommend(
+            business_type=body.business_type,
+            transaction_type=body.transaction_type,
+            user_id=user_id,
+            limit=body.limit,
+        )
+    except Exception:
+        return _fallback_checklists(body.limit)
     return [
         ChecklistRecOut(
             checklist_id=r.checklist_id,
@@ -580,27 +690,44 @@ def recommend_similar_cases(
         {"situation": "Hàng xóm lấn chiếm 50cm đất sổ đỏ của tôi", "law_type": "dat_dai"}
     """
     vs = _get_vector_storage(request)
+    if vs is None:
+        return _fallback_cases(body.situation, body.law_type, body.limit)
 
     from src.pipeline.embedding_stage import embed_text
 
-    embedding = embed_text(body.situation)
+    try:
+        embedding = embed_text(body.situation)
+    except Exception:
+        embedding = None
 
+    raw = []
     if embedding:
-        raw = vs.vector_search_cases(
-            query_vector=embedding,
-            law_type=body.law_type,
-            limit=body.limit,
-        )
-    else:
+        try:
+            raw = vs.vector_search_cases(
+                query_vector=embedding,
+                law_type=body.law_type,
+                limit=body.limit,
+            )
+        except Exception:
+            raw = []
+    if not raw:
         keywords = [w for w in body.situation.split() if len(w) > 3][:6]
-        raw = vs.keyword_search_cases(keywords, limit=body.limit)
+        try:
+            raw = vs.keyword_search_cases(keywords, limit=body.limit)
+        except Exception:
+            raw = []
+    if not raw:
+        return _fallback_cases(body.situation, body.law_type, body.limit)
 
-    vs.log_interaction(
-        user_id=user_id,
-        doc_id="__cases__",
-        action_type="case_recommendation",
-        context={"situation": body.situation[:200], "law_type": body.law_type},
-    )
+    try:
+        vs.log_interaction(
+            user_id=user_id,
+            doc_id="__cases__",
+            action_type="case_recommendation",
+            context={"situation": body.situation[:200], "law_type": body.law_type},
+        )
+    except Exception:
+        pass
 
     return [
         CaseRecOut(

@@ -1357,6 +1357,9 @@ def seed_all(vector_storage: VectorStorage) -> dict:
     logger.info("seed_data: seeding legal cases …")
     _seed_legal_cases(vector_storage)
 
+    logger.info("seed_data: seeding user behavior interactions …")
+    _seed_interactions(vector_storage)
+
     logger.info("seed_data: done.")
     return {
         "templates": len(_TEMPLATES),
@@ -1415,6 +1418,53 @@ def _seed_legal_cases(vs: VectorStorage) -> None:
             doc["embedding"] = emb
         vs.upsert_case(doc)
     logger.info("seed_data: %d legal cases upserted.", len(_LEGAL_CASES))
+
+
+def _seed_interactions(vs: VectorStorage) -> None:
+    from datetime import datetime, timedelta, timezone
+    import random
+    
+    # Check if interactions already seeded to avoid duplication
+    if vs.interactions.count_documents({"user_id": "demo_user_001"}) > 0:
+        logger.info("seed_data: interactions already seeded.")
+        return
+        
+    now = datetime.now(timezone.utc)
+    
+    # Seed 24 realistic interactions over the last 12 days
+    actions = [
+        ("situation_analysis", "dat_dai", "Tra cứu lấn chiếm đất đai xây dựng trái phép"),
+        ("situation_analysis", "hop_dong", "Soát xét hợp đồng thuê nhà xưởng"),
+        ("situation_analysis", "lao_dong", "Tranh chấp sa thải người lao động trái luật"),
+        ("nba_click", "dat_dai", "Xem vụ việc tương tự tranh chấp đất đai"),
+        ("nba_click", "hop_dong", "Phân tích điều khoản rủi ro hợp đồng"),
+        ("view", "dat_dai", "Xem điều luật đất đai liên quan"),
+        ("view", "hop_dong", "Xem mẫu hợp đồng thuê văn phòng"),
+        ("download", "lao_dong", "Tải đơn khiếu nại lao động"),
+        ("save", "dan_su", "Lưu kết quả phân tích tranh chấp dân sự"),
+    ]
+    
+    seeded = 0
+    for day in range(12, 0, -1):
+        # 1-3 interactions per day to make active days look beautiful
+        for i in range(random.randint(1, 3)):
+            act, domain, snippet = random.choice(actions)
+            ts = now - timedelta(days=day, hours=random.randint(1, 20), minutes=random.randint(1, 59))
+            
+            vs.interactions.insert_one({
+                "user_id": "demo_user_001",
+                "doc_id": f"doc_demo_{random.randint(100, 999)}",
+                "action_type": act,
+                "context": {
+                    "law_type": domain,
+                    "situation_snippet": snippet
+                },
+                "chunk_id": f"chunk_demo_{random.randint(1000, 9999)}",
+                "timestamp": ts.isoformat()
+            })
+            seeded += 1
+            
+    logger.info("seed_data: %d user interactions seeded.", seeded)
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ import {
   Check,
 } from 'lucide-react';
 import { apiFetch, RiskAssessment, logInteraction, analyzeRisk, RiskAnalysisResult, saveAnalysis } from '../lib/api';
-import { getContextSummary } from '../lib/analysisContext';
+import { useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -95,7 +95,7 @@ function RiskSection({
 
 function AiRiskPanel() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => getContextSummary(location.state));
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RiskAnalysisResult | null>(null);
   const [error, setError] = useState('');
@@ -244,7 +244,7 @@ function AiRiskPanel() {
 function GenericRisksPanel() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'situation' | 'history'>('situation');
-  const [situation, setSituation] = useState(() => getContextSummary(location.state));
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [risks, setRisks] = useState<RiskAssessment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [severityFilter, setSeverityFilter] = useState<'all' | 'cao' | 'trung_binh' | 'thap'>('all');
@@ -304,9 +304,10 @@ function GenericRisksPanel() {
           />
           <button
             onClick={() => fetchRisks(false)}
-            className="px-8 bg-legal-gold text-legal-navy rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-legal-gold/20"
+            disabled={isLoading || !situation.trim()}
+            className="px-8 bg-legal-gold text-legal-navy rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-legal-gold/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            Đánh giá
+            {isLoading ? 'Đang đánh giá...' : 'Đánh giá'}
           </button>
         </div>
       )}

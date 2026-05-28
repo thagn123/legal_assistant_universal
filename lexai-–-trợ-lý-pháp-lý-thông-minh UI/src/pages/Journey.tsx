@@ -120,7 +120,10 @@ function LawRefItem({ title, score }: { title: string; score: number }) {
 
 export function Journey() {
   const location = useLocation();
-  const [situation, setSituation] = useState('');
+  const [situation, setSituation] = useState(() => {
+    const state = location.state as { situation?: string; domain?: string } | null;
+    return state?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
   const [result, setResult] = useState<JourneyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -129,6 +132,7 @@ export function Journey() {
   async function handleAnalyze(overrideSituation?: string) {
     const trimmed = (overrideSituation ?? situation).trim();
     if (!trimmed) return;
+    sessionStorage.setItem('lexai_current_situation', trimmed);
     setLoading(true);
     setError('');
     setSaved(false);
@@ -147,6 +151,7 @@ export function Journey() {
     const state = location.state as { situation?: string; domain?: string } | null;
     if (state?.situation) {
       setSituation(state.situation);
+      sessionStorage.setItem('lexai_current_situation', state.situation);
       handleAnalyze(state.situation);
       // Clear state so navigating back + forward doesn't re-trigger
       window.history.replaceState({}, '');

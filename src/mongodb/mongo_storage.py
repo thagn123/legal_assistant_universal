@@ -251,16 +251,19 @@ class VectorStorage:
         chunk_id: Optional[str] = None,
     ) -> None:
         """Record a user interaction for collaborative filtering."""
-        self.interactions.insert_one(
-            {
-                "user_id": user_id,
-                "doc_id": doc_id,
-                "chunk_id": chunk_id,
-                "action_type": action_type,
-                "context": context,
-                "timestamp": _now(),
-            }
-        )
+        try:
+            self.interactions.insert_one(
+                {
+                    "user_id": user_id,
+                    "doc_id": doc_id,
+                    "chunk_id": chunk_id,
+                    "action_type": action_type,
+                    "context": context,
+                    "timestamp": _now(),
+                }
+            )
+        except Exception as exc:
+            logger.warning("log_interaction failed: %s", exc)
 
     def get_user_viewed_docs(self, user_id: str, limit: int = 50) -> List[str]:
         """Return doc_ids the user has interacted with, most recent first."""
@@ -1130,7 +1133,7 @@ class VectorStorage:
         """Keyword fallback for legal case search."""
         if not keywords:
             return []
-        pattern = "|".join(keywords)
+        pattern = "|".join(re.escape(k) for k in keywords)
         try:
             return list(
                 self.legal_cases.find(

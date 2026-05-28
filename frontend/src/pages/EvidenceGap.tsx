@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { getEvidenceGap, EvidenceGapResult, EvidenceItem, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
-import { getContextDomain, getContextSummary } from '../lib/analysisContext';
+import { getContextDomain, useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -137,7 +137,7 @@ function EvidenceStrengthSection({
 
 export function EvidenceGap() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => getContextSummary(location.state));
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [domain, setDomain]       = useState(() => getContextDomain(location.state));
   const [factsText, setFactsText] = useState('');
   const [loading, setLoading]     = useState(false);

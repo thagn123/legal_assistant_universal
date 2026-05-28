@@ -18,7 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { searchLaws, LawArticle, LawSearchResult, saveAnalysis } from '../lib/api';
-import { getContextSummary } from '../lib/analysisContext';
+import { useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -109,7 +109,7 @@ const QUICK_QUERIES = [
 
 export function LawSearch() {
   const location = useLocation();
-  const [query, setQuery] = useState(() => getContextSummary(location.state));
+  const [query, setQuery] = useSyncedSituation(location.state);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LawSearchResult | null>(null);
   const [error, setError] = useState('');

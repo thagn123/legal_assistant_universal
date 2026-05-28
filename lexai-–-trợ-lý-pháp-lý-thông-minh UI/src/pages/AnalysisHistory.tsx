@@ -48,7 +48,7 @@ const TYPE_CONFIG: Record<AnalysisType, { label: string; icon: React.ReactNode; 
   action_plan:      { label: 'Kế hoạch hành động', icon: <ListChecks size={14} />, color: 'text-red-400 bg-red-500/10 border-red-500/25',          path: '/actions' },
   compliance_radar: { label: 'Compliance Radar',    icon: <Radar size={14} />,      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',       path: '/compliance-radar' },
   risk_analysis:    { label: 'Phân tích rủi ro',   icon: <TrendingUp size={14} />, color: 'text-pink-400 bg-pink-500/10 border-pink-500/25',       path: '/risks' },
-  law_search:       { label: 'Tra cứu điều luật',  icon: <BookOpen size={14} />,   color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25', path: '/laws' },
+  law_search:       { label: 'Tra cứu điều luật',  icon: <BookOpen size={14} />,   color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25', path: '/law-search' },
   journey:          { label: 'Hành trình pháp lý', icon: <Map size={14} />,        color: 'text-teal-400 bg-teal-500/10 border-teal-500/25',       path: '/journey' },
   contract_analysis:{ label: 'Rà soát hợp đồng',  icon: <FileText size={14} />,   color: 'text-violet-400 bg-violet-500/10 border-violet-500/25', path: '/contract' },
 };

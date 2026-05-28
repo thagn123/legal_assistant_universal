@@ -21,7 +21,7 @@ import {
   Check,
 } from 'lucide-react';
 import { buildJourney, JourneyResult, JourneyMilestone, saveAnalysis } from '../lib/api';
-import { getAnalysisContext } from '../lib/analysisContext';
+import { getAnalysisContext, getContextSummary, useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -123,10 +123,7 @@ function LawRefItem({ title, score }: { title: string; score: number }) {
 
 export function Journey() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => {
-    const context = getAnalysisContext(location.state);
-    return context.summary || '';
-  });
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [result, setResult] = useState<JourneyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -154,7 +151,7 @@ export function Journey() {
   useEffect(() => {
     const state = location.state as { situation?: string } | null;
     const context = getAnalysisContext(location.state);
-    const initialSituation = state?.situation || context.summary;
+    const initialSituation = state?.situation || getContextSummary(location.state);
     if (initialSituation) {
       setSituation(initialSituation);
       handleAnalyze(initialSituation);

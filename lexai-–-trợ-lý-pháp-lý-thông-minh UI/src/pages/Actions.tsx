@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   ListChecks,
   Zap,
@@ -103,14 +104,46 @@ function PrioritySection({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Actions() {
-  const [situation, setSituation] = useState('');
+  const location = useLocation();
+  const [situation, setSituation] = useState(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    return state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ActionPlanResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
+  // Pre-fill and auto-run when navigated with context
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    const initialSituation = state?.situation || state?.prefill?.situation;
+    if (initialSituation) {
+      setSituation(initialSituation);
+      sessionStorage.setItem('lexai_current_situation', initialSituation);
+      
+      const runAuto = async () => {
+        setLoading(true);
+        setResult(null);
+        setError('');
+        setSaved(false);
+        try {
+          const r = await getActionPlan(initialSituation.trim());
+          setResult(r);
+        } catch {
+          setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      runAuto();
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
   async function handlePlan() {
     if (!situation.trim()) return;
+    sessionStorage.setItem('lexai_current_situation', situation.trim());
     setLoading(true);
     setResult(null);
     setError('');

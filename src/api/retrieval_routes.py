@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
+import re
 import uuid
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from src.api.deps import require_user
 from src.services.situation_classifier import SituationClassifier
+
+logger = logging.getLogger(__name__)
 
 retrieval_router = APIRouter(prefix="/retrieval", tags=["retrieval"])
 
@@ -91,11 +95,131 @@ def _similarity_label(score: float) -> str:
 
 
 def _get_vector_storage(request: Request):
+    if getattr(request.app.state, "mongodb_enabled", True) is False:
+        return None
     vs = getattr(request.app.state, "vector_storage", None)
-    if vs is None:
+    if vs is not None:
+        return vs
+    try:
         from src.mongodb.mongo_storage import VectorStorage
-        vs = VectorStorage()
+        return VectorStorage()
+    except Exception as exc:
+        logger.warning("Mongo vector storage unavailable; using demo fallback data: %s", exc)
+        return None
     return vs
+
+
+def _keywords(text: str, min_len: int = 3, limit: int = 10) -> list[str]:
+    folded = text.lower()
+    return [w for w in re.findall(r"[\wÀ-ỹ]+", folded, flags=re.UNICODE) if len(w) >= min_len][:limit]
+
+
+def _ranked_fallback(items: list[dict[str, Any]], query: str, text_fields: list[str], limit: int) -> list[dict[str, Any]]:
+    keys = _keywords(query, min_len=3, limit=12)
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for item in items:
+        haystack = " ".join(str(item.get(field, "")) for field in text_fields).lower()
+        hits = sum(1 for key in keys if key in haystack)
+        score = 0.42 + min(0.45, hits * 0.09)
+        ranked.append((score, {**item, "vector_score": round(score, 3)}))
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in ranked[:limit]]
+
+
+_FALLBACK_LAWS: list[dict[str, Any]] = [
+    {
+        "chunk_id": "demo_law_hngd_81",
+        "doc_id": "demo_law_hon_nhan_gia_dinh",
+        "law_reference": "Luat Hon nhan va Gia dinh 2014, Dieu 81",
+        "law_type": "dan_su",
+        "is_global": True,
+        "content": "Khi ly hon, viec trong nom, cham soc, nuoi duong, giao duc con duoc uu tien theo loi ich moi mat cua con. Con tu du bay tuoi tro len duoc xem xet nguyen vong.",
+    },
+    {
+        "chunk_id": "demo_law_hngd_59",
+        "doc_id": "demo_law_hon_nhan_gia_dinh",
+        "law_reference": "Luat Hon nhan va Gia dinh 2014, Dieu 59",
+        "law_type": "dan_su",
+        "is_global": True,
+        "content": "Tai san chung cua vo chong khi ly hon duoc chia theo nguyen tac chia doi nhung co tinh den hoan canh gia dinh, cong suc dong gop, loi cua moi ben va bao ve quyen loi chinh dang.",
+    },
+    {
+        "chunk_id": "demo_law_ld_36",
+        "doc_id": "demo_law_lao_dong",
+        "law_reference": "Bo luat Lao dong 2019, Dieu 36",
+        "law_type": "lao_dong",
+        "is_global": True,
+        "content": "Nguoi su dung lao dong chi duoc don phuong cham dut hop dong lao dong trong cac truong hop luat dinh va phai bao truoc theo thoi han tuong ung.",
+    },
+    {
+        "chunk_id": "demo_law_ds_328",
+        "doc_id": "demo_law_dan_su",
+        "law_reference": "Bo luat Dan su 2015, Dieu 328",
+        "law_type": "dan_su",
+        "is_global": True,
+        "content": "Dat coc la viec mot ben giao cho ben kia mot khoan tien hoac tai san trong mot thoi han de bao dam giao ket hoac thuc hien hop dong.",
+    },
+    {
+        "chunk_id": "demo_law_dd_188",
+        "doc_id": "demo_law_dat_dai",
+        "law_reference": "Luat Dat dai 2013, Dieu 188",
+        "law_type": "dat_dai",
+        "is_global": True,
+        "content": "Nguoi su dung dat duoc chuyen nhuong, tang cho, the chap khi co giay chung nhan, dat khong tranh chap, quyen su dung dat khong bi ke bien va con thoi han su dung.",
+    },
+]
+
+_FALLBACK_CASES: list[dict[str, Any]] = [
+    {
+        "case_id": "demo_case_divorce_custody",
+        "title": "Tranh chap ly hon, nuoi con va chia tai san chung",
+        "situation_summary": "Mot ben yeu cau ly hon, muon truc tiep nuoi con nho va tranh chap ve tai san chung hinh thanh trong hon nhan.",
+        "outcome": "Toa an xem xet loi ich cua con, kha nang cham soc, thu nhap, cho o va cong suc dong gop vao tai san chung.",
+        "lesson": "Can chuan bi chung cu ve thu nhap, dieu kien cham soc con, nguon goc tai san va qua trinh dong gop.",
+        "law_type": "dan_su",
+        "key_laws": ["Luat HNGD Dieu 59", "Luat HNGD Dieu 81"],
+        "stage": "pre_litigation",
+    },
+    {
+        "case_id": "demo_case_labor_termination",
+        "title": "Nguoi lao dong bi cham dut hop dong khong bao truoc",
+        "situation_summary": "Cong ty cho nghi viec, chua thanh toan luong va khong co van ban giai thich ly do cham dut hop dong.",
+        "outcome": "Nguoi lao dong co the yeu cau thanh toan luong, boi thuong va chung minh viec cham dut trai quy dinh.",
+        "lesson": "Luu hop dong, bang luong, email, tin nhan va thong bao cham dut la chung cu quan trong.",
+        "law_type": "lao_dong",
+        "key_laws": ["Bo luat Lao dong 2019"],
+        "stage": "violation",
+    },
+    {
+        "case_id": "demo_case_land_handwritten",
+        "title": "Mua ban dat bang giay tay phat sinh tranh chap",
+        "situation_summary": "Ben mua da giao tien, nhan dat nhung giao dich chua cong chung va ben ban doi lai dat.",
+        "outcome": "Co quan giai quyet xem xet thoi diem giao dich, chung cu thanh toan, quan ly su dung dat va dieu kien chuyen nhuong.",
+        "lesson": "Can tap hop giay tay mua ban, bien nhan, sao ke, nguoi lam chung va hien trang su dung dat.",
+        "law_type": "dat_dai",
+        "key_laws": ["Luat Dat dai Dieu 188", "Bo luat Dan su"],
+        "stage": "dispute",
+    },
+]
+
+_FALLBACK_CLAUSES: list[dict[str, Any]] = [
+    {
+        "clause_id": "demo_clause_penalty",
+        "doc_id": "demo_contract",
+        "clause_text": "Ben vi pham phai chiu phat vi pham va boi thuong thiet hai thuc te phat sinh theo chung cu hop le.",
+        "clause_type": "penalty",
+        "risk_level": "medium",
+        "suggestion": "Nen neu muc phat, cach tinh thiet hai, chung tu chung minh va thoi han thanh toan.",
+    },
+    {
+        "clause_id": "demo_clause_termination",
+        "doc_id": "demo_contract",
+        "clause_text": "Moi ben co quyen cham dut hop dong khi ben con lai vi pham nghiem trong va khong khac phuc trong thoi han thong bao.",
+        "clause_type": "termination",
+        "risk_level": "low",
+        "suggestion": "Bo sung quy trinh thong bao, thoi han khac phuc va nghia vu sau cham dut.",
+    },
+]
 
 
 # ── Law search models ─────────────────────────────────────────────────────────
@@ -158,23 +282,42 @@ def search_laws(
     except Exception:
         embedding = None
 
-    if embedding:
-        raw = vs.vector_search_chunks(
-            query_vector=embedding,
-            filter_user_id=user_id,
-            law_type=domain if domain != "general" else None,
-            limit=body.limit,
-        )
-        if len(raw) < 2 and domain != "general":
+    raw = []
+    if embedding and vs is not None:
+        try:
             raw = vs.vector_search_chunks(
                 query_vector=embedding,
                 filter_user_id=user_id,
+                law_type=domain if domain != "general" else None,
                 limit=body.limit,
             )
-    else:
+            if len(raw) < 2 and domain != "general":
+                raw = vs.vector_search_chunks(
+                    query_vector=embedding,
+                    filter_user_id=user_id,
+                    limit=body.limit,
+                )
+        except Exception as e:
+            logger.warning("Vector search chunks failed: %s. Falling back to keyword search.", e)
+            raw = []
+
+    if not embedding or not raw:
         search_mode = "keyword"
         keywords = [w for w in body.query.split() if len(w) >= 3][:8]
-        raw = vs.keyword_search_chunks(keywords=keywords, filter_user_id=user_id, limit=body.limit)
+        if vs is not None:
+            try:
+                raw = vs.keyword_search_chunks(keywords=keywords, filter_user_id=user_id, limit=body.limit)
+            except Exception as exc:
+                logger.warning("Keyword search chunks failed: %s. Using demo fallback.", exc)
+                raw = []
+        if not raw:
+            search_mode = "demo_fallback"
+            raw = _ranked_fallback(
+                [item for item in _FALLBACK_LAWS if domain == "general" or item.get("law_type") == domain] or _FALLBACK_LAWS,
+                body.query,
+                ["law_reference", "content", "law_type"],
+                body.limit,
+            )
 
     articles: list[LawArticle] = []
     for c in raw[: body.limit]:
@@ -251,25 +394,44 @@ def find_similar_cases(
     except Exception:
         embedding = None
 
-    if embedding:
-        raw = vs.vector_search_cases(
-            query_vector=embedding,
-            law_type=domain if domain != "general" else None,
-            limit=body.limit,
-        )
-        # If vector search returned too few, try without domain filter
-        if len(raw) < 2 and domain != "general":
+    raw = []
+    if embedding and vs is not None:
+        try:
             raw = vs.vector_search_cases(
                 query_vector=embedding,
-                law_type=None,
+                law_type=domain if domain != "general" else None,
                 limit=body.limit,
             )
-    else:
+            # If vector search returned too few, try without domain filter
+            if len(raw) < 2 and domain != "general":
+                raw = vs.vector_search_cases(
+                    query_vector=embedding,
+                    law_type=None,
+                    limit=body.limit,
+                )
+        except Exception as e:
+            logger.warning("Vector search cases failed: %s. Falling back to keyword search.", e)
+            raw = []
+
+    if not embedding or not raw:
         search_mode = "keyword"
         # Extract meaningful keywords from situation + facts
         text = " ".join([body.situation] + body.facts)
         keywords = [w for w in text.split() if len(w) >= 4][:8]
-        raw = vs.keyword_search_cases(keywords=keywords, limit=body.limit)
+        if vs is not None:
+            try:
+                raw = vs.keyword_search_cases(keywords=keywords, limit=body.limit)
+            except Exception as exc:
+                logger.warning("Keyword search cases failed: %s. Using demo fallback.", exc)
+                raw = []
+        if not raw:
+            search_mode = "demo_fallback"
+            raw = _ranked_fallback(
+                [item for item in _FALLBACK_CASES if domain == "general" or item.get("law_type") == domain] or _FALLBACK_CASES,
+                text,
+                ["title", "situation_summary", "outcome", "lesson", "law_type"],
+                body.limit,
+            )
 
     # Step 3: build response items
     items: list[SimilarCaseItem] = []
@@ -396,24 +558,34 @@ def search_similar_clauses(
         embedding = None
 
     raw: list = []
-    if embedding:
-        raw = vs.vector_search_similar_clauses(
-            query_vector=embedding,
-            clause_type=body.clause_type or None,
-            risk_level=body.risk_level or None,
-            limit=body.limit,
-        )
-        # Fallback: drop filters if too few results
-        if len(raw) < 2 and (body.clause_type or body.risk_level):
+    if embedding and vs is not None:
+        try:
             raw = vs.vector_search_similar_clauses(
                 query_vector=embedding,
+                clause_type=body.clause_type or None,
+                risk_level=body.risk_level or None,
                 limit=body.limit,
             )
-    else:
+            # Fallback: drop filters if too few results
+            if len(raw) < 2 and (body.clause_type or body.risk_level):
+                raw = vs.vector_search_similar_clauses(
+                    query_vector=embedding,
+                    limit=body.limit,
+                )
+        except Exception as e:
+            logger.warning("Vector search similar clauses failed: %s. Falling back to keyword search.", e)
+            raw = []
+
+    if not embedding or not raw:
         search_mode = "keyword"
         keywords = [w for w in body.clause_text.split() if len(w) >= 3][:8]
         # Keyword fallback using chunks with clause content matching
-        raw_chunks = vs.keyword_search_chunks(keywords=keywords, filter_user_id=user_id, limit=body.limit)
+        raw_chunks = []
+        if vs is not None:
+            try:
+                raw_chunks = vs.keyword_search_chunks(keywords=keywords, filter_user_id=user_id, limit=body.limit)
+            except Exception as exc:
+                logger.warning("Keyword search clauses failed: %s. Using demo fallback.", exc)
         # Wrap chunks as clause-like items
         raw = [
             {
@@ -427,6 +599,14 @@ def search_similar_clauses(
             }
             for c in raw_chunks
         ]
+        if not raw:
+            search_mode = "demo_fallback"
+            raw = _ranked_fallback(
+                _FALLBACK_CLAUSES,
+                body.clause_text,
+                ["clause_text", "clause_type", "suggestion"],
+                body.limit,
+            )
 
     items: list[ClauseItem] = []
     for c in raw[: body.limit]:

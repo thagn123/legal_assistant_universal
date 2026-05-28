@@ -17,14 +17,6 @@ import {
   ScrollText,
   Info,
   Map,
-  ListChecks,
-  GitCompare,
-  BookOpen,
-  Radar,
-  Gavel,
-  FileSearch,
-  Clock,
-  History,
 } from 'lucide-react';
 import { cn } from '../../lib/api';
 
@@ -32,20 +24,11 @@ const menuItems = [
   { path: '/', label: 'Tổng quan', icon: LayoutDashboard },
   { path: '/analyze', label: 'Phân tích', icon: Search },
   { path: '/journey', label: 'Hành Trình', icon: Map },
-  { path: '/timeline', label: 'Tiến trình pháp lý', icon: Clock },
-  { path: '/actions', label: 'Kế hoạch hành động', icon: ListChecks },
-  { path: '/law-search', label: 'Tra cứu điều luật', icon: BookOpen },
-  { path: '/similar-cases', label: 'Vụ việc tương tự', icon: GitCompare },
-  { path: '/evidence-gap', label: 'Kiểm tra chứng cứ', icon: FileSearch },
   { path: '/contract', label: 'Rà soát hợp đồng', icon: FileCheck },
-  { path: '/clause-coach', label: 'Tư vấn điều khoản', icon: Gavel },
-  { path: '/clause-search', label: 'Tìm điều khoản', icon: FileSearch },
   { path: '/documents', label: 'Tài liệu', icon: FileText },
   { path: '/templates', label: 'Mẫu hợp đồng', icon: ScrollText },
   { path: '/risks', label: 'Rủi ro pháp lý', icon: ShieldAlert },
-  { path: '/compliance-radar', label: 'Compliance Radar', icon: Radar },
   { path: '/checklists', label: 'Liên kết tuân thủ', icon: ClipboardList },
-  { path: '/history', label: 'Lịch sử phân tích', icon: History },
   { path: '/profile', label: 'Hồ sơ của tôi', icon: UserCircle },
 ];
 
@@ -62,7 +45,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => (
           <NavLink
             key={item.path}

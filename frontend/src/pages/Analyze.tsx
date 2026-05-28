@@ -42,6 +42,7 @@ import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWar
 import { LawTypeBadge, InteractionButtons } from '../components/ui/Shared';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { cn } from '../lib/api';
+import { useSyncedSituation } from '../lib/analysisContext';
 
 interface ChatTurn {
   role: 'user' | 'assistant';
@@ -138,7 +139,7 @@ const stages_list = [
 
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
-  const [situation, setSituation] = useState('');
+  const [situation, setSituation] = useSyncedSituation(null);
   const [userRole, setUserRole] = useState('nguyen_don');
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);

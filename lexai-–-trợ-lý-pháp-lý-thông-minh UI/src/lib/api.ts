@@ -12,7 +12,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const API_BASE: string =
-  import.meta.env.VITE_API_URL || "http://localhost:8001";
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const USER_ID_KEY = 'lexai_user_id';
 const DEFAULT_USER_ID = 'demo_user_001';
@@ -66,6 +66,25 @@ export interface StageTiming {
   duration_ms: number;
 }
 
+export interface NextBestAction {
+  action_id: string;
+  title: string;
+  description: string;
+  module: string;
+  action_url: string;
+  category: string;
+  priority: string;
+  score: number;
+  reason: string;
+  evidence: string[];
+  prefill: Record<string, any>;
+  blocking_gaps: string[];
+  detected_goals: string[];
+  user_position: string;
+  next_questions: string[];
+  journey_steps: string[];
+}
+
 export interface AnalysisResponse {
   session_id: string;
   status: 'manh' | 'trung_binh' | 'yeu';
@@ -86,6 +105,7 @@ export interface AnalysisResponse {
     tool: string;
     description: string;
   }>;
+  next_best_actions?: NextBestAction[];
 }
 
 export interface ContractAnalysisResult {
@@ -196,6 +216,7 @@ export interface DigestResponse {
     title: string;
     reason: string;
     score: number;
+    action_hint?: string;
   }>;
 }
 
@@ -235,6 +256,25 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
   const rawScore = raw.position_score ?? 0;
   const position_score = rawScore <= 1 ? Math.round(rawScore * 100) : Math.round(rawScore);
 
+  const next_best_actions: NextBestAction[] = (raw.next_best_actions || []).map((n: any) => ({
+    action_id: n.action_id || '',
+    title: n.title || '',
+    description: n.description || '',
+    module: n.module || '',
+    action_url: n.action_url || '',
+    category: n.category || '',
+    priority: n.priority || 'low',
+    score: n.score ?? 0,
+    reason: n.reason || '',
+    evidence: n.evidence || [],
+    prefill: n.prefill || {},
+    blocking_gaps: n.blocking_gaps || [],
+    detected_goals: n.detected_goals || [],
+    user_position: n.user_position || 'general_user',
+    next_questions: n.next_questions || [],
+    journey_steps: n.journey_steps || [],
+  }));
+
   return {
     session_id: raw.session_id || '',
     status,
@@ -255,6 +295,7 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
       tool: typeof t === 'string' ? t : t.tool || t.name || '',
       description: t.description || '',
     })),
+    next_best_actions,
   };
 }
 
@@ -380,6 +421,7 @@ function transformDigest(raw: any): DigestResponse {
       title: r.title || '',
       reason: r.reason || '',
       score: r.score ?? 0,
+      action_hint: r.action_hint || r.action_url || '',
     })),
   };
 }
