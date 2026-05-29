@@ -104,6 +104,16 @@ class RetrievalFusionEngine:
         limit: int = 15,
         trace_id: str = "",
     ) -> FusedResultSet:
+        if self._vs is None:
+            logger.warning("RetrievalFusionEngine.fuse: no vector storage, returning empty set")
+            return FusedResultSet(
+                plan_id=plan.query_variants[0][:60] if plan.query_variants else "",
+                results=[],
+                total_raw_hits=0, vector_hits=0, bm25_hits=0,
+                graph_hits=0, behavior_hits=0,
+                fusion_weights=dict(self._weights),
+                fusion_duration_ms=0.0,
+            )
         t0 = time.perf_counter()
         candidates: Dict[str, FusedResult] = {}
 

@@ -17,10 +17,11 @@ import {
   ChevronUp,
   Bookmark,
   Check,
+  HelpCircle,
 } from 'lucide-react';
 import { getEvidenceGap, EvidenceGapResult, EvidenceItem, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
-import { getContextDomain, useSyncedSituation } from '../lib/analysisContext';
+import { getAnalysisContext, getContextDomain, useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -31,7 +32,8 @@ const DOMAIN_OPTIONS = [
   { value: 'dat_dai',      label: 'Đất đai / BĐS' },
   { value: 'hop_dong',     label: 'Hợp đồng' },
   { value: 'lao_dong',     label: 'Lao động' },
-  { value: 'dan_su',       label: 'Dân sự / Gia đình' },
+  { value: 'gia_dinh',     label: 'Hôn nhân gia đình' },
+  { value: 'dan_su',       label: 'Dân sự / Thừa kế' },
   { value: 'doanh_nghiep', label: 'Doanh nghiệp' },
   { value: 'hinh_su',      label: 'Hình sự' },
   { value: 'hanh_chinh',   label: 'Hành chính' },
@@ -42,6 +44,30 @@ const PRIORITY_CONFIG = {
   medium: { label: 'Ưu tiên vừa',   color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
   low:    { label: 'Ưu tiên thấp',  color: 'text-slate-400',  bg: 'bg-white/5 border-white/10' },
 } as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  title: "Giấy tờ giao dịch / quyền sử dụng",
+  confirmation: "Xác nhận của cơ quan địa phương",
+  certificate: "Giấy chứng nhận",
+  map: "Bản đồ / sơ đồ thửa đất",
+  witness: "Nhân chứng",
+  payment: "Chứng từ thanh toán",
+  contract: "Hợp đồng / thỏa thuận",
+  termination: "Quyết định / thông báo chấm dứt",
+  salary: "Chứng từ lương / thu nhập",
+  income: "Chứng minh thu nhập",
+  marriage: "Giấy tờ hôn nhân",
+  birth: "Giấy khai sinh",
+  custody: "Điều kiện chăm sóc con",
+  ownership: "Chứng minh quyền sở hữu",
+  identity: "Giấy tờ tùy thân",
+  other: "Tài liệu khác",
+};
+
+function categoryLabel(item: EvidenceItem): string {
+  const key = (item.category || '').toLowerCase();
+  return item.category_label || CATEGORY_LABELS[key] || item.category || 'Tài liệu khác';
+}
 
 // ── Coverage bar ──────────────────────────────────────────────────────────────
 
@@ -69,18 +95,95 @@ function CoverageBar({ score }: { score: number }) {
 
 // ── Evidence item row ─────────────────────────────────────────────────────────
 
-function EvidenceRow({ item }: { item: EvidenceItem }) {
+function EvidenceRow({
+  item,
+  tone = 'missing',
+}: {
+  item: EvidenceItem;
+  tone?: 'present' | 'missing' | 'uncertain' | 'contradicted';
+}) {
   const cfg = PRIORITY_CONFIG[item.priority] ?? PRIORITY_CONFIG.low;
+  const toneCfg = {
+    present: {
+      icon: <CheckCircle2 size={15} className="flex-none mt-0.5 text-green-400" />,
+      bg: 'bg-green-500/10 border-green-500/25',
+      label: 'Đã có',
+      labelColor: 'text-green-400',
+    },
+    missing: {
+      icon: <XCircle size={15} className={cn('flex-none mt-0.5', cfg.color)} />,
+      bg: cfg.bg,
+      label: 'Cần bổ sung',
+      labelColor: cfg.color,
+    },
+    uncertain: {
+      icon: <HelpCircle size={15} className="flex-none mt-0.5 text-blue-300" />,
+      bg: 'bg-blue-500/10 border-blue-500/25',
+      label: 'Chưa rõ',
+      labelColor: 'text-blue-300',
+    },
+    contradicted: {
+      icon: <AlertTriangle size={15} className="flex-none mt-0.5 text-orange-400" />,
+      bg: 'bg-orange-500/10 border-orange-500/25',
+      label: 'Mâu thuẫn',
+      labelColor: 'text-orange-400',
+    },
+  }[tone];
   return (
-    <div className={cn('flex items-start gap-3 p-3 rounded-xl border', cfg.bg)}>
-      <XCircle size={15} className={cn('flex-none mt-0.5', cfg.color)} />
+    <div className={cn('flex items-start gap-3 p-3 rounded-xl border', toneCfg.bg)}>
+      {toneCfg.icon}
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium">{item.item}</p>
+        <p className="text-sm text-white font-medium">{item.title || item.item}</p>
+        {item.matched_text && (
+          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{item.matched_text}</p>
+        )}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className="text-[10px] text-slate-500">{item.category}</span>
+          <span className="text-[10px] text-slate-500">{categoryLabel(item)}</span>
+          <span className={cn('text-[10px] font-bold', toneCfg.labelColor)}>{toneCfg.label}</span>
           <span className={cn('text-[10px] font-bold', cfg.color)}>{cfg.label}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EvidenceGroupSection({
+  title,
+  icon,
+  items,
+  tone,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  items: EvidenceItem[];
+  tone: 'present' | 'missing' | 'uncertain' | 'contradicted';
+}) {
+  if (!items.length) return null;
+  const grouped: Record<string, EvidenceItem[]> = {};
+  for (const item of items) {
+    const label = categoryLabel(item);
+    if (!grouped[label]) grouped[label] = [];
+    grouped[label].push(item);
+  }
+  return (
+    <div className="glass-card p-5 space-y-5">
+      <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+        {icon}
+        {title}
+      </h2>
+      {Object.entries(grouped).map(([cat, group]) => (
+        <div key={cat} className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{cat}</h3>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/10">
+              {group.length} mục
+            </span>
+          </div>
+          {group.map((item, idx) => (
+            <EvidenceRow key={`${item.evidence_id || item.item}-${idx}`} item={item} tone={tone} />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -139,6 +242,7 @@ export function EvidenceGap() {
   const location = useLocation();
   const [situation, setSituation] = useSyncedSituation(location.state);
   const [domain, setDomain]       = useState(() => getContextDomain(location.state));
+  const sessionId = getAnalysisContext(location.state).sessionId ?? '';
   const [factsText, setFactsText] = useState('');
   const [loading, setLoading]     = useState(false);
   const [result, setResult]       = useState<EvidenceGapResult | null>(null);
@@ -157,21 +261,12 @@ export function EvidenceGap() {
         .split('\n')
         .map(s => s.trim())
         .filter(Boolean);
-      const r = await getEvidenceGap(situation.trim(), domain, facts);
+      const r = await getEvidenceGap(situation.trim(), domain, facts, sessionId);
       setResult(r);
     } catch {
       setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
     } finally {
       setLoading(false);
-    }
-  }
-
-  // Group missing evidence by category
-  const categories: Record<string, EvidenceItem[]> = {};
-  if (result) {
-    for (const item of result.missing_evidence) {
-      if (!categories[item.category]) categories[item.category] = [];
-      categories[item.category].push(item);
     }
   }
 
@@ -266,14 +361,17 @@ export function EvidenceGap() {
             </div>
             <p className="text-sm text-slate-300 leading-relaxed">{result.summary}</p>
             <div className="flex gap-4 text-xs flex-wrap">
+              <span className="text-green-400 font-bold">
+                {result.present_evidence?.length || result.strong_evidence.length} Chứng cứ đã có
+              </span>
               <span className="text-red-400 font-bold">
                 {result.priority_items.length} Ưu tiên cao cần bổ sung
               </span>
+              <span className="text-blue-300 font-bold">
+                {result.uncertain_evidence?.length || 0} Mục cần xác minh
+              </span>
               <span className="text-yellow-400 font-bold">
                 {result.missing_evidence.length} Tổng mục còn thiếu
-              </span>
-              <span className="text-green-400 font-bold">
-                {result.strong_evidence.length} Chứng cứ mạnh
               </span>
             </div>
             {result.warnings?.map((w, i) => (
@@ -285,26 +383,48 @@ export function EvidenceGap() {
             <p className="text-[11px] text-slate-400 italic">{result.advice}</p>
           </div>
 
-          {/* Missing evidence by category */}
-          {Object.keys(categories).length > 0 && (
-            <div className="glass-card p-5 space-y-5">
+          <EvidenceGroupSection
+            title="Chứng cứ đã có"
+            icon={<CheckCircle2 size={14} className="text-green-400" />}
+            items={result.present_evidence || []}
+            tone="present"
+          />
+
+          <EvidenceGroupSection
+            title="Chứng cứ cần bổ sung"
+            icon={<ShieldAlert size={14} className="text-red-400" />}
+            items={result.missing_evidence}
+            tone="missing"
+          />
+
+          <EvidenceGroupSection
+            title="Chứng cứ chưa rõ / nên xác minh"
+            icon={<HelpCircle size={14} className="text-blue-300" />}
+            items={result.uncertain_evidence || []}
+            tone="uncertain"
+          />
+
+          <EvidenceGroupSection
+            title="Mâu thuẫn cần làm rõ"
+            icon={<AlertTriangle size={14} className="text-orange-400" />}
+            items={result.contradictions || []}
+            tone="contradicted"
+          />
+
+          {result.recommendations?.length > 0 && (
+            <div className="glass-card p-5 space-y-3">
               <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <ShieldAlert size={14} className="text-red-400" />
-                Chứng cứ cần bổ sung
+                <CheckCircle2 size={14} className="text-legal-gold" />
+                Gợi ý tiếp theo
               </h2>
-              {Object.entries(categories).map(([cat, items]) => (
-                <div key={cat} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{cat}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">
-                      {items.filter(i => i.priority === 'high').length} cao
-                    </span>
-                  </div>
-                  {items.map((item, idx) => (
-                    <EvidenceRow key={idx} item={item} />
-                  ))}
-                </div>
-              ))}
+              <ul className="space-y-2">
+                {result.recommendations.map((rec, i) => (
+                  <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-legal-gold flex-none" />
+                    {rec}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -312,10 +432,10 @@ export function EvidenceGap() {
           <EvidenceStrengthSection strong={result.strong_evidence} weak={result.weak_evidence} />
 
           {/* All clear */}
-          {result.missing_evidence.length === 0 && (
+          {result.missing_evidence.length === 0 && (result.contradictions?.length || 0) === 0 && (
             <div className="glass-card p-5 flex items-center gap-3 text-green-400">
               <CheckCircle2 size={20} />
-              <p className="text-sm font-medium">Chứng cứ hiện có đã đủ tốt theo tiêu chuẩn đánh giá.</p>
+              <p className="text-sm font-medium">Không phát hiện chứng cứ ưu tiên cao còn thiếu theo thông tin hiện có.</p>
             </div>
           )}
         </div>

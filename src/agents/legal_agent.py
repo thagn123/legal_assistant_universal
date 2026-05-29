@@ -40,6 +40,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.agents.tools import dispatch_tool
+from src.evidence.evidence_gap_engine import (
+    analyze_evidence_gap,
+    filter_contradictory_recommendations,
+)
 from src.llm import client as llm
 from src.llm.prompts import (
     CONTRACT_ANALYSIS_PROMPT,
@@ -195,6 +199,18 @@ class LegalAgent:
         session_id: str,
     ) -> LegalAgentResult:
         role_label = _role_label(user_role)
+        evidence_context = analyze_evidence_gap(situation, law_type or "general")
+        evidence_context_json = json.dumps(
+            {
+                "user_facts": [fact.to_dict() for fact in evidence_context.normalized_facts],
+                "present_evidence": [item.title for item in evidence_context.present_evidence],
+                "missing_evidence": [item.title for item in evidence_context.missing_evidence],
+                "uncertain_evidence": [item.title for item in evidence_context.uncertain_evidence],
+                "contradictions": [item.title for item in evidence_context.contradictions],
+                "domain": evidence_context.domain,
+            },
+            ensure_ascii=False,
+        )
 
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
@@ -205,6 +221,7 @@ class LegalAgent:
                     f"**TÌNH HUỐNG:** {situation}\n"
                     f"**VAI TRÒ:** {role_label}\n"
                     + (f"**LĨNH VỰC:** {law_type}\n" if law_type else "")
+                    + f"\n**USER_FACTS / EVIDENCE_STATUS:**\n{evidence_context_json}\n"
                     + "\nHãy dùng tool `retrieve_relevant_laws` và `retrieve_similar_cases` "
                     "để thu thập bằng chứng trước khi phân tích."
                 ),
@@ -305,6 +322,7 @@ class LegalAgent:
         # ── Parse structured fields ───────────────────────────────────────────
         strength, score = _parse_position_strength(full_assessment)
         actions = _parse_recommended_actions(full_assessment, law_type)
+        actions = filter_contradictory_recommendations(actions, evidence_context.present_evidence)
         warnings = _parse_warnings(full_assessment)
         citations = _extract_citations(full_assessment, retrieved_laws)
 

@@ -643,14 +643,25 @@ export async function adminGetStats(): Promise<AdminStats> {
 
 export interface EvidenceItem {
   item: string;
+  title?: string;
   priority: 'high' | 'medium' | 'low';
   category: string;
+  category_label?: string;
+  evidence_id?: string;
+  status?: 'present' | 'missing' | 'uncertain' | 'contradicted';
+  matched_text?: string;
+  matched_alias?: string;
+  confidence?: number;
+  reason?: string;
 }
 
 export interface EvidenceGapResult {
   request_id: string;
   domain: string;
+  present_evidence: EvidenceItem[];
   missing_evidence: EvidenceItem[];
+  uncertain_evidence: EvidenceItem[];
+  contradictions: EvidenceItem[];
   strong_evidence: string[];
   weak_evidence: string[];
   coverage_score: number;
@@ -659,6 +670,11 @@ export interface EvidenceGapResult {
   summary: string;
   confidence: number;
   warnings: string[];
+  recommendations: string[];
+  debug?: {
+    normalized_facts?: unknown[];
+    matched_aliases?: unknown[];
+  };
 }
 
 export async function getEvidenceGap(
@@ -796,6 +812,27 @@ export async function classifySituation(
 
 // ---------------------------------------------------------------------------
 // Next Best Actions — POST /recommendations/next-best-actions
+//
+// IMPORTANT — two distinct usage patterns:
+//
+// 1. Dashboard quick-classify (current usage):
+//    Call with { situation, domain, limit } only. No session_id, no
+//    recommended_actions. The backend generates fresh recommendations
+//    without any prior evidence context. No contradiction filtering needed.
+//
+// 2. Session-aware call (future / defense-in-depth):
+//    If you have an existing analyze session (e.g., user re-opens a
+//    saved conversation), pass { session_id: backendSessionId,
+//    recommended_actions: [...] }. The backend will load the session's
+//    evidence_snapshot and strip recommendations that contradict PRESENT
+//    evidence (e.g., "Thu thập sổ đỏ" when land_certificate=PRESENT).
+//    session_id must be the MongoDB session ID from data.session_id in
+//    the /intelligence/analyze response, not the client-generated chat ID.
+//
+// NOTE: Analyze page NBA sidebar does NOT call this endpoint.
+//    It uses result.next_best_actions embedded in the /intelligence/analyze
+//    response, already filtered by the orchestrator before the response
+//    is built. Never route Analyze page NBA through this endpoint.
 // ---------------------------------------------------------------------------
 
 export interface NextBestActionRequest {
@@ -808,6 +845,7 @@ export interface NextBestActionRequest {
   recommended_actions?: string[];
   risk_assessment?: Record<string, unknown>;
   limit?: number;
+  session_id?: string;
 }
 
 export async function getNextBestActions(
@@ -1060,6 +1098,7 @@ export interface SimilarCaseItem {
   key_laws: string[];
   similarity_score: number;
   similarity_label: string;
+  is_demo?: boolean;
   stage: string;
   stage_label: string;
   // Phase 23

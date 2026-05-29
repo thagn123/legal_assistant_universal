@@ -83,7 +83,8 @@ class GeminiQAEvaluator:
             sanitized = {}
             for k, v in data.items():
                 k_lower = k.lower()
-                if any(sec in k_lower for sec in ["key", "token", "cookie", "auth", "secret", "password"]):
+                # Do not redact functional fields like 'key_laws'
+                if any(sec in k_lower for sec in ["token", "cookie", "auth", "secret", "password"]) or ("key" in k_lower and "key_law" not in k_lower):
                     sanitized[k] = "[REDACTED_SECURITY]"
                 else:
                     sanitized[k] = self._sanitize_data(v)

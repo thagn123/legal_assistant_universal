@@ -64,7 +64,7 @@ def _call_api(method: str, path: str, body: dict | None, user_id: str) -> Tuple[
     resp_data = {}
     
     try:
-        with urllib.request.urlopen(req, timeout=35) as resp:
+        with urllib.request.urlopen(req, timeout=75) as resp:
             status_code = resp.status
             resp_data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:

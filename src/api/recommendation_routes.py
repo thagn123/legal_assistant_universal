@@ -15,8 +15,11 @@ Endpoints:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, BaseModel
@@ -328,6 +331,7 @@ class NextBestActionRequest(BaseModel):
     recommended_actions: List[str] = Field(default_factory=list)
     risk_assessment: Dict[str, Any] = Field(default_factory=dict)
     limit: int = Field(default=6, ge=1, le=10)
+    session_id: Optional[str] = None  # used to load shared evidence_snapshot
 
 
 class NextBestActionOut(BaseModel):
@@ -430,6 +434,29 @@ def recommend_next_best_actions(
     analysis context (domain, score, citations, warnings, risks) to recommend
     which module should be used next and why.
     """
+    # Load evidence snapshot from session so NBA never contradicts PRESENT evidence
+    _session_present_evidence: List[Dict[str, Any]] = []
+    if body.session_id:
+        try:
+            from src.memory.session_store import SessionStore
+            _ss = SessionStore()
+            _sctx = _ss.load_context(body.session_id, user_id)
+            if _sctx and _sctx.evidence_snapshot:
+                _session_present_evidence = _sctx.evidence_snapshot.get("present_evidence", [])
+        except Exception as _se:
+            logger.debug("NBA: evidence snapshot load failed (non-fatal): %s", _se)
+
+    # Filter recommended_actions to remove any that contradict PRESENT evidence
+    effective_recommended_actions = body.recommended_actions
+    if _session_present_evidence:
+        try:
+            from src.evidence.evidence_gap_engine import filter_contradictory_recommendations
+            effective_recommended_actions = filter_contradictory_recommendations(
+                body.recommended_actions, _session_present_evidence
+            )
+        except Exception as _fe:
+            logger.debug("NBA: filter_contradictory_recommendations failed: %s", _fe)
+
     # Fix the hardcoded citations polluted by the testing runner config
     effective_citations = body.citations
     sit_lower = body.situation.lower()
@@ -447,7 +474,7 @@ def recommend_next_best_actions(
         domain_confidence=body.domain_confidence,
         citations=effective_citations,
         warnings=body.warnings,
-        recommended_actions=body.recommended_actions,
+        recommended_actions=effective_recommended_actions,
         risk_assessment=body.risk_assessment,
     )
     behavior_scores = _next_best_action_behavior_scores(_get_behavior_source(request), user_id)
@@ -495,14 +522,24 @@ def recommend_next_best_actions(
 
         if "thừa kế" in sit_lower or "đất đai" in sit_lower or "sổ đỏ" in sit_lower or "lấn chiếm" in sit_lower:
             nba_text = "Gửi đơn yêu cầu giải quyết tranh chấp đất đai tại Ủy ban nhân dân cấp xã nơi có đất để tiến hành hòa giải bắt buộc theo Điều 202 Luật Đất đai."
+            # Adapt step 1 based on whether user already has land certificate
+            _has_land_cert = any(
+                p.get("evidence_id") == "land_certificate"
+                for p in _session_present_evidence
+            )
+            _land_step1 = (
+                "Kiểm tra và đối chiếu giấy tờ đất đai hiện có (sổ đỏ/sổ hồng, hợp đồng chuyển nhượng, biên lai thanh toán) — xác nhận tên người đứng và ranh giới."
+                if _has_land_cert else
+                "Thu thập và kiểm tra giấy tờ đất đai (sổ đỏ/sổ hồng, hợp đồng chuyển nhượng, biên lai thanh toán)."
+            )
             journey_steps = [
-                "Thu thập và kiểm tra giấy tờ đất đai (sổ đỏ/sổ hồng, hợp đồng chuyển nhượng, biên lai thanh toán).",
+                _land_step1,
                 "Nộp đơn yêu cầu hòa giải tại UBND cấp xã — bắt buộc trước khi khởi kiện theo Điều 202 Luật Đất đai.",
                 "Nếu hòa giải không thành, nộp đơn khởi kiện tại TAND cấp huyện nơi có đất.",
                 "Chuẩn bị nhân chứng, biên bản đo đạc thực địa và tài liệu lịch sử sử dụng đất.",
             ]
             next_questions = [
-                "Bạn có Giấy chứng nhận quyền sử dụng đất (sổ đỏ/sổ hồng) không?",
+                "Bạn có Giấy chứng nhận quyền sử dụng đất (sổ đỏ/sổ hồng) không?" if not _has_land_cert else "Tên trên sổ đỏ/sổ hồng là của bạn hay đồng sở hữu?",
                 "Tranh chấp liên quan đến thừa kế, mua bán hay ranh giới đất?",
                 "Hai bên đã từng hòa giải tại địa phương chưa, và kết quả thế nào?",
             ]
@@ -1353,6 +1390,13 @@ def intelligence_analyze(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+    # NBA for the Analyze page is built here — NOT via the standalone
+    # /recommendations/next-best-actions endpoint. result.recommended_actions
+    # has already been filtered by the orchestrator (filter_contradictory_
+    # recommendations + OutputValidator.validate) before reaching this point,
+    # so the NBA list embedded in IntelligenceOut is contradiction-free.
+    # Frontend reads result.next_best_actions directly; it must NOT re-fetch
+    # this data via getNextBestActions().
     next_best_actions: List[NextBestActionOut] = []
     if not getattr(result, "is_chitchat", False):
         ctx = build_recommendation_context(

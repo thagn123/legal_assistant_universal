@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.api.deps import require_user
+from src.evidence.evidence_schemas import category_label
 from src.services.evidence_gap_detector import EvidenceGapDetector, EvidenceItem
 from src.services.situation_classifier import SituationClassifier
 from src.services.timeline_tracker import TimelineTracker, DeadlineItem
@@ -34,13 +35,24 @@ class EvidenceItemOut(BaseModel):
     item: str
     priority: str
     category: str
+    evidence_id: str = ""
+    title: str = ""
+    status: str = ""
+    matched_text: str = ""
+    matched_alias: str = ""
+    confidence: float = 0.0
+    reason: str = ""
+    category_label: str = ""
 
 
 class EvidenceGapResponse(BaseModel):
     request_id: str
     feature: str = "evidence_gap"
     domain: str
+    present_evidence: List[EvidenceItemOut] = []
     missing_evidence: List[EvidenceItemOut]
+    uncertain_evidence: List[EvidenceItemOut] = []
+    contradictions: List[EvidenceItemOut] = []
     strong_evidence: List[str]
     weak_evidence: List[str]
     coverage_score: float
@@ -49,6 +61,8 @@ class EvidenceGapResponse(BaseModel):
     summary: str
     confidence: float
     warnings: List[str]
+    recommendations: List[str] = []
+    debug: Dict[str, Any] = {}
 
 
 class TimelineRequest(BaseModel):
@@ -124,7 +138,19 @@ class ClassifyResponse(BaseModel):
 
 
 def _item_out(item: EvidenceItem) -> EvidenceItemOut:
-    return EvidenceItemOut(item=item.item, priority=item.priority, category=item.category)
+    return EvidenceItemOut(
+        item=item.item,
+        title=item.item,
+        priority=item.priority,
+        category=item.category,
+        evidence_id=item.evidence_id,
+        status=item.status,
+        matched_text=item.matched_text,
+        matched_alias=item.matched_alias,
+        confidence=item.confidence,
+        reason=item.reason,
+        category_label=category_label(item.category),
+    )
 
 
 def _deadline_out(d: DeadlineItem) -> DeadlineItemOut:
@@ -194,6 +220,7 @@ def classify_situation(
 @analysis_router.post("/evidence-gap", response_model=EvidenceGapResponse)
 def detect_evidence_gap(
     body: EvidenceGapRequest,
+    debug: bool = False,
     user_id: str = Depends(require_user),
 ) -> EvidenceGapResponse:
     """
@@ -207,32 +234,31 @@ def detect_evidence_gap(
         situation=body.situation,
     )
 
-    missing_count = len(result.missing_evidence)
     priority_count = len(result.priority_items)
 
-    if result.coverage_score >= 0.8:
-        summary = f"Chứng cứ khá đầy đủ ({round(result.coverage_score * 100)}%). Còn thiếu {missing_count} mục nhỏ."
-    elif result.coverage_score >= 0.5:
-        summary = f"Chứng cứ ở mức trung bình ({round(result.coverage_score * 100)}%). Cần bổ sung {priority_count} mục ưu tiên cao."
-    else:
-        summary = f"Chứng cứ còn thiếu nhiều ({round(result.coverage_score * 100)}%). Cần bổ sung gấp {priority_count} mục quan trọng."
-
     warnings = []
+    if result.contradictions:
+        warnings.append("Có mâu thuẫn về tình trạng chứng cứ — cần xác minh trước khi kết luận thiếu.")
     if priority_count >= 3:
-        warnings.append("Thiếu nhiều chứng cứ quan trọng — khả năng thắng kiện bị ảnh hưởng đáng kể.")
+        warnings.append("Thiếu nhiều chứng cứ ưu tiên cao — khả năng bảo vệ yêu cầu có thể bị ảnh hưởng.")
 
     return EvidenceGapResponse(
         request_id="gap_" + str(uuid.uuid4())[:8],
         domain=result.domain,
+        present_evidence=[_item_out(p) for p in result.present_evidence],
         missing_evidence=[_item_out(m) for m in result.missing_evidence],
+        uncertain_evidence=[_item_out(u) for u in result.uncertain_evidence],
+        contradictions=[_item_out(c) for c in result.contradictions],
         strong_evidence=result.strong_evidence,
         weak_evidence=result.weak_evidence,
         coverage_score=result.coverage_score,
         priority_items=[_item_out(p) for p in result.priority_items],
         advice=result.advice,
-        summary=summary,
+        summary=result.summary,
         confidence=result.coverage_score,
         warnings=warnings,
+        recommendations=result.recommendations,
+        debug=result.debug if debug else {},
     )
 
 

@@ -32,6 +32,7 @@ from src.evidence.evidence_gap_engine import (
     analyze_evidence_gap,
     filter_contradictory_recommendations,
 )
+from src.engine.output_validator import OutputValidator
 from src.engine.query_planner import QueryPlanner, QueryPlan
 from src.engine.retrieval_fusion import RetrievalFusionEngine, FusedResultSet
 from src.engine.recommendation_ranker import RecommendationRanker, RankedItem
@@ -121,6 +122,7 @@ class LegalIntelligenceOrchestrator:
         self._ranker = RecommendationRanker(vector_storage)
         self._session_store = SessionStore()
         self._tracer = get_tracer()
+        self._output_validator = OutputValidator()
 
         # Long-term user memory (cross-session, no TTL)
         self._memory_store: Optional[Any] = None
@@ -298,10 +300,25 @@ class LegalIntelligenceOrchestrator:
                     for r in fused.results[:5]
                     if r.content
                 )
+                present_titles = [
+                    e.title
+                    for e in getattr(evidence_context, "present_evidence", [])
+                    if getattr(e, "title", "")
+                ][:6]
+                evidence_instruction = ""
+                if present_titles:
+                    evidence_instruction = (
+                        "\n\n⚠️ QUY TẮC TUYỆT ĐỐI — NGƯỜI DÙNG XÁC NHẬN ĐÃ CÓ các tài liệu sau:\n"
+                        + "\n".join(f"  ✓ {t}" for t in present_titles)
+                        + "\nKHÔNG được viết 'cần thu thập', 'bổ sung', 'cần có' hay bất kỳ cụm từ gợi ý "
+                        "thu thập các tài liệu trên. Chỉ được gợi ý: kiểm tra tính hợp lệ, bản gốc/bản sao, "
+                        "ngày cấp, nội dung thể hiện trên tài liệu đó."
+                    )
                 user_content = (
                     f"Tình huống: {situation[:800]}\n\n"
                     f"Vai trò: {user_role}\n\n"
-                    f"USER_FACTS / EVIDENCE_STATUS:\n{_evidence_context_json(evidence_context)}\n\n"
+                    f"USER_FACTS / EVIDENCE_STATUS:\n{_evidence_context_json(evidence_context)}"
+                    f"{evidence_instruction}\n\n"
                     f"Bối cảnh pháp lý đã truy xuất:\n{context_snippets}"
                 )
                 if user_memory_ctx:
@@ -404,9 +421,45 @@ class LegalIntelligenceOrchestrator:
             recommended_actions,
             evidence_context.present_evidence,
         )
+        # OutputValidator: second pass catches any remaining contradictions
+        recommended_actions = self._output_validator.validate(
+            recommended_actions, evidence_context
+        )
         full_assessment = llm_full_assessment or _synthesize_assessment(
             situation, plan, strength, raw_laws, raw_cases, evidence_context
         )
+        # Scan and rewrite contradictory sentences in prose (scan_text was defined but
+        # never called — sanitize_prose now runs in production and rewrites in-place).
+        try:
+            full_assessment, _prose_flagged = self._output_validator.sanitize_prose(
+                full_assessment, evidence_context
+            )
+            if _prose_flagged:
+                logger.warning(
+                    "sanitize_prose rewrote %d contradictory sentence(s) in full_assessment",
+                    len(_prose_flagged),
+                )
+            
+            # P2 Risk Fix: Scan position_reasoning as well
+            reasoning, _reas_flagged = self._output_validator.sanitize_prose(
+                reasoning, evidence_context
+            )
+            if _reas_flagged:
+                logger.warning(
+                    "sanitize_prose rewrote %d contradictory sentence(s) in position_reasoning",
+                    len(_reas_flagged),
+                )
+
+            # P2 Risk Fix: Scan warnings array
+            new_warnings = []
+            for w in warnings:
+                w_sanitized, _w_flagged = self._output_validator.sanitize_prose(w, evidence_context)
+                if w_sanitized.strip():
+                    new_warnings.append(w_sanitized.strip())
+            warnings = new_warnings
+
+        except Exception as _pve:
+            logger.warning("sanitize_prose failed (non-fatal): %s", _pve)
         citations = [
             l.get("law_reference", "")
             for l in raw_laws[:5]
@@ -475,6 +528,13 @@ class LegalIntelligenceOrchestrator:
                 result_summary=result_summary,
                 trace_id=trace_id,
                 query_plan=plan.to_dict(),
+            )
+            # Persist evidence snapshot so NBA/sidebar can share it without recomputing
+            self._session_store.update_evidence_snapshot(
+                session_id=sid,
+                user_id=user_id,
+                evidence_snapshot=evidence_context.to_dict(),
+                domain=plan.detected_domain,
             )
             self._session_store.cache_retrieval_context(
                 session_id=sid,

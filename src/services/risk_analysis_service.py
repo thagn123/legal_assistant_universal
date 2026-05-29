@@ -139,22 +139,27 @@ class RiskAnalysisService:
             "low"
         )
 
-        # Stage 4 — derive strengths from situation text
+        # Stage 4 — derive strengths from deterministic evidence status.
+        # Do not infer "has evidence" from raw keywords because phrases like
+        # "không có sổ đỏ" still contain the token "sổ đỏ".
         q = (situation + " ".join(facts)).lower()
         strengths: List[str] = []
-        for kw_list, label in _STRENGTH_INDICATORS.get(profile.domain, []):
-            if any(kw in q for kw in kw_list):
-                strengths.append(label)
-        if gap.strong_evidence:
-            strengths += [f"Chứng cứ mạnh: {e}" for e in gap.strong_evidence[:2]]
+        if gap.present_evidence:
+            strengths += [f"Đã có: {e.item}" for e in gap.present_evidence[:3]]
+        else:
+            for kw_list, label in _STRENGTH_INDICATORS.get(profile.domain, []):
+                if any(kw in q and f"không có {kw}" not in q and f"chưa có {kw}" not in q for kw in kw_list):
+                    strengths.append(label)
 
         # Stage 5 — derive weaknesses
         weaknesses: List[str] = []
         for kw_list, label in _WEAKNESS_INDICATORS.get(profile.domain, []):
             if any(kw in q for kw in kw_list):
                 weaknesses.append(label)
-        if gap.weak_evidence:
-            weaknesses += [f"Chứng cứ yếu: {e}" for e in gap.weak_evidence[:2]]
+        if gap.uncertain_evidence:
+            weaknesses += [f"Chưa rõ: {e.item}" for e in gap.uncertain_evidence[:2]]
+        if gap.contradictions:
+            weaknesses += [f"Mâu thuẫn cần xác minh: {e.item}" for e in gap.contradictions[:2]]
         if not weaknesses and risk_score >= 50:
             weaknesses.append("Thiếu nhiều chứng cứ quan trọng theo tiêu chuẩn pháp lý")
 

@@ -44,6 +44,10 @@ class SessionContext:
     law_type_preferences: List[str]        # top law_types from history
     last_query_plan: Optional[Dict[str, Any]]  # serialized QueryPlan from last turn
     metadata: Dict[str, Any]
+    # Evidence snapshot — shared across modules in same session (no TTL beyond session)
+    evidence_snapshot: Optional[Dict[str, Any]] = None   # serialized EvidenceGapAnalysis.to_dict()
+    evidence_domain: Optional[str] = None                 # detected_domain when snapshot was saved
+    evidence_updated_at: Optional[str] = None             # ISO timestamp of last snapshot save
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +136,9 @@ class SessionStore:
                 law_type_preferences=doc.get("law_type_preferences", []),
                 last_query_plan=doc.get("last_query_plan"),
                 metadata=doc.get("metadata", {}),
+                evidence_snapshot=doc.get("evidence_snapshot"),
+                evidence_domain=doc.get("evidence_domain"),
+                evidence_updated_at=doc.get("evidence_updated_at"),
             )
 
         # New session
@@ -274,6 +281,31 @@ class SessionStore:
             )
         except Exception as exc:
             logger.warning("append_evidence failed: %s", exc)
+
+    def update_evidence_snapshot(
+        self,
+        session_id: str,
+        user_id: str,
+        evidence_snapshot: Dict[str, Any],
+        domain: str,
+    ) -> None:
+        """
+        Persist evidence_context snapshot so NBA/sidebar can load it without
+        recomputing from scratch. Non-blocking — swallows all exceptions.
+        """
+        try:
+            self.sessions.update_one(
+                {"session_id": session_id, "user_id": user_id},
+                {"$set": {
+                    "evidence_snapshot": evidence_snapshot,
+                    "evidence_domain": domain,
+                    "evidence_updated_at": _now(),
+                    "last_active": _now(),
+                }},
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("update_evidence_snapshot failed: %s", exc)
 
     # ── Context cache ─────────────────────────────────────────────────────────
 

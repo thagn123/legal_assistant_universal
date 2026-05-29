@@ -75,6 +75,11 @@ function CaseCard({ item, index }: { item: SimilarCaseItem; index: number }) {
         <div className="flex-1 min-w-0 space-y-1.5">
           <p className="text-sm font-semibold text-white leading-snug">
             {item.title || 'Vụ việc không có tiêu đề'}
+            {item.is_demo && (
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
+                Ví dụ tham khảo
+              </span>
+            )}
           </p>
           <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
             {item.situation_summary}

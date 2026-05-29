@@ -30,6 +30,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from src.evidence.evidence_gap_engine import (
+    analyze_evidence_gap,
+    filter_contradictory_recommendations,
+)
 from src.graphrag.evidence_bundle import EvidenceBundle, assemble_evidence_bundle, empty_bundle
 from src.graphrag.reasoning import ReasoningEngine
 from src.mongodb.mongo_storage import VectorStorage
@@ -173,7 +177,7 @@ class SituationAnalyzer:
 
         # ── 8. Extract actions & warnings ────────────────────────────────────
         answer = getattr(reasoning, "answer", "")
-        actions = _extract_recommended_actions(answer, user_role, law_type)
+        actions = _extract_recommended_actions(answer, user_role, law_type, situation=situation)
         warnings = list(getattr(reasoning, "warnings", []))
         if not is_grounded:
             warnings.insert(
@@ -332,7 +336,10 @@ def _classify_position(
 
 
 def _extract_recommended_actions(
-    answer: str, user_role: str, law_type: Optional[str]
+    answer: str,
+    user_role: str,
+    law_type: Optional[str],
+    situation: str = "",
 ) -> List[str]:
     """
     Return a practical action list.
@@ -375,7 +382,11 @@ def _extract_recommended_actions(
     ]
 
     specific = domain_actions.get(law_type or "", [])
-    return specific + [a for a in base_actions if a not in specific]
+    actions = specific + [a for a in base_actions if a not in specific]
+    if situation:
+        evidence = analyze_evidence_gap(situation, law_type or "general")
+        actions = filter_contradictory_recommendations(actions, evidence.present_evidence)
+    return actions
 
 
 def _summarise(situation: str, max_len: int = 200) -> str:
