@@ -135,6 +135,9 @@ class RetrievalFusionEngine:
                     if not cid or cid.startswith("__"):
                         continue
                     vscore = float(c.get("vector_score", 0))
+                    # QA Risk Fix: Loại bỏ các kết quả nhiễu thấp hơn ngưỡng
+                    if vscore < 0.55:
+                        continue
                     if cid not in candidates:
                         candidates[cid] = _make_result(c, "law_chunk")
                         vector_hits += 1

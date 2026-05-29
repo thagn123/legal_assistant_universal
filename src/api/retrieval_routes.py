@@ -406,6 +406,8 @@ def search_laws(
                     filter_user_id=user_id,
                     limit=body.limit,
                 )
+            # QA Risk Fix: Lọc kết quả rác (dưới 0.55) để tránh fallback sai
+            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= 0.55]
         except Exception as e:
             logger.warning("Vector search chunks failed: %s. Falling back to keyword search.", e)
             raw = []
@@ -570,6 +572,8 @@ def find_similar_cases(
                     law_type=None,
                     limit=body.limit,
                 )
+            # QA Risk Fix: Lọc kết quả rác (dưới 0.55)
+            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= 0.55]
         except Exception as e:
             logger.warning("Vector search cases failed: %s. Falling back to keyword.", e)
             raw = []
