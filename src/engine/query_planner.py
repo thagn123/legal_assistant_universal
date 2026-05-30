@@ -33,6 +33,8 @@ _DOMAIN_KEYWORDS: Dict[str, List[str]] = {
         "lấn chiếm", "tranh chấp đất", "thu hồi đất", "bồi thường đất",
         "giải phóng mặt bằng", "ranh giới", "đất đai", "giấy chứng nhận qsd",
         "gcn", "luật đất đai",
+        # No-diacritics aliases — match queries typed without Vietnamese diacritics
+        "so do", "ranh gioi", "tranh chap dat",
     ],
     "hop_dong": [
         "hợp đồng", "điều khoản", "ký kết", "vi phạm hợp đồng", "phạt vi phạm",
@@ -63,12 +65,44 @@ _DOMAIN_KEYWORDS: Dict[str, List[str]] = {
         "hành chính", "cơ quan nhà nước", "khiếu nại hành chính", "tố cáo",
         "quyết định hành chính", "ủy ban nhân dân", "ubnd", "giấy phép",
         "xử phạt vi phạm hành chính",
+        # Standalone "khiếu nại" boosts hanh_chinh over hop_dong when "phạt vi phạm"
+        # keyword also matches (e.g., "bị phạt vi phạm hành chính … khiếu nại").
+        "khiếu nại",
     ],
     "gia_dinh": [
         "hôn nhân", "ly hôn", "nuôi con", "cấp dưỡng", "tài sản chung",
         "thừa kế", "gia đình", "vợ chồng", "con cái", "nhận con nuôi",
     ],
 }
+
+# Primary labor action keywords — when present, lao_dong takes precedence over
+# property or company keywords in multi-domain queries.
+# Rationale: "sa thải + tranh chấp đất đai" → the dispute is about the termination,
+# not the land. Raw keyword count alone mis-classifies these as dat_dai/doanh_nghiep.
+_LABOR_PRIMARY_KEYWORDS: List[str] = [
+    "sa thải", "bị sa thải", "đuổi việc",
+    "nợ lương", "chậm lương", "không trả lương",
+    "trợ cấp thôi việc", "bồi thường sa thải",
+    "chấm dứt hợp đồng lao động",
+    "tai nạn lao động",
+    "bhxh chưa đóng", "chưa đóng bhxh",
+]
+
+# Primary family action keywords — "ly hôn", "quyền nuôi con" signal gia_dinh even when
+# the query also mentions property/inheritance terms that accumulate more raw hits.
+# Only fires when gia_dinh has ≥1 keyword match AND lao_dong override did not fire first.
+_FAMILY_PRIMARY_KEYWORDS: List[str] = [
+    "ly hôn",
+    "ly hôn đơn phương",
+    "quyền nuôi con",
+    "tranh chấp nuôi con",
+    "con dưới 36 tháng",
+    "sau ly hôn",
+    "vợ chồng ly hôn",
+    "bạo lực gia đình",
+    "cấp dưỡng con",
+    "phán quyết ly hôn",
+]
 
 _DISPUTE_TYPE_PATTERNS: Dict[str, List[str]] = {
     "tranh_chap_ranh_gioi":    ["ranh giới", "lấn chiếm", "tranh chấp đất"],
@@ -214,6 +248,25 @@ class QueryPlanner:
         total = sum(scores.values())
         top_domain = max(scores, key=scores.__getitem__)
         confidence = round(scores[top_domain] / max(total, 1), 3)
+
+        # Labor action override: a primary labor action keyword (sa thải, nợ lương, …)
+        # signals that the dispute is fundamentally about labor, even when the query also
+        # mentions land/company context that accumulates more raw keyword hits.
+        # Only fires when lao_dong has ≥1 keyword match of its own in the query.
+        if top_domain != "lao_dong" and scores.get("lao_dong", 0) >= 1:
+            if any(kw in query_lower for kw in _LABOR_PRIMARY_KEYWORDS):
+                top_domain = "lao_dong"
+                confidence = round(scores["lao_dong"] / max(total, 1), 3)
+
+        # Family action override: "ly hôn", "quyền nuôi con" → gia_dinh wins over dan_su.
+        # When both domains tie (shared keywords: ly hôn, nuôi con), dict ordering gives
+        # dan_su the win. Override to gia_dinh when a family primary keyword is present
+        # AND gia_dinh has ≥1 hit AND lao_dong did not already override.
+        if top_domain not in ("gia_dinh", "lao_dong") and scores.get("gia_dinh", 0) >= 1:
+            if any(kw in query_lower for kw in _FAMILY_PRIMARY_KEYWORDS):
+                top_domain = "gia_dinh"
+                confidence = round(scores["gia_dinh"] / max(total, 1), 3)
+
         return top_domain, confidence
 
     def _extract_entities(self, query: str) -> Dict[str, List[str]]:

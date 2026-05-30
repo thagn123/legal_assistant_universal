@@ -416,7 +416,7 @@ class LegalIntelligenceOrchestrator:
         position_score, strength, reasoning = _compute_position(raw_laws, plan)
         risks = _identify_risks(situation, plan)
         warnings = _extract_warnings(raw_laws, plan)
-        recommended_actions = _generate_recommendations(plan, strength, risks, evidence_context)
+        recommended_actions = _generate_recommendations(plan, strength, risks, evidence_context, situation)
         recommended_actions = filter_contradictory_recommendations(
             recommended_actions,
             evidence_context.present_evidence,
@@ -872,6 +872,45 @@ def _extract_warnings(laws: List[Dict], plan: QueryPlan) -> List[str]:
     return warnings
 
 
+# Phrases (lowercased) indicating user has ALREADY completed — or been refused — UBND mediation.
+# When any of these appears in the situation, suppressing the "nộp đơn hòa giải tại UBND" action
+# avoids re-suggesting a step the user explicitly states was completed.
+_POST_MEDIATION_SIGNALS = [
+    "hòa giải không thành",
+    "hoa giai khong thanh",
+    "biên bản hòa giải không thành",
+    "bien ban hoa giai khong thanh",
+    "hòa giải ở xã nhưng không thành",
+    "ubnd xã hòa giải không thành",
+    "đã hòa giải tại ubnd",
+    "da hoa giai tai ubnd",
+    "đã hòa giải không thành",
+    "da hoa giai khong thanh",
+    "hòa giải rồi",
+    "hoa giai roi",
+    "không ký biên bản hòa giải",
+    "khong ky bien ban hoa giai",
+    "bên kia không ký biên bản",
+    "ben kia khong ky bien ban",
+]
+
+# Replacement action list for dat_dai when user is already past UBND mediation stage.
+# Replaces the standard template that always includes "Nộp đơn yêu cầu hòa giải tại UBND cấp xã".
+_DAT_DAI_POST_MEDIATION_ACTIONS: List[str] = [
+    "Kiểm tra và công chứng giấy chứng nhận quyền sử dụng đất (sổ đỏ/sổ hồng); đảm bảo thông tin trên sổ khớp với thực địa.",
+    "Lưu giữ biên bản hòa giải không thành từ UBND xã — đây là tài liệu bắt buộc khi nộp đơn khởi kiện.",
+    "Tổng hợp chứng cứ ranh giới: bản đồ địa chính, ảnh hiện trạng lấn chiếm, nhân chứng, biên bản đo đạc.",
+    "Chuẩn bị hồ sơ khởi kiện tại Tòa án nhân dân cấp huyện nơi có đất.",
+    "Kiểm tra thời hiệu khởi kiện tranh chấp đất đai: 3 năm kể từ khi biết quyền bị xâm phạm.",
+]
+
+
+def _is_post_mediation_failed(situation: str) -> bool:
+    """Return True if the situation text signals that UBND mediation was already attempted and failed."""
+    sit_lower = situation.lower()
+    return any(sig in sit_lower for sig in _POST_MEDIATION_SIGNALS)
+
+
 _DOMAIN_RECOMMENDED_ACTIONS: Dict[str, List[str]] = {
     "dat_dai": [
         "Kiểm tra và công chứng giấy chứng nhận quyền sử dụng đất (sổ đỏ/sổ hồng); đảm bảo thông tin trên sổ khớp với thực địa.",
@@ -929,11 +968,21 @@ def _generate_recommendations(
     strength: str,
     risks: List[str],
     evidence_context: Any = None,
+    situation: str = "",
 ) -> List[str]:
     actions: List[str] = []
 
-    # Domain-specific primary actions (most relevant, situation-grounded)
-    domain_acts = _DOMAIN_RECOMMENDED_ACTIONS.get(plan.detected_domain, [])
+    # Domain-specific primary actions (most relevant, situation-grounded).
+    # For dat_dai: if user already completed (failed) UBND mediation, swap to post-mediation
+    # actions so we never re-suggest a step they explicitly stated was done.
+    if (
+        plan.detected_domain == "dat_dai"
+        and situation
+        and _is_post_mediation_failed(situation)
+    ):
+        domain_acts = _DAT_DAI_POST_MEDIATION_ACTIONS
+    else:
+        domain_acts = _DOMAIN_RECOMMENDED_ACTIONS.get(plan.detected_domain, [])
     actions.extend(domain_acts[:3])
 
     # Evidence gap: add actions only for HIGH-priority missing items not already covered
@@ -1114,11 +1163,18 @@ def _synthesize_assessment(
             "Con dưới 36 tháng tuổi được ưu tiên giao cho mẹ nuôi dưỡng theo Điều 81."
         )
 
-    # Key action
-    key_action = _DOMAIN_KEY_ACTIONS.get(
-        plan.detected_domain,
-        "Bước quan trọng nhất: tư vấn luật sư chuyên ngành để xác định chiến lược pháp lý phù hợp với tình huống cụ thể của bạn.",
-    )
+    # Key action — context-aware: if user already completed UBND mediation, point to court filing
+    if plan.detected_domain == "dat_dai" and _is_post_mediation_failed(situation):
+        key_action = (
+            "Bước ưu tiên nhất: chuẩn bị hồ sơ khởi kiện tại Tòa án nhân dân cấp huyện — "
+            "bạn đã hoàn thành bước hòa giải bắt buộc tại UBND xã; biên bản hòa giải không thành "
+            "là tài liệu quan trọng cần đính kèm đơn khởi kiện."
+        )
+    else:
+        key_action = _DOMAIN_KEY_ACTIONS.get(
+            plan.detected_domain,
+            "Bước quan trọng nhất: tư vấn luật sư chuyên ngành để xác định chiến lược pháp lý phù hợp với tình huống cụ thể của bạn.",
+        )
 
     parts = [intro, position_para]
     if evidence_para:

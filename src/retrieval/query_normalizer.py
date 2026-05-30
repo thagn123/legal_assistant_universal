@@ -101,11 +101,19 @@ _EN_TO_VI: Dict[str, List[str]] = {
 # Only entries not trivially derived from EN→VI above
 _VI_INDICATORS = {"tôi", "tại", "của", "và", "là", "có", "không", "được", "trong", "về"}
 
+# No-diacritics Vietnamese stop words — catches queries like "so do cua toi bi hang xom".
+# English legal text does not use these tokens, so false-positive risk is negligible.
+_VI_INDICATORS_NODIAC = {
+    "toi", "cua", "va", "la", "co", "khong", "duoc", "trong", "tai",
+    "cac", "nhu", "voi", "sau", "truoc", "tren", "cung", "hoac",
+}
+
 
 def detect_language(text: str) -> str:
     """
     Lightweight language detector: returns 'vi' or 'en'.
     Uses presence of Vietnamese diacritics or common stop words as signal.
+    Also recognises no-diacritics Vietnamese via common stop-word forms.
     """
     # Any Vietnamese-specific Unicode characters → Vietnamese
     vi_chars_re = re.compile(r"[àáâãèéêìíòóôõùúýăđêơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]", re.UNICODE)
@@ -113,6 +121,9 @@ def detect_language(text: str) -> str:
         return "vi"
     words = set(text.lower().split())
     if words & _VI_INDICATORS:
+        return "vi"
+    # No-diacritics Vietnamese: check for stop words that appear in VI but not EN legal text
+    if words & _VI_INDICATORS_NODIAC:
         return "vi"
     return "en"
 

@@ -15,6 +15,7 @@ All candidates are deduplicated by chunk_id. Final score = weighted sum.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,6 +26,9 @@ from src.observability.tracer import get_tracer
 from src.pipeline.embedding_stage import embed_text
 
 logger = logging.getLogger(__name__)
+
+# Threshold constant — override via env var for production tuning.
+FUSION_VECTOR_SIGNAL_THRESHOLD: float = float(os.getenv("FUSION_VECTOR_SIGNAL_THRESHOLD", "0.55"))
 
 # Default fusion weights (must sum to 1.0)
 _DEFAULT_WEIGHTS: Dict[str, float] = {
@@ -136,7 +140,7 @@ class RetrievalFusionEngine:
                         continue
                     vscore = float(c.get("vector_score", 0))
                     # QA Risk Fix: Loại bỏ các kết quả nhiễu thấp hơn ngưỡng
-                    if vscore < 0.55:
+                    if vscore < FUSION_VECTOR_SIGNAL_THRESHOLD:
                         continue
                     if cid not in candidates:
                         candidates[cid] = _make_result(c, "law_chunk")

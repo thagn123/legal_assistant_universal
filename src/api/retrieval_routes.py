@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 from typing import Any, List, Optional
@@ -12,6 +13,11 @@ from src.api.deps import require_user
 from src.services.situation_classifier import SituationClassifier
 
 logger = logging.getLogger(__name__)
+
+# Threshold constants — override via env vars for production tuning.
+# Default 0.55 matches the QA Risk Fix applied across all three filter sites.
+LAW_VECTOR_SCORE_THRESHOLD: float = float(os.getenv("LAW_VECTOR_SCORE_THRESHOLD", "0.55"))
+SIMILAR_CASE_SCORE_THRESHOLD: float = float(os.getenv("SIMILAR_CASE_SCORE_THRESHOLD", "0.55"))
 
 retrieval_router = APIRouter(prefix="/retrieval", tags=["retrieval"])
 
@@ -183,7 +189,7 @@ def _domain_limitations(item_domain: str, query_domain: str, score: float) -> li
         limitations.append(
             f"Nguồn thuộc lĩnh vực {item_domain}, không trùng trực tiếp với truy vấn {query_domain}."
         )
-    if score < 0.55:
+    if score < SIMILAR_CASE_SCORE_THRESHOLD:
         limitations.append("Độ liên quan dưới ngưỡng khẳng định chắc chắn; chỉ nên dùng để tham khảo.")
     return limitations
 
@@ -297,6 +303,64 @@ _FALLBACK_CASES_EN: list[dict[str, Any]] = [
     },
 ]
 
+_DAN_SU_FALLBACK_CASE: dict[str, Any] = {
+    "case_id": "demo_case_inheritance_dispute",
+    "title": "Tranh chấp thừa kế tài sản nhà đất khi cha mẹ mất không để lại di chúc",
+    "situation_summary": "Cha mẹ mất không để lại di chúc, các con tranh chấp quyền thừa kế đối với tài sản chung là nhà đất và tài khoản ngân hàng.",
+    "outcome": "Tòa án chia di sản theo Hàng thừa kế thứ nhất (Điều 651 Bộ luật Dân sự 2015): vợ/chồng, cha/mẹ và con đẻ được hưởng phần bằng nhau, không có ưu tiên cho con trai hay con gái.",
+    "lesson": "Thu thập giấy khai sinh, hộ khẩu, giấy tờ nhà đất và xác nhận quan hệ hợp pháp. Nếu không thỏa thuận được, nộp đơn yêu cầu chia di sản tại Tòa án nhân dân cấp huyện.",
+    "law_type": "dan_su",
+    "key_laws": [
+        "Bộ luật Dân sự 2015, Điều 651 (Hàng thừa kế thứ nhất)",
+        "Bộ luật Dân sự 2015, Điều 650 (Thừa kế theo pháp luật)",
+    ],
+    "stage": "dispute",
+}
+
+_DAN_SU_FALLBACK_CASE_EN: dict[str, Any] = {
+    "case_id": "demo_case_inheritance_dispute_en",
+    "title": "Inheritance dispute over real estate when parents died without a will",
+    "situation_summary": "Parents died without leaving a will. The children dispute inheritance rights over shared assets including the family home and bank accounts.",
+    "outcome": "The court distributes the estate equally among first-order heirs under Article 651 of the Civil Code 2015: spouse, parents, and children share equally regardless of gender.",
+    "lesson": "Gather birth certificates, household registration books, property documents and proof of legal kinship. If agreement fails, file for estate distribution at the district People's Court.",
+    "law_type": "dan_su",
+    "key_laws": [
+        "Civil Code 2015, Article 651 (First-order heirs)",
+        "Civil Code 2015, Article 650 (Inheritance by law)",
+    ],
+    "stage": "dispute",
+}
+
+_HANH_CHINH_FALLBACK_CASE: dict[str, Any] = {
+    "case_id": "demo_case_admin_complaint",
+    "title": "Khiếu nại quyết định xử phạt vi phạm hành chính không đúng thẩm quyền",
+    "situation_summary": "Cơ quan nhà nước ra quyết định xử phạt vi phạm hành chính không đúng thẩm quyền và không đúng căn cứ pháp lý. Người bị xử phạt nộp đơn khiếu nại yêu cầu hủy quyết định.",
+    "outcome": "Cơ quan có thẩm quyền giải quyết khiếu nại hủy quyết định xử phạt do vi phạm thủ tục và vượt thẩm quyền theo Luật Xử lý vi phạm hành chính 2012 sửa đổi 2020.",
+    "lesson": "Trong thời hạn 90 ngày kể từ ngày nhận quyết định xử phạt, nộp đơn khiếu nại tới cơ quan ra quyết định. Nếu không giải quyết hoặc không đồng ý, tiếp tục khiếu nại lên cấp trên hoặc khởi kiện hành chính tại Tòa án theo Luật Tố tụng hành chính 2015.",
+    "law_type": "hanh_chinh",
+    "key_laws": [
+        "Luật Xử lý vi phạm hành chính 2012 (sửa đổi 2020)",
+        "Luật Khiếu nại 2011, Điều 7 (Thời hiệu khiếu nại 90 ngày)",
+        "Luật Tố tụng hành chính 2015",
+    ],
+    "stage": "dispute",
+}
+
+_HANH_CHINH_FALLBACK_CASE_EN: dict[str, Any] = {
+    "case_id": "demo_case_admin_complaint_en",
+    "title": "Appeal against administrative penalty decision lacking legal authority",
+    "situation_summary": "A government agency issued an administrative penalty without proper authority or legal basis. The penalized party filed an administrative complaint requesting annulment.",
+    "outcome": "The competent authority annulled the penalty decision due to procedural violations and lack of authority under the Law on Handling Administrative Violations 2012 (amended 2020).",
+    "lesson": "Within 90 days of receiving the penalty decision, file a complaint with the issuing authority. If unresolved or denied, escalate to the superior authority or file an administrative lawsuit at the Administrative Court under the Administrative Procedure Law 2015.",
+    "law_type": "hanh_chinh",
+    "key_laws": [
+        "Law on Handling Administrative Violations 2012 (amended 2020)",
+        "Law on Complaints 2011, Article 7 (90-day statute of limitations)",
+        "Administrative Procedure Law 2015",
+    ],
+    "stage": "dispute",
+}
+
 _FALLBACK_CLAUSES: list[dict[str, Any]] = [
     {
         "clause_id": "demo_clause_penalty",
@@ -406,8 +470,8 @@ def search_laws(
                     filter_user_id=user_id,
                     limit=body.limit,
                 )
-            # QA Risk Fix: Lọc kết quả rác (dưới 0.55) để tránh fallback sai
-            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= 0.55]
+            # QA Risk Fix: Lọc kết quả rác (dưới ngưỡng) để tránh fallback sai
+            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= LAW_VECTOR_SCORE_THRESHOLD]
         except Exception as e:
             logger.warning("Vector search chunks failed: %s. Falling back to keyword search.", e)
             raw = []
@@ -572,8 +636,8 @@ def find_similar_cases(
                     law_type=None,
                     limit=body.limit,
                 )
-            # QA Risk Fix: Lọc kết quả rác (dưới 0.55)
-            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= 0.55]
+            # QA Risk Fix: Lọc kết quả rác (dưới ngưỡng)
+            raw = [c for c in raw if float(c.get("vector_score", 0.0)) >= SIMILAR_CASE_SCORE_THRESHOLD]
         except Exception as e:
             logger.warning("Vector search cases failed: %s. Falling back to keyword.", e)
             raw = []
@@ -601,19 +665,28 @@ def find_similar_cases(
 
     # Inject specialized fallback cases ONLY when retrieval confidence is low.
     # Gate: skip injection if top result has vector_score >= 0.45 (good real match).
+    # gia_dinh and dan_su are injected with domain-specific cases (B-11 fix).
     top_score = raw[0].get("vector_score", 0.0) if raw else 0.0
-    if fallback_used or top_score < 0.45:
+    if fallback_used or top_score < SIMILAR_CASE_SCORE_THRESHOLD:
         cases_pool = _FALLBACK_CASES_EN if query_language == "en" else _FALLBACK_CASES
         if query_language == "en":
             if domain == "lao_dong" and not any("severance" in c.get("situation_summary", "").lower() for c in raw):
                 raw.insert(0, cases_pool[1])
-            elif domain in ("gia_dinh", "dan_su") and not any("custody" in c.get("situation_summary", "").lower() for c in raw):
-                raw.insert(0, cases_pool[0])
+            elif domain == "gia_dinh" and not any("custody" in c.get("situation_summary", "").lower() for c in raw):
+                raw.insert(0, cases_pool[0])   # divorce/custody case — correct for gia_dinh
+            elif domain == "dan_su" and not any("inherit" in c.get("situation_summary", "").lower() for c in raw):
+                raw.insert(0, _DAN_SU_FALLBACK_CASE_EN)  # inheritance case — correct for dan_su
+            elif domain == "hanh_chinh" and not any("complaint" in c.get("situation_summary", "").lower() for c in raw):
+                raw.insert(0, _HANH_CHINH_FALLBACK_CASE_EN)
         else:
-            if domain in ("gia_dinh", "dan_su") and not any("36 tháng" in c.get("situation_summary", "") for c in raw):
-                raw.insert(0, cases_pool[0])
+            if domain == "gia_dinh" and not any("36 tháng" in c.get("situation_summary", "") for c in raw):
+                raw.insert(0, cases_pool[0])   # divorce/custody case — correct for gia_dinh
+            elif domain == "dan_su" and not any("thừa kế" in c.get("situation_summary", "") for c in raw):
+                raw.insert(0, _DAN_SU_FALLBACK_CASE)  # inheritance case — correct for dan_su
             elif domain == "lao_dong" and not any("sa thải" in c.get("situation_summary", "").lower() for c in raw):
                 raw.insert(0, cases_pool[1])
+            elif domain == "hanh_chinh" and not any("khiếu nại" in c.get("situation_summary", "").lower() for c in raw):
+                raw.insert(0, _HANH_CHINH_FALLBACK_CASE)
 
     # Step 3: official case items
     official_items: list[SimilarCaseItem] = []
@@ -625,7 +698,7 @@ def find_similar_cases(
         if (
             domain != "general"
             and c_domain not in _allowed_domains(domain)
-            and score < 0.55
+            and score < SIMILAR_CASE_SCORE_THRESHOLD
         ):
             continue
 
@@ -666,6 +739,18 @@ def find_similar_cases(
                 is_demo=c.get("case_id", "").startswith("demo_"),
             )
         )
+
+    # Domain-priority sort: exact domain > related domain > cross-domain.
+    # Three-tier key so an exact-domain case (priority 0) always leads a related-domain
+    # case (priority 1) even when the related case has a higher raw score.
+    # Fixes B-11: dan_su injection was shadowed by gia_dinh case with higher
+    # _ranked_fallback score because both were previously treated as priority 0.
+    if domain != "general":
+        _dom_allowed = _allowed_domains(domain)
+        official_items.sort(key=lambda item: (
+            0 if item.domain == domain else (1 if item.domain in _dom_allowed else 2),
+            -item.similarity_score,
+        ))
 
     # Step 4: community case patterns
     community_items: list[CommunityCaseItem] = []
