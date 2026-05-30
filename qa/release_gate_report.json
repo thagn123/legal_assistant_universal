@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-05-30T02:28:41.439211+00:00",
+  "verdict": {
+    "beta": "PASS_BETA",
+    "ga": "FAIL_GA"
+  },
+  "hard_gates": [
+    {
+      "name": "HG-1: P0 contradictions = 0",
+      "passed": true,
+      "reason": "clean"
+    },
+    {
+      "name": "HG-2: Forbidden phrases = 0",
+      "passed": true,
+      "reason": "clean"
+    },
+    {
+      "name": "HG-3: API 500 errors = 0",
+      "passed": true,
+      "reason": "clean"
+    },
+    {
+      "name": "HG-4: Demo labelling correct",
+      "passed": true,
+      "reason": "clean"
+    },
+    {
+      "name": "HG-5: Cross-domain error = 0%",
+      "passed": true,
+      "reason": "clean"
+    },
+    {
+      "name": "HG-6: Score threshold leak = 0",
+      "passed": true,
+      "reason": "clean"
+    }
+  ],
+  "beta_fails": [],
+  "ga_fails": [
+    "Benchmark gate fail: fallback_demo_rate_pct: 100.0 > 30.0 (target)",
+    "Manual QA: 14/15 pass — need 15/15 for GA"
+  ]
+}

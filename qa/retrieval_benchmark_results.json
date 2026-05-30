@@ -1,0 +1,783 @@
+{
+  "generated_at": "2026-05-30T02:03:25.301507+00:00",
+  "metrics": {
+    "mode": "http",
+    "total_queries": 30,
+    "non_general_queries": 29,
+    "top1_domain_accuracy_pct": 96.6,
+    "top3_domain_accuracy_pct": 96.6,
+    "fallback_demo_rate_pct": 100.0,
+    "empty_rate_pct": 0.0,
+    "cross_domain_error_rate_pct": 0.0,
+    "average_top1_score": 0.5247,
+    "http_error_count": 0,
+    "worst_5_queries": [
+      {
+        "id": "Q01",
+        "score": 0.5,
+        "fallback": true
+      },
+      {
+        "id": "Q02",
+        "score": 0.5,
+        "fallback": true
+      },
+      {
+        "id": "Q03",
+        "score": 0.5,
+        "fallback": true
+      },
+      {
+        "id": "Q04",
+        "score": 0.5,
+        "fallback": true
+      },
+      {
+        "id": "Q05",
+        "score": 0.5,
+        "fallback": true
+      }
+    ],
+    "gate_fails": [
+      "fallback_demo_rate_pct: 100.0 > 30.0 (target)"
+    ],
+    "gate_pass": false,
+    "targets": {
+      "top1_accuracy_pct": {
+        "value": 96.6,
+        "target": 85.0,
+        "op": ">="
+      },
+      "top3_accuracy_pct": {
+        "value": 96.6,
+        "target": 90.0,
+        "op": ">="
+      },
+      "cross_domain_error_pct": {
+        "value": 0.0,
+        "target": 0.0,
+        "op": "=="
+      },
+      "empty_rate_pct": {
+        "value": 0.0,
+        "target": 0.0,
+        "op": "=="
+      },
+      "fallback_demo_rate_pct": {
+        "value": 100.0,
+        "target": 30.0,
+        "op": "<="
+      }
+    }
+  },
+  "rows": [
+    {
+      "query_id": "Q01",
+      "query": "Hàng xóm lấn chiếm đất sổ đỏ của tôi 50cm, tôi làm gì?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 21410.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q02",
+      "query": "Chưa có sổ đỏ ở 20 năm, bên cạnh đòi lấy đất, làm sao?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 181.4,
+      "notes": ""
+    },
+    {
+      "query_id": "Q03",
+      "query": "GCN QSDĐ bị UBND thu hồi không bồi thường, khiếu nại ở đâu?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "hanh_chinh",
+      "top_3_domains": [
+        "hanh_chinh"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": false,
+      "top3_match": false,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 202.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q04",
+      "query": "Bản photo sổ đỏ có giá trị pháp lý tranh chấp không?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 178.4,
+      "notes": ""
+    },
+    {
+      "query_id": "Q05",
+      "query": "Đất mua bằng giấy tay, bên bán không công chứng, xử lý thế nào?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai",
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 176.4,
+      "notes": ""
+    },
+    {
+      "query_id": "Q06",
+      "query": "UBND ra quyết định thu hồi đất sai quy trình, tôi có quyền khiếu nại?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 170.0,
+      "notes": ""
+    },
+    {
+      "query_id": "Q07",
+      "query": "Thủ tục sang tên sổ đỏ sau khi mua bán đất?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 175.0,
+      "notes": ""
+    },
+    {
+      "query_id": "Q08",
+      "query": "Đất tranh chấp đã qua hòa giải UBND không thành, bước tiếp theo?",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai",
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 177.5,
+      "notes": ""
+    },
+    {
+      "query_id": "Q09",
+      "query": "Công ty sa thải không có lý do, không trả lương tháng cuối, tôi đòi gì?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 169.9,
+      "notes": ""
+    },
+    {
+      "query_id": "Q10",
+      "query": "Bị cho thôi việc trái luật, thời hạn khởi kiện là bao lâu?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong",
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 174.3,
+      "notes": ""
+    },
+    {
+      "query_id": "Q11",
+      "query": "Công ty trả lương dưới mức lương tối thiểu vùng, tôi có quyền gì?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong",
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 171.7,
+      "notes": ""
+    },
+    {
+      "query_id": "Q12",
+      "query": "Tai nạn lao động tại xưởng, công ty không bồi thường, phải làm sao?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 181.3,
+      "notes": ""
+    },
+    {
+      "query_id": "Q13",
+      "query": "Hợp đồng lao động hết hạn mà công ty không ký tiếp, quyền lợi của tôi?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 227.6,
+      "notes": ""
+    },
+    {
+      "query_id": "Q14",
+      "query": "Bên thuê nhà không trả tiền đặt cọc khi hết hợp đồng thuê?",
+      "expected_domain": "hop_dong",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "doanh_nghiep"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 188.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q15",
+      "query": "Muốn ly hôn đơn phương vì chồng bạo lực, có con 3 tuổi, làm thế nào?",
+      "expected_domain": "gia_dinh",
+      "top_1_domain": "gia_dinh",
+      "top_3_domains": [
+        "gia_dinh"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 230.6,
+      "notes": ""
+    },
+    {
+      "query_id": "Q16",
+      "query": "Sau ly hôn tranh chấp quyền nuôi con dưới 36 tháng tuổi, ai được nuôi?",
+      "expected_domain": "gia_dinh",
+      "top_1_domain": "gia_dinh",
+      "top_3_domains": [
+        "gia_dinh"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 359.9,
+      "notes": ""
+    },
+    {
+      "query_id": "Q17",
+      "query": "Vợ chồng ly hôn, nhà chung tài sản chia như thế nào?",
+      "expected_domain": "gia_dinh",
+      "top_1_domain": "gia_dinh",
+      "top_3_domains": [
+        "gia_dinh"
+      ],
+      "top_1_score": 0.87,
+      "top_3_scores": [
+        0.87
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 189.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q18",
+      "query": "Cha mẹ mất không có di chúc, anh chị em tranh chấp thừa kế nhà đất?",
+      "expected_domain": "dan_su",
+      "top_1_domain": "dan_su",
+      "top_3_domains": [
+        "dan_su",
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 177.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q19",
+      "query": "Di chúc viết tay có giá trị pháp lý không, cần điều kiện gì?",
+      "expected_domain": "dan_su",
+      "top_1_domain": "dan_su",
+      "top_3_domains": [
+        "dan_su",
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 198.4,
+      "notes": ""
+    },
+    {
+      "query_id": "Q20",
+      "query": "Hợp đồng đã ký bên kia không thực hiện, tôi đòi phạt vi phạm được không?",
+      "expected_domain": "hop_dong",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "doanh_nghiep"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 180.6,
+      "notes": ""
+    },
+    {
+      "query_id": "Q21",
+      "query": "Đặt cọc mua bán nhà, bên bán đổi ý không bán nữa, lấy lại tiền cọc thế nào?",
+      "expected_domain": "hop_dong",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "doanh_nghiep"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 177.0,
+      "notes": ""
+    },
+    {
+      "query_id": "Q22",
+      "query": "Hợp đồng dịch vụ chưa ký, bên kia đã nhận tiền rồi không làm, đòi lại được không?",
+      "expected_domain": "hop_dong",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "doanh_nghiep"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 171.8,
+      "notes": ""
+    },
+    {
+      "query_id": "Q23",
+      "query": "Điều khoản phạt trong hợp đồng thương mại tối đa bao nhiêu phần trăm?",
+      "expected_domain": "hop_dong",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "hop_dong",
+        "doanh_nghiep"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 174.8,
+      "notes": ""
+    },
+    {
+      "query_id": "Q24",
+      "query": "Bị phạt vi phạm hành chính oan, thủ tục khiếu nại quyết định xử phạt?",
+      "expected_domain": "hanh_chinh",
+      "top_1_domain": "hanh_chinh",
+      "top_3_domains": [
+        "hanh_chinh"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 179.7,
+      "notes": ""
+    },
+    {
+      "query_id": "Q25",
+      "query": "Cơ quan nhà nước ra quyết định sai, tôi khởi kiện hành chính ở đâu?",
+      "expected_domain": "hanh_chinh",
+      "top_1_domain": "hanh_chinh",
+      "top_3_domains": [
+        "hanh_chinh"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 172.6,
+      "notes": ""
+    },
+    {
+      "query_id": "Q26",
+      "query": "so do cua toi bi hang xom tranh chap ranh gioi",
+      "expected_domain": "dat_dai",
+      "top_1_domain": "dat_dai",
+      "top_3_domains": [
+        "dat_dai",
+        "dat_dai"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 178.9,
+      "notes": ""
+    },
+    {
+      "query_id": "Q27",
+      "query": "Sa thải trái luật + tranh chấp đất đai cùng lúc, cần ưu tiên cái gì trước?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong",
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 189.1,
+      "notes": ""
+    },
+    {
+      "query_id": "Q28",
+      "query": "Hôm nay thời tiết đẹp, đi đâu ăn?",
+      "expected_domain": "general",
+      "top_1_domain": "hop_dong",
+      "top_3_domains": [
+        "hop_dong",
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": false,
+      "top3_match": false,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 122.9,
+      "notes": ""
+    },
+    {
+      "query_id": "Q29",
+      "query": "luat lao dong viet nam quy dinh gi ve thi gian nghi phep nam",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong",
+        "gia_dinh",
+        "dat_dai"
+      ],
+      "top_1_score": 0.87,
+      "top_3_scores": [
+        0.87,
+        0.6,
+        0.42
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": true,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 128.7,
+      "notes": ""
+    },
+    {
+      "query_id": "Q30",
+      "query": "Công ty nợ lương 3 tháng, giờ tuyên bố phá sản, quyền lợi công nhân?",
+      "expected_domain": "lao_dong",
+      "top_1_domain": "lao_dong",
+      "top_3_domains": [
+        "lao_dong",
+        "lao_dong"
+      ],
+      "top_1_score": 0.5,
+      "top_3_scores": [
+        0.5,
+        0.5
+      ],
+      "top1_match": true,
+      "top3_match": true,
+      "is_fallback": true,
+      "is_demo": false,
+      "empty_result": false,
+      "cross_domain_error": false,
+      "http_ok": true,
+      "elapsed_ms": 176.5,
+      "notes": ""
+    }
+  ]
+}

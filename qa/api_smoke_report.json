@@ -1,0 +1,131 @@
+{
+  "generated_at": "2026-05-30T03:02:38.626486+00:00",
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "p0_violations": 0,
+    "all_bugs": []
+  },
+  "results": [
+    {
+      "test_id": "SM-01",
+      "endpoint": "/intelligence/analyze",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200",
+        "response fields present",
+        "response has actionable content"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:23.878840+00:00"
+    },
+    {
+      "test_id": "SM-02",
+      "endpoint": "/intelligence/analyze",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200",
+        "no P0 violations",
+        "domain-relevant content present"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:27.608286+00:00"
+    },
+    {
+      "test_id": "SM-03",
+      "endpoint": "/analysis/evidence-gap",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200",
+        "all required fields present",
+        "coverage_score=0.22 in valid range",
+        "advice has no supplement contradiction"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:27.616740+00:00"
+    },
+    {
+      "test_id": "SM-04",
+      "endpoint": "/retrieval/laws",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200 (no 500)",
+        "response structure valid",
+        "all 1 results above threshold"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:27.736371+00:00"
+    },
+    {
+      "test_id": "SM-05",
+      "endpoint": "/retrieval/similar-cases",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200 (no 500)",
+        "response structure valid",
+        "demo labelling and score threshold OK"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:27.753405+00:00"
+    },
+    {
+      "test_id": "SM-06",
+      "endpoint": "/recommendations/next-best-actions",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200 (no 500)",
+        "response is list",
+        "all 6 actions have valid structure, no P0 violations"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:27.755963+00:00"
+    },
+    {
+      "test_id": "SM-07",
+      "endpoint": "/intelligence/analyze",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200 (no 500 on non-legal input)",
+        "no P0 violations",
+        "response not empty"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:34.734175+00:00"
+    },
+    {
+      "test_id": "SM-08",
+      "endpoint": "/intelligence/analyze",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200",
+        "no P0 violations for no-diacritic input",
+        "domain detection acceptable: 'dat_dai'"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:38.569632+00:00"
+    },
+    {
+      "test_id": "SM-09",
+      "endpoint": "/health",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200",
+        "status=ok",
+        "version='2.0.0'"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:38.620304+00:00"
+    },
+    {
+      "test_id": "SM-10",
+      "endpoint": "/analysis/evidence-gap",
+      "status": "PASS",
+      "checks_passed": [
+        "HTTP 200 — handled short input gracefully"
+      ],
+      "bugs_found": [],
+      "timestamp": "2026-05-30T03:02:38.624884+00:00"
+    }
+  ]
+}
