@@ -164,3 +164,31 @@ raw_data/VNLegalText-main/
 
 # Output files
 outputs/
+
+# Planning & generation scripts (not part of submission)
+scripts/generate_pptx.py
+scripts/generate_presentation_doc.py
+scripts/generate_screenshots.py
+scripts/capture_real_screenshots.js
+scripts/create_screenshot_placeholders.py
+
+# Presentation files (binary, planning)
+submission/*.pptx
+submission/*.docx
+submission/~$*
+submission/SLIDE_PROMPT.md
+submission/SLIDES.html
+submission/PRESENTATION_TALK_TRACK.md
+submission/VIDEO_STORYBOARD.md
+submission/SCREENSHOT_GUIDE.md
+submission/beta_ga_status.md
+submission/e2e_plan.md
+submission/ai_user_simulation_prompt.md
+
+# npm artifacts from screenshot scripts
+package.json
+package-lock.json
+notebooklm-mcp/
+
+# Screenshot copies (keep originals only)
+submission/screenshots/*_copy.png

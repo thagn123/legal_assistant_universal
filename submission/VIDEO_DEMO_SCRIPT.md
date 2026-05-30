@@ -96,7 +96,7 @@ Full assessment giải thích rõ: vì đã có sổ đỏ, vị thế pháp lý
 > *[Mở tab mới hoặc clear input. Nhập:]*
 
 ```
-Tôi đã hòa giải ở xã nhưng không thành, hàng xóm vẫn lấn đất và không ký biên bản.
+Tôi đã có sổ đỏ, hàng xóm xây tường lấn 50cm đất của tôi, tôi cần làm gì?
 ```
 
 > *[Nhấn Phân tích. Đợi kết quả.]*
