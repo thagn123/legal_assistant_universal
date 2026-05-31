@@ -9,6 +9,14 @@
 
 ---
 
+## Video Demo
+
+**▶ [Xem demo trên YouTube](https://youtu.be/yL13iIu7x-0)**
+
+> Demo live: phân tích tình huống pháp lý đất đai (thu hồi, hòa giải không thành) và hợp đồng (đơn phương chấm dứt) — hệ thống nhận diện đúng giai đoạn pháp lý và gợi ý hành động không mâu thuẫn.
+
+---
+
 ## What is LexAI?
 
 LexAI là **Legal Intelligence Infrastructure** — không phải chatbot pháp lý thông thường.
@@ -18,10 +26,45 @@ Thay vì chỉ nhận câu hỏi → trả lời, LexAI:
 - **Trích xuất evidence status** từ input người dùng (`land_certificate = PRESENT`, `ubnd_mediation = PRESENT_FAILED`)
 - **Kiểm tra mâu thuẫn** giữa output AI và evidence đã biết → loại bỏ action không phù hợp
 - **Chuyển đổi action template** theo trạng thái pháp lý thực tế (chưa hòa giải vs. hòa giải không thành)
-- **Hybrid retrieval fusion**: Vector Search + BM25 + GraphRAG + Behavior trong một pipeline duy nhất
+- **Hybrid retrieval fusion**: Vector Search + BM25 + GraphRAG + Behavior trong một Aggregation Pipeline duy nhất
 - **Tự báo cáo** giới hạn kỹ thuật qua release gate tự động — không che giấu limitation
 
-> "Khi pháp luật còn phức tạp — LexAI ở đây để chỉ đường."
+> *"Khi pháp luật còn phức tạp — LexAI ở đây để chỉ đường."*
+
+---
+
+## Tài Liệu Kỹ Thuật
+
+### Tài liệu bắt buộc theo yêu cầu cuộc thi
+
+| Hạng mục | File | Mô tả |
+|---|---|---|
+| **MVP & Kiến trúc hệ thống** | [`submission/MVP_SCOPE.md`](submission/MVP_SCOPE.md) | Phạm vi MVP, tính năng trong/ngoài scope, decision rationale |
+| **Kiến trúc tổng thể** | [`submission/TECHNICAL_DOCUMENT.md`](submission/TECHNICAL_DOCUMENT.md) | Full tech stack, 7-stage pipeline, module map, design decisions |
+| **Data schema MongoDB** | [`submission/MONGODB_ARCHITECTURE.md`](submission/MONGODB_ARCHITECTURE.md) | Collections, schema, vector indexes, TTL, data isolation model |
+| **Vector Search & Aggregation Pipeline** | [`submission/VECTOR_SEARCH_AND_AGGREGATION.md`](submission/VECTOR_SEARCH_AND_AGGREGATION.md) | Index definition, full aggregation pipeline JS code, fusion weights |
+
+### Tài liệu bổ sung
+
+| File | Mô tả |
+|---|---|
+| [`submission/DEMO_INPUTS_AND_EXPECTED_OUTPUTS.md`](submission/DEMO_INPUTS_AND_EXPECTED_OUTPUTS.md) | 10 câu hỏi demo + kết quả mong đợi cho từng domain |
+| [`submission/METRICS_TABLES.md`](submission/METRICS_TABLES.md) | Bảng chi tiết tất cả metrics (accuracy, latency, coverage) |
+| [`submission/LIMITATIONS_AND_ROADMAP.md`](submission/LIMITATIONS_AND_ROADMAP.md) | Known limitations (L-01 case_embedding_index) + roadmap |
+| [`submission/JUDGING_CRITERIA_MAPPING.md`](submission/JUDGING_CRITERIA_MAPPING.md) | Mapping từng tiêu chí chấm điểm → phần code/doc tương ứng |
+| [`submission/INVESTOR_SLIDE_OUTLINE.md`](submission/INVESTOR_SLIDE_OUTLINE.md) | Slide deck cho nhà đầu tư (10 slides) |
+| [`submission/INVESTOR_PITCH_SCRIPT.md`](submission/INVESTOR_PITCH_SCRIPT.md) | Kịch bản thuyết trình đầu tư (12 phút) |
+
+### QA & Benchmark
+
+| File | Mô tả |
+|---|---|
+| [`qa/retrieval_benchmark_report.md`](qa/retrieval_benchmark_report.md) | Kết quả benchmark 30 queries — 96.6% top-1 accuracy |
+| [`qa/retrieval_benchmark_results.json`](qa/retrieval_benchmark_results.json) | Raw JSON benchmark data |
+| [`qa/release_gate_report.md`](qa/release_gate_report.md) | Release gate HG-1 đến HG-6 — PASS_BETA |
+| [`qa/release_gate_report.json`](qa/release_gate_report.json) | Machine-readable gate results |
+| [`qa/manual_qa_results.json`](qa/manual_qa_results.json) | 15/15 manual QA scenarios |
+| [`qa/api_smoke_report.md`](qa/api_smoke_report.md) | API smoke test results |
 
 ---
 
@@ -73,6 +116,8 @@ flowchart TD
   Persist --> Response --> FE
 ```
 
+> Tài liệu đầy đủ: [`submission/TECHNICAL_DOCUMENT.md`](submission/TECHNICAL_DOCUMENT.md) · [`submission/MVP_SCOPE.md`](submission/MVP_SCOPE.md)
+
 ---
 
 ## MongoDB Architecture
@@ -81,7 +126,7 @@ flowchart TD
 
 **Embedding model:** `paraphrase-multilingual-MiniLM-L12-v2` · 384 dimensions · cosine similarity
 
-### Collections Overview
+### Collections
 
 | Collection | Purpose | Vector Index | TTL |
 |---|---|---|---|
@@ -129,20 +174,20 @@ Every retrieval query applies:
 { $or: [{ user_id: userId }, { is_global: true }] }
 ```
 
-Full schema reference: [`submission/MONGODB_ARCHITECTURE.md`](submission/MONGODB_ARCHITECTURE.md)
+> Schema đầy đủ + TTL config: [`submission/MONGODB_ARCHITECTURE.md`](submission/MONGODB_ARCHITECTURE.md)
 
 ---
 
 ## Vector Search & Aggregation Pipeline
 
-### Why Vector Search?
+### Tại sao cần Vector Search?
 
-Vietnamese legal text has unique challenges:
-- Users ask in natural language — they don't know article numbers
-- Same concept has many forms: `"sổ đỏ"` = `"GCN QSDĐ"` = `"giấy chứng nhận quyền sử dụng đất"`
-- No-diacritics queries: `"so do bi tranh chap phai lam gi"` must still resolve correctly
+Vietnamese legal text có những thách thức đặc thù:
+- Người dùng hỏi bằng ngôn ngữ tự nhiên — không biết số điều khoản
+- Cùng khái niệm có nhiều dạng: `"sổ đỏ"` = `"GCN QSDĐ"` = `"giấy chứng nhận quyền sử dụng đất"`
+- Query không dấu: `"so do bi tranh chap phai lam gi"` vẫn phải resolve đúng
 
-Keyword exact match is insufficient. Vector Search finds **semantically similar** text even with zero word overlap.
+Keyword exact match là không đủ. Vector Search tìm **văn bản tương đồng về nghĩa** dù không trùng từ khóa.
 
 ### Vector Search Index Definition
 
@@ -165,7 +210,7 @@ Keyword exact match is insufficient. Vector Search finds **semantically similar*
 
 ```javascript
 db.chunks_vec.aggregate([
-  // Stage 1: ANN Vector Search with data-isolation filter
+  // Stage 1: ANN Vector Search với data-isolation filter
   {
     $vectorSearch: {
       index: "chunk_embedding_index",
@@ -176,12 +221,12 @@ db.chunks_vec.aggregate([
       filter: { $or: [{ user_id: userId }, { is_global: true }] }
     }
   },
-  // Stage 2: Capture vector score + apply threshold
+  // Stage 2: Lấy vector score + áp threshold
   { $addFields: { vector_score: { $meta: "vectorSearchScore" } } },
   { $match: { vector_score: { $gte: 0.55 } } },
-  // Stage 3: Optional domain filter
+  // Stage 3: Filter theo domain pháp lý đã phân loại
   { $match: { law_type: detectedDomain } },
-  // Stage 4: BM25 TF approximation (no corpus IDF needed)
+  // Stage 4: BM25 TF approximation (không cần IDF corpus)
   {
     $addFields: {
       bm25_score: {
@@ -194,7 +239,7 @@ db.chunks_vec.aggregate([
       }
     }
   },
-  // Stage 5: Fusion score (weights sum to 1.0)
+  // Stage 5: Fusion score (tổng weights = 1.0)
   {
     $addFields: {
       fusion_score: {
@@ -215,26 +260,26 @@ db.chunks_vec.aggregate([
 
 ### Retrieval Fusion Weights
 
-| Signal | Weight | Source |
+| Signal | Weight | Nguồn |
 |---|---|---|
 | Vector Search (semantic) | **0.45** | MongoDB `$vectorSearch`, cosine similarity |
-| GraphRAG (law reference expansion) | **0.25** | BFS traversal from law entity nodes |
-| BM25 (keyword TF) | **0.20** | TF approximation on `content` field |
-| Behavior (interaction history) | **0.10** | User view/save/download events in `interactions` |
+| GraphRAG (law reference expansion) | **0.25** | BFS traversal từ law entity nodes |
+| BM25 (keyword TF) | **0.20** | TF approximation trên trường `content` |
+| Behavior (interaction history) | **0.10** | User view/save/download từ collection `interactions` |
 
-Full pipeline details: [`submission/VECTOR_SEARCH_AND_AGGREGATION.md`](submission/VECTOR_SEARCH_AND_AGGREGATION.md)
+> Pipeline đầy đủ + giải thích chi tiết: [`submission/VECTOR_SEARCH_AND_AGGREGATION.md`](submission/VECTOR_SEARCH_AND_AGGREGATION.md)
 
 ---
 
 ## 7-Stage Intelligence Pipeline
 
-| Stage | Module | Description |
+| Stage | Module | Mô tả |
 |---|---|---|
 | 1 | `src/engine/query_planner.py` | Domain classification — keyword scoring, <10ms, no LLM |
 | 2 | `src/memory/session_store.py` | Load 24h TTL MongoDB session context |
 | 2b | `src/memory/user_memory_store.py` | Load permanent cross-session user memory |
 | 3 | `src/engine/retrieval_fusion.py` | Hybrid Vector+BM25+Graph+Behavior fusion |
-| 4 | `src/graphrag/traversal.py` | BFS graph expansion from law references |
+| 4 | `src/graphrag/traversal.py` | BFS graph expansion từ law references |
 | 5 | `src/agents/legal_agent.py` | OpenAI tool-calling (4 rounds max) + deterministic fallback |
 | 6 | `src/engine/recommendation_ranker.py` | 6-signal reranking |
 | 7 | `src/engine/orchestrator.py` | Persist trace + ReflectionAgent daemon thread |
@@ -253,7 +298,7 @@ if _is_post_mediation_failed(situation):
     # Loại bỏ: "hòa giải tại UBND" (đã thử và thất bại)
 ```
 
-25 regression tests cover this logic: `tests/test_output_validator.py`
+25 regression tests: `tests/test_output_validator.py`
 
 ### 6-Signal Recommendation Ranker
 
@@ -277,7 +322,7 @@ Upload → OCR Cleaner → Layout Profiler → Structurer
 
 | Stage | Module | Output |
 |---|---|---|
-| 1 — Extract | `src/pipeline/extractor.py` | Raw text from PDF/DOCX/HTML/image |
+| 1 — Extract | `src/pipeline/extractor.py` | Raw text từ PDF/DOCX/HTML/image |
 | 2 — Profile | `src/pipeline/profiler.py` | Layout metadata |
 | 3 — Clean | `src/pipeline/cleaner.py` | OCR corrections, normalization |
 | 4 — Structure | `src/pipeline/structurer.py` | Canonical legal schema |
@@ -286,21 +331,22 @@ Upload → OCR Cleaner → Layout Profiler → Structurer
 | 7 — Embed | `src/pipeline/embedding_stage.py` | 384-dim vectors → MongoDB |
 | 8 — Index | `src/pipeline/retrieval_stage.py` | Search index update |
 
-**Admin uploads** set `is_global=True` automatically when `user_id == "admin"`.
+Admin uploads (`user_id == "admin"`) tự động set `is_global=True`.
 
 ---
 
-## Legal Domains (Vietnamese)
+## Legal Domains
 
-| Code | Domain | Sample Keywords | No-diacritics |
-|---|---|---|---|
-| `dat_dai` | Land law | đất, sổ đỏ, quyền sử dụng đất, thu hồi, lấn chiếm | so do, lan chiem |
-| `hop_dong` | Contract law | hợp đồng, vi phạm, đặt cọc, phạt | hop dong, vi pham |
-| `lao_dong` | Labour law | lao động, sa thải, lương, bhxh | sa thai, luong |
-| `dan_su` | Civil law | thừa kế, di chúc, bồi thường dân sự | thua ke |
-| `gia_dinh` | Family law | hôn nhân, ly hôn, nuôi con, cấp dưỡng | ly hon, nuoi con |
-| `hanh_chinh` | Administrative law | khiếu nại, quyết định hành chính, ubnd | khieu nai |
-| `general` | Fallback | — | — |
+| Code | Domain | Sample Keywords |
+|---|---|---|
+| `dat_dai` | Land law | đất, sổ đỏ, quyền sử dụng đất, thu hồi, lấn chiếm |
+| `hop_dong` | Contract law | hợp đồng, vi phạm, đặt cọc, phạt, đơn phương chấm dứt |
+| `lao_dong` | Labour law | lao động, sa thải, lương, bhxh, tai nạn lao động |
+| `dan_su` | Civil law | thừa kế, di chúc, bồi thường dân sự |
+| `gia_dinh` | Family law | hôn nhân, ly hôn, nuôi con, cấp dưỡng |
+| `hanh_chinh` | Administrative law | khiếu nại, quyết định hành chính, ubnd |
+| `doanh_nghiep` | Corporate law | công ty, cổ đông, phá sản, vốn điều lệ |
+| `general` | Fallback | — |
 
 ---
 
@@ -326,7 +372,7 @@ python scripts/benchmark_retrieval.py --mode http
 | Cross-domain error | **0.0%** | 0% | ✅ |
 | Empty rate | **0.0%** | 0% | ✅ |
 
-Full results: [`qa/retrieval_benchmark_report.md`](qa/retrieval_benchmark_report.md)
+Full results: [`qa/retrieval_benchmark_report.md`](qa/retrieval_benchmark_report.md) · [`qa/retrieval_benchmark_results.json`](qa/retrieval_benchmark_results.json)
 
 ### Release Gate
 
@@ -352,7 +398,7 @@ Full report: [`qa/release_gate_report.md`](qa/release_gate_report.md)
 
 | Layer | Technology |
 |---|---|
-| **Database** | MongoDB Atlas M0 — Vector Search, TTL indexes, aggregation pipelines |
+| **Database** | MongoDB Atlas M0 — Vector Search, TTL indexes, Aggregation Pipeline |
 | **Embedding** | `paraphrase-multilingual-MiniLM-L12-v2` — 384-dim, multilingual (Vi + En) |
 | **Backend** | Python 3.11 · FastAPI · pymongo 4.x · sentence-transformers |
 | **LLM** | OpenAI API (tool-calling, 4 rounds max) + deterministic fallback |
@@ -369,15 +415,15 @@ Full report: [`qa/release_gate_report.md`](qa/release_gate_report.md)
 ```bash
 pip install -r requirements.txt
 
-# Environment variables
-export MONGO_URI="mongodb+srv://..."    # MongoDB Atlas connection string
-export OPENAI_API_KEY="sk-..."          # Optional — falls back to deterministic
-export ADMIN_API_KEY="lexai-admin-secret"  # Default value
+# Environment variables (.env)
+MONGO_URI="mongodb+srv://..."         # MongoDB Atlas connection string
+OPENAI_API_KEY="sk-..."               # Optional — falls back to deterministic
+ADMIN_API_KEY="lexai-admin-secret"    # Default value
 
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 2. Seed global knowledge base (once)
+### 2. Seed global knowledge base (một lần)
 
 ```bash
 python scripts/seed_raw_data.py
@@ -407,7 +453,7 @@ curl -X POST http://localhost:8001/intelligence/analyze \
   }'
 ```
 
-Expected: `detected_domain: "dat_dai"`, recommended actions include "đo đạc ranh giới" and "hòa giải", must **NOT** include "thu thập sổ đỏ" (evidence already present).
+Expected: `detected_domain: "dat_dai"`, recommended actions bao gồm "đo đạc ranh giới" và "hòa giải", **KHÔNG** bao gồm "thu thập sổ đỏ" (evidence đã có).
 
 ---
 
@@ -434,29 +480,32 @@ src/                          # Python backend
 └── recommenders/             # Domain-specific recommenders (6 types)
 
 tests/                        # 365 automated tests
-qa/                           # Benchmark + release gate reports
-  ├── retrieval_benchmark_report.md    # 96.6% top-1 accuracy
-  ├── retrieval_benchmark_results.json
-  ├── release_gate_report.md           # PASS_BETA
-  ├── release_gate_report.json
-  ├── manual_qa_results.json           # 15/15 scenarios
-  └── api_smoke_report.md
 
-submission/                   # Technical documentation
-  ├── TECHNICAL_DOCUMENT.md
-  ├── MONGODB_ARCHITECTURE.md
-  ├── VECTOR_SEARCH_AND_AGGREGATION.md
-  ├── MVP_SCOPE.md
-  ├── METRICS_TABLES.md
-  ├── JUDGING_CRITERIA_MAPPING.md
-  ├── DEMO_INPUTS_AND_EXPECTED_OUTPUTS.md
-  ├── LIMITATIONS_AND_ROADMAP.md
-  └── screenshots/
+qa/                           # Benchmark + release gate reports
+├── retrieval_benchmark_report.md    # 96.6% top-1 accuracy
+├── retrieval_benchmark_results.json
+├── release_gate_report.md           # PASS_BETA
+├── release_gate_report.json
+├── manual_qa_results.json           # 15/15 scenarios
+└── api_smoke_report.md
+
+submission/                   # Tài liệu kỹ thuật
+├── MVP_SCOPE.md                         # MVP scope & decisions
+├── TECHNICAL_DOCUMENT.md                # Kiến trúc hệ thống tổng thể
+├── MONGODB_ARCHITECTURE.md              # Data schema MongoDB
+├── VECTOR_SEARCH_AND_AGGREGATION.md     # Vector Search & Pipeline
+├── DEMO_INPUTS_AND_EXPECTED_OUTPUTS.md  # 10 demo scenarios
+├── METRICS_TABLES.md                    # All metrics
+├── JUDGING_CRITERIA_MAPPING.md          # Judging criteria map
+├── LIMITATIONS_AND_ROADMAP.md           # Known limits + roadmap
+├── INVESTOR_SLIDE_OUTLINE.md            # Investor pitch deck (10 slides)
+├── INVESTOR_PITCH_SCRIPT.md             # Investor pitch script (12 min)
+└── screenshots/                         # 21 UI screenshots
 
 scripts/
-  ├── seed_raw_data.py         # Seed global knowledge base
-  ├── benchmark_retrieval.py   # 30-query retrieval benchmark
-  └── qa_release_gate.py       # Automated release gate
+├── seed_raw_data.py           # Seed global knowledge base
+├── benchmark_retrieval.py     # 30-query retrieval benchmark
+└── qa_release_gate.py         # Automated release gate
 
 lexai-–-trợ-lý-pháp-lý-thông-minh UI/   # React 19 frontend (20+ pages)
 ```
@@ -467,20 +516,20 @@ lexai-–-trợ-lý-pháp-lý-thông-minh UI/   # React 19 frontend (20+ pages)
 
 **L-01 — `case_embedding_index` blocked by Atlas M0 limit**
 
-MongoDB Atlas M0 allows maximum 3 vector search indexes. All slots are taken:
+MongoDB Atlas M0 cho phép tối đa 3 vector search indexes. Tất cả đều đã được sử dụng:
 - `chunk_embedding_index` (chunks_vec) ✅
 - `template_embedding_index` (templates) ✅
 - `risk_embedding_index` (risks) ✅
 
-`case_embedding_index` on `legal_cases` cannot be created → similar cases use `is_demo=True` fallback.
+`case_embedding_index` trên `legal_cases` không thể tạo → similar cases dùng `is_demo=True` fallback.
 
-This is **not a code bug** — domain classification, law retrieval, OutputValidator, and evidence extraction all work correctly.
+Đây **không phải bug code** — domain classification, law retrieval, OutputValidator, và evidence extraction đều hoạt động đúng.
 
-Fix: Upgrade Atlas M0 → M10+ → create `case_embedding_index` → GA gate passes.
+Fix: Nâng Atlas M0 → M10+ → tạo `case_embedding_index` → GA gate pass.
 
-The release gate detects and reports this transparently. We never suppress it.
+Release gate phát hiện và báo cáo minh bạch. Không bao giờ suppress.
 
-Full limitations: [`submission/LIMITATIONS_AND_ROADMAP.md`](submission/LIMITATIONS_AND_ROADMAP.md)
+> Chi tiết: [`submission/LIMITATIONS_AND_ROADMAP.md`](submission/LIMITATIONS_AND_ROADMAP.md)
 
 ---
 
