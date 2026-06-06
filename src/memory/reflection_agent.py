@@ -29,16 +29,35 @@ logger = logging.getLogger(__name__)
 # Tier 1 — regex extractors
 # ---------------------------------------------------------------------------
 
-_NAME_PATTERNS = [
-    # Vietnamese: "tên tôi là Nguyễn Văn A"
-    re.compile(
-        r"(?:tên tôi là|tên của tôi là|tôi tên là|gọi tôi là|mình tên là|tôi là)\s+"
-        r"([A-ZÀÁẢÃẠĂẮẶẰẲẴÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ]"
-        r"(?:[a-zàáảãạăắặằẳẵâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ"
-        r"A-ZÀÁẢÃẠĂẮẶẰẲẴÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ\s]{1,35}))",
-        re.IGNORECASE,
-    ),
-]
+# Vietnamese letter class (upper + lower, with diacritics) used to capture names.
+_VN_LETTERS = (
+    "A-ZÀÁẢÃẠĂẮẶẰẲẴÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ"
+    "a-zàáảãạăắặằẳẵâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ"
+)
+
+# Explicit name declarations — unambiguous, so accept 1–4 words (incl. single-word names).
+_NAME_EXPLICIT_RE = re.compile(
+    r"(?:tên tôi là|tên của tôi là|tôi tên là|mình tên là|gọi tôi là)\s+"
+    r"([" + _VN_LETTERS + r"][" + _VN_LETTERS + r"\s]{1,34})",
+    re.IGNORECASE,
+)
+
+# Generic self-intro ("tôi là X") — ambiguous (often a role/occupation). Accept only a
+# SINGLE word that is not a known occupation/role word, so "tôi là Thắng" → name, but
+# "tôi là giáo viên" / "tôi là nạn nhân" → not a name.
+_NAME_GENERIC_RE = re.compile(
+    r"(?:tôi là|mình là)\s+([" + _VN_LETTERS + r"]{2,20})",
+    re.IGNORECASE,
+)
+
+# Words that, if captured, mean the phrase is a role/description — not a personal name.
+_NAME_STOPWORDS = {
+    "giáo", "viên", "kỹ", "sư", "luật", "bác", "sĩ", "sinh", "học", "công", "nhân",
+    "nông", "dân", "kế", "toán", "giám", "đốc", "nạn", "bị", "đơn", "nguyên", "chủ",
+    "người", "ai", "gì", "thợ", "cán", "bộ", "chức", "trưởng", "phòng", "lập", "trình",
+    "thư", "ký", "hr", "nhà", "doanh", "nghiệp", "khách", "hàng", "mẹ", "bố", "cha",
+    "vợ", "chồng", "con", "năm", "nay", "tuổi", "hiện",
+}
 
 _AGE_PATTERNS = [
     re.compile(r"(?:tôi|mình)\s+(\d{1,2})\s*tuổi", re.IGNORECASE),
@@ -62,13 +81,31 @@ _LOCATION_PATTERN = re.compile(
 )
 
 
+def _clean_name(raw: str) -> Optional[str]:
+    """Trim to the name token(s), reject role/occupation phrases."""
+    # Stop at the first clause separator (handles "Thắng, năm nay 23 tuổi").
+    name = re.split(r"[,.\n;:]", raw)[0].strip()
+    words = name.split()
+    if not (1 <= len(words) <= 4) or not (2 <= len(name) <= 45):
+        return None
+    if any(w.lower() in _NAME_STOPWORDS for w in words):
+        return None
+    return name
+
+
 def _extract_name(text: str) -> Optional[str]:
-    for pat in _NAME_PATTERNS:
-        m = pat.search(text)
-        if m:
-            name = m.group(1).strip()
-            if 2 <= len(name) <= 45 and " " in name:  # require at least 2 words
-                return name
+    # 1. Explicit "tên tôi là …" — accept single- or multi-word names.
+    m = _NAME_EXPLICIT_RE.search(text)
+    if m:
+        name = _clean_name(m.group(1))
+        if name:
+            return name
+    # 2. Generic "tôi là X" — single word only, must not be a role/occupation word.
+    m = _NAME_GENERIC_RE.search(text)
+    if m:
+        word = m.group(1).strip()
+        if 2 <= len(word) <= 20 and word.lower() not in _NAME_STOPWORDS:
+            return word
     return None
 
 

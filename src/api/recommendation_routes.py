@@ -41,6 +41,9 @@ rec_router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 interact_router = APIRouter(prefix="/interactions", tags=["interactions"])
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
 
+MIN_QUERY_LENGTH = 10
+
+
 
 # ---------------------------------------------------------------------------
 # Shared dependency
@@ -705,6 +708,9 @@ def recommend_risks(
     Provide situation for $vectorSearch-based risk matching.
     Both can be combined (results are merged and deduplicated).
     """
+    if body.situation and len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     vs = _get_vector_storage(request)
     if vs is None:
         return _fallback_risks(body.limit)
@@ -1343,6 +1349,7 @@ class IntelligenceOut(BaseModel):
     detected_domain: str
     domain_confidence: float
     situation_summary: str
+    accumulated_situation: str = ""
     legal_position_strength: str
     position_reasoning: str = ""
     position_score: float
@@ -1371,6 +1378,9 @@ def intelligence_analyze(
     QueryPlanner → SessionMemory → RetrievalFusion →
     GraphRAG → LLM Reasoning → RecommendationRanker → Persist.
     """
+    if not body.situation or len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     vs = _get_vector_storage(request)
     try:
         from src.engine.orchestrator import LegalIntelligenceOrchestrator
@@ -1399,8 +1409,12 @@ def intelligence_analyze(
     # this data via getNextBestActions().
     next_best_actions: List[NextBestActionOut] = []
     if not getattr(result, "is_chitchat", False):
+        # Use the accumulated multi-turn situation (prior turns + current) so proactive
+        # questions reflect the whole conversation and don't re-ask what the user already
+        # told us. Falls back to the single turn if the orchestrator didn't supply it.
+        nba_situation = getattr(result, "accumulated_situation", "") or body.situation
         ctx = build_recommendation_context(
-            situation=body.situation,
+            situation=nba_situation,
             domain=result.detected_domain,
             position_score=result.position_score,
             domain_confidence=result.domain_confidence,
@@ -1450,6 +1464,7 @@ def intelligence_analyze(
         next_best_actions=next_best_actions,
         is_chitchat=getattr(result, "is_chitchat", False),
         tool_calls_made=getattr(result, "tool_calls_made", []),
+        accumulated_situation=getattr(result, "accumulated_situation", ""),
     )
 
 

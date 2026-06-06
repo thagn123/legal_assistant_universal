@@ -1,0 +1,7 @@
+Query: Đất nhà tôi bị thu hồi để làm đường, hòa giải tại xã không thành. Bước tiếp theo là gì?
+Detected Domain: dat_dai
+Domain Confidence: 1.0
+Dispute Type: thu_hoi_dat_boi_thuong
+Strategy: ['vector', 'bm25', 'graph', 'behavior']
+Variants: ['Đất nhà tôi bị thu hồi để làm đường, hòa giải tại xã không thành. Bước tiếp theo là gì?', 'Đất nhà tôi bị thu hồi để làm đường, hòa giải tại xã không thành. Bước tiếp theo là gì? quyền sử dụng đất', 'Đất nhà tôi bị thu hồi để làm đường, hòa giải tại xã không thành. Bước tiếp']
+Entities: {'laws': [], 'parties': ['ông thành'], 'amounts': [], 'dates': [], 'locations': ['tại xã không thành']}

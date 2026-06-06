@@ -90,6 +90,7 @@ export interface AnalysisResponse {
   status: 'manh' | 'trung_binh' | 'yeu';
   position_score: number;
   position_reasoning: string;
+  accumulated_situation?: string;
   domain: string;
   domain_confidence: number;
   laws: LawChunk[];
@@ -706,15 +707,10 @@ export interface JourneyResult {
   warnings: string[];
 }
 
-export async function buildJourney(
-  situation: string,
-  sessionId = '',
-  facts: string[] = [],
-  domain?: string,
-): Promise<JourneyResult> {
+export async function buildJourney(situation: string, domain: string, facts: string[], stageHint?: string): Promise<JourneyResult> {
   return apiFetch<JourneyResult>('/journey/build', {
     method: 'POST',
-    body: JSON.stringify({ situation, session_id: sessionId, facts, domain }),
+    body: JSON.stringify({ situation, facts, domain_hint: domain, stage_hint: stageHint }),
   });
 }
 

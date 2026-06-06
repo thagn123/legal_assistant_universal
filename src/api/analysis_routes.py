@@ -13,6 +13,8 @@ from src.services.situation_classifier import SituationClassifier
 from src.services.timeline_tracker import TimelineTracker, DeadlineItem
 from src.services.risk_analysis_service import RiskAnalysisService
 
+MIN_QUERY_LENGTH = 10
+
 analysis_router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 _gap_detector = EvidenceGapDetector()
@@ -170,6 +172,10 @@ def classify_situation(
     giai đoạn, ý định người dùng và trích xuất sự kiện chính.
     Dùng làm bước đầu tiên trước khi gọi /analysis/evidence-gap hoặc /journey/build.
     """
+    from fastapi import HTTPException
+    if not body.situation or len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     result = _classifier.classify(
         situation=body.situation,
         facts=body.facts,
@@ -228,6 +234,10 @@ def detect_evidence_gap(
     danh sách cần thiết theo lĩnh vực pháp lý, trả về danh sách còn thiếu
     và mức độ ưu tiên.
     """
+    from fastapi import HTTPException
+    if not body.situation or len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     result = _gap_detector.detect_gaps(
         domain=body.domain,
         facts=body.facts,
@@ -271,6 +281,10 @@ def track_timeline(
     Xác định giai đoạn hiện tại của vụ việc pháp lý, thời hạn điển hình
     và cảnh báo quan trọng cần lưu ý.
     """
+    from fastapi import HTTPException
+    if not body.situation or len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     result = _timeline_tracker.track(
         situation=body.situation,
         domain=body.domain,
@@ -340,6 +354,10 @@ def analyze_risk(
     phân tích khoảng trống chứng cứ để sinh điểm rủi ro, điểm mạnh/yếu,
     và kế hoạch hành động ưu tiên.
     """
+    from fastapi import HTTPException
+    if not body.situation or len(body.situation.strip()) < MIN_QUERY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất {MIN_QUERY_LENGTH} ký tự).")
+
     result = _risk_service.analyze(
         situation=body.situation,
         facts=body.facts,

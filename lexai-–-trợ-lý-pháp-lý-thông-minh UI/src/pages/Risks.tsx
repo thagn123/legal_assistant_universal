@@ -129,7 +129,10 @@ function AiRiskPanel() {
   }, [location.state]);
 
   async function handleAnalyze() {
-    if (!situation.trim()) return;
+    if (!situation.trim() || situation.trim().length < 10) {
+      setError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
     sessionStorage.setItem('lexai_current_situation', situation.trim());
     setLoading(true);
     setResult(null);
@@ -161,7 +164,7 @@ function AiRiskPanel() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleAnalyze}
-            disabled={loading || !situation.trim()}
+            disabled={loading || situation.trim().length < 10}
             className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy font-bold rounded-xl disabled:opacity-40 hover:scale-105 active:scale-95 transition-all text-sm"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -275,6 +278,10 @@ function GenericRisksPanel() {
   const [severityFilter, setSeverityFilter] = useState<'all' | 'cao' | 'trung_binh' | 'thap'>('all');
 
   const fetchRisks = async (useHistory: boolean = false) => {
+    if (!useHistory && (!situation.trim() || situation.trim().length < 10)) {
+      alert('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
     setIsLoading(true);
     try {
       const data = await apiFetch<RiskAssessment[]>('/recommendations/risks', {

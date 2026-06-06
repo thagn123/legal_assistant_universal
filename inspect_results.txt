@@ -1,0 +1,200 @@
+Total chunks in MongoDB: 2237
+
+Chunks by law_type:
+  thue: 8
+  hinh_su: 53
+  general: 654
+  lao_dong: 342
+  dan_su: 358
+  dat_dai: 252
+  doanh_nghiep: 268
+  hop_dong: 300
+  so_huu_tri_tue: 2
+
+Sample chunks matching 'Điều 62':
+  chunk_id: doc_25d8d2addb4732c2__chunk00061
+  law_type: dan_su
+  law_ref:  None
+  content:  Chương IV › Điều 62. Quyết định việc thay đổi Kiểm sát viên, Kiểm tra viên
+
+## Điều 62. Quyết định việc thay đổi Kiểm sát viên, Kiểm tra viên
+
+Điều 62. Quyết định việc thay đổi Kiểm sát viên, Kiểm tra...
+
+  chunk_id: doc_25d8d2addb4732c2__chunk00232
+  law_type: general
+  law_ref:  None
+  content:  Mục 1. QUY ĐỊNH CHUNG VỀ PHIÊN TÒA SƠ THẨM › Điều 233. Thời hạn hoãn phiên tòa và quyết định hoãn phiên tòa
+
+## Điều 233. Thời hạn hoãn phiên tòa và quyết định hoãn phiên tòa
+
+Điều 233. Thời hạn hoãn ...
+
+  chunk_id: doc_230dcf1a1f82693f__chunk00039
+  law_type: hop_dong
+  law_ref:  None
+  content:  Mục 3. CHẤM DỨT HỢP ĐỒNG LAO ĐỘNG › Điều 40. Nghĩa vụ của người lao động khi đơn phương chấm dứt hợp đồng lao động trái pháp luật
+
+## Điều 40. Nghĩa vụ của người lao động khi đơn phương chấm dứt hợp đ...
+
+  chunk_id: doc_230dcf1a1f82693f__chunk00061
+  law_type: hop_dong
+  law_ref:  None
+  content:  Chương IV › Điều 62. Hợp đồng đào tạo nghề giữa người sử dụng lao động, người lao động và chi phí đào tạo nghề
+
+## Điều 62. Hợp đồng đào tạo nghề giữa người sử dụng lao động, người lao động và chi phí...
+
+  chunk_id: doc_22cff50dea861de7__chunk00002
+  law_type: hinh_su
+  law_ref:  None
+  content:  Điều 3. Sửa đổi, bổ sung một số điều của Luật Tư pháp người chưa thành niên
+
+## Điều 3. Sửa đổi, bổ sung một số điều của Luật Tư pháp người chưa thành niên
+
+Điều 3. Sửa đổi, bổ sung một số điều của Lu...
+
+  chunk_id: doc_1d2c4b4dd5cc74c5__chunk00000
+  law_type: hinh_su
+  law_ref:  None
+  content:  Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Hình sự
+
+## Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Hình sự
+
+Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Hình sự
+
+1. Sửa đổi, bổ sung kho...
+
+  chunk_id: doc_7a31ffe03b034130__chunk00061
+  law_type: so_huu_tri_tue
+  law_ref:  None
+  content:  Chương III. › Điều 62.
+
+## Điều 62.
+
+Điều 62.
+
+1. Phát triển khoa học và công nghệ là quốc sách hàng đầu, giữ vai trò then chốt trong sự nghiệp phát triển kinh tế - xã hội của đất nước.
+
+2. Nhà nước ư...
+
+  chunk_id: doc_2eb6f73d68bf2631__chunk00001
+  law_type: general
+  law_ref:  None
+  content:  Điều 2. Thay thế, bỏ từ, cụm từ, bãi bỏ điểm, khoản tại một số điều
+
+## Điều 2. Thay thế, bỏ từ, cụm từ, bãi bỏ điểm, khoản tại một số điều
+
+Điều 2. Thay thế, bỏ từ, cụm từ, bãi bỏ điểm, khoản tại một...
+
+  chunk_id: doc_6004e35ceb4c0814__chunk00061
+  law_type: lao_dong
+  law_ref:  None
+  content:  Mục 2. THỦ TỤC THI HÀNH ÁN TRONG MỘT SỐ TRƯỜNG HỢP CỤ THỂ › Điều 62. Thi hành quyết định áp dụng biện pháp khẩn cấp tạm thời
+
+## Điều 62. Thi hành quyết định áp dụng biện pháp khẩn cấp tạm thời
+
+Điều ...
+
+  chunk_id: doc_42b9c3caf5b23f80__chunk00061
+  law_type: hop_dong
+  law_ref:  None
+  content:  Mục 4. QUYỀN VÀ NGHĨA VỤ CỦA CÁC CHỦ THỂ TRONG THI CÔNG XÂY DỰNG › Điều 62. Quyền, nghĩa vụ và trách nhiệm của nhà thầu thiết kế trong việc thi công xây dựng
+
+## Điều 62. Quyền, nghĩa vụ và trách nhiệ...
+
+
+Sample chunks under 'dat_dai':
+  chunk_id: doc_25d8d2addb4732c2__chunk00020
+  law_ref:  None
+  content:  Chương II › Điều 21. Kiểm sát việc tuân theo pháp luật trong tố tụng dân sự
+
+## Điều 21. Kiểm sát việc tuân theo pháp luật trong tố tụng dân sự
+
+Điều 21. Kiểm sát việc tuân theo pháp luật trong tố tụn...
+
+  chunk_id: doc_25d8d2addb4732c2__chunk00025
+  law_ref:  None
+  content:  Mục 1. NHỮNG VỤ VIỆC DÂN SỰ THUỘC THẨM QUYỀN GIẢI QUYẾT CỦA TÒA ÁN › Điều 26. Những tranh chấp về dân sự thuộc thẩm quyền giải quyết của Tòa án
+
+## Điều 26. Những tranh chấp về dân sự thuộc thẩm quyền...
+
+  chunk_id: doc_25d8d2addb4732c2__chunk00191
+  law_ref:  None
+  content:  Chương XII › Điều 192. Trả lại đơn khởi kiện, hậu quả của việc trả lại đơn khởi kiện
+
+## Điều 192. Trả lại đơn khởi kiện, hậu quả của việc trả lại đơn khởi kiện
+
+Điều 192. Trả lại đơn khởi kiện, hậu q...
+
+  chunk_id: doc_1d2c4b4dd5cc74c5__chunk00013
+  law_ref:  None
+  content:  Điều 31. Tiếp nhận, xác minh, giải cứu và trao trả người nước ngoài bị mua bán tại Việt Nam
+
+## Điều 31. Tiếp nhận, xác minh, giải cứu và trao trả người nước ngoài bị mua bán tại Việt Nam
+
+Điều 31. Ti...
+
+  chunk_id: doc_7a31ffe03b034130__chunk00052
+  law_ref:  None
+  content:  Chương III. › Điều 53.
+
+## Điều 53.
+
+Điều 53.
+
+Đất đai, tài nguyên nước, tài nguyên khoáng sản, nguồn lợi ở vùng biển, vùng trời, tài nguyên thiên nhiên khác và các tài sản do Nhà nước đầu tư, quản lý...
+
+  chunk_id: doc_7a31ffe03b034130__chunk00053
+  law_ref:  None
+  content:  Chương III. › Điều 54.
+
+## Điều 54.
+
+Điều 54.
+
+1. Đất đai là tài nguyên đặc biệt của quốc gia, nguồn lực quan trọng phát triển đất nước, được quản lý theo pháp luật.
+
+2. Tổ chức, cá nhân được Nhà nư...
+
+  chunk_id: doc_93b7151cbdcba230__chunk00016
+  law_ref:  None
+  content:  Mục 2. CÔNG KHAI THÔNG TIN › Điều 17. Thông tin phải được công khai
+
+## Điều 17. Thông tin phải được công khai
+
+Điều 17. Thông tin phải được công khai
+
+1. Các thông tin sau đây phải được công khai:
+
+a...
+
+  chunk_id: doc_12547f40f1e89dc8__chunk00013
+  law_ref:  None
+  content:  Chương III › Điều 14. Bảo đảm trật tự, an toàn Thủ đô
+
+## Điều 14. Bảo đảm trật tự, an toàn Thủ đô
+
+Điều 14. Bảo đảm trật tự, an toàn Thủ đô
+
+1. Việc xử phạt vi phạm hành chính trên địa bàn Thành phố ...
+
+  chunk_id: doc_12547f40f1e89dc8__chunk00023
+  law_ref:  None
+  content:  Chương VI › Điều 24. Quản lý, bảo vệ, sử dụng tài nguyên
+
+## Điều 24. Quản lý, bảo vệ, sử dụng tài nguyên
+
+Điều 24. Quản lý, bảo vệ, sử dụng tài nguyên
+
+1. Các trường hợp thu hồi đất trên địa bàn Thàn...
+
+  chunk_id: doc_5e964cace0328a4d__chunk00000
+  law_ref:  None
+  content:  Điều 1. Sửa đổi, bổ sung một số điều của Luật Công chứng
+
+## Điều 1. Sửa đổi, bổ sung một số điều của Luật Công chứng
+
+Điều 1. Sửa đổi, bổ sung một số điều của Luật Công chứng
+
+1. Sửa đổi, bổ sung kho...
+

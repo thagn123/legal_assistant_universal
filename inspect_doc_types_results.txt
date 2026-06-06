@@ -1,0 +1,97 @@
+=== MongoDB chunks_vec Doc Types ===
+Found 34 documents in SQLite:
+Doc ID: efbf800d... | Filename: string                                   | SQLite global=0 | NOT found in MongoDB chunks_vec!
+
+Doc ID: 902029fe... | Filename: string                                   | SQLite global=0 | NOT found in MongoDB chunks_vec!
+
+Doc ID: 597f5981... | Filename: 85_2025_QH15_651570.doc                  | SQLite global=0 | NOT found in MongoDB chunks_vec!
+
+Doc ID: b98bafc3... | Filename: 92_2015_QH13_296861.doc                  | SQLite global=1 | Mongo law_type=lao_dong | Chunks=517
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh và nhiệm vụ của Bộ luật tố tụng dân sự  ## Điều 1. Phạm vi điều chỉnh và nhiệm vụ 
+
+Doc ID: cc7f71c3... | Filename: 45_2019_QH14_333670 (1).doc              | SQLite global=1 | Mongo law_type=lao_dong | Chunks=220
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Bộ luật Lao động quy đ
+
+Doc ID: 7cb3e7d2... | Filename: 85_2025_QH15_651570.doc                  | SQLite global=1 | Mongo law_type=lao_dong | Chunks=6
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Tố tụng dân sự  ## Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Tố 
+
+Doc ID: 9e70ef19... | Filename: 86_2025_QH15_662377.doc                  | SQLite global=1 | Mongo law_type=hinh_su | Chunks=16
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Hình sự  ## Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Hình sự  Đ
+
+Doc ID: f05725f2... | Filename: 99_2025_QH15_662829.doc                  | SQLite global=1 | Mongo law_type=hinh_su | Chunks=2
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Tố tụng hình sự  ## Điều 1. Sửa đổi, bổ sung một số điều của Bộ luật Tố
+
+Doc ID: bcff67de... | Filename: Khongso_215627.doc                       | SQLite global=1 | Mongo law_type=general | Chunks=113
+  Sample Content: Chương I. › Điều 1.  ## Điều 1.  Điều 1.  Nước Cộng hòa xã hội chủ nghĩa Việt Nam là một nước độc lập, có chủ quyền, thố
+
+Doc ID: ea7999f8... | Filename: 01_2026_QH16_704788.doc                  | SQLite global=1 | Mongo law_type=general | Chunks=31
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh.  ## Điều 1. Phạm vi điều chỉnh.  Điều 1. Phạm vi điều chỉnh.  Luật này quy định v
+
+Doc ID: c46e9eac... | Filename: 02_2026_QH16_696077.doc                  | SQLite global=1 | Mongo law_type=general | Chunks=36
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định vị t
+
+Doc ID: 42727a85... | Filename: 03_2026_QH16_694806.doc                  | SQLite global=1 | Mongo law_type=general | Chunks=30
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về h
+
+Doc ID: 1d3d6f86... | Filename: 04_2026_QH16_681012.doc                  | SQLite global=1 | Mongo law_type=dat_dai | Chunks=3
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Công chứng  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Công chứng  Đ
+
+Doc ID: 088682d6... | Filename: 05_2026_QH16_704792.doc                  | SQLite global=1 | Mongo law_type=hop_dong | Chunks=3
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Trợ giúp pháp lý  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Trợ giú
+
+Doc ID: 535fc246... | Filename: 06_2026_QH16_704653.doc                  | SQLite global=1 | Mongo law_type=lao_dong | Chunks=4
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Thi đua, khen thưởng  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Thi
+
+Doc ID: 3605bca0... | Filename: 07_2026_QH16_704791.doc                  | SQLite global=1 | Mongo law_type=general | Chunks=61
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh, đối tượng áp dụng  ## Điều 1. Phạm vi điều chỉnh, đối tượng áp dụng  Điều 1. Phạm
+
+Doc ID: 860d72ed... | Filename: 106_2025_QH15_628717.doc                 | SQLite global=1 | Mongo law_type=dan_su | Chunks=116
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định nguy
+
+Doc ID: f1410715... | Filename: 135_2025_QH15_675213.doc                 | SQLite global=1 | Mongo law_type=general | Chunks=95
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về h
+
+Doc ID: fd08adcf... | Filename: 136_2025_QH15__686937.doc                | SQLite global=1 | Mongo law_type=general | Chunks=5
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Tiếp công dân  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Tiếp công 
+
+Doc ID: ff1718ab... | Filename: 142_2025_QH15_675210.doc                 | SQLite global=1 | Mongo law_type=doanh_nghiep | Chunks=88
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về n
+
+Doc ID: 4cbcea18... | Filename: 143_2025_QH15_681550.doc                 | SQLite global=1 | Mongo law_type=general | Chunks=52
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về h
+
+Doc ID: c0dfe971... | Filename: 144_2025_QH15_675260.doc                 | SQLite global=1 | Mongo law_type=dat_dai | Chunks=3
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Quy hoạch đô thị và nông thôn  ## Điều 1. Sửa đổi, bổ sung một số điều của
+
+Doc ID: 1aef1820... | Filename: 146_2025_QH15_675259.doc                 | SQLite global=1 | Mongo law_type=doanh_nghiep | Chunks=20
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Bảo vệ môi trường  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Bảo vệ
+
+Doc ID: 2a69a803... | Filename: 148_2025_QH15_675262.doc                 | SQLite global=1 | Mongo law_type=general | Chunks=48
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  1. Luật này quy định v
+
+Doc ID: 411fc8e2... | Filename: 149_2025_QH15_679698.doc                 | SQLite global=1 | Mongo law_type=doanh_nghiep | Chunks=2
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Thuế giá trị gia tăng  ## Điều 1. Sửa đổi, bổ sung một số điều của Luật Th
+
+Doc ID: 1a953366... | Filename: 25_2018_QH14_336713.doc                  | SQLite global=1 | Mongo law_type=general | Chunks=67
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về t
+
+Doc ID: 0d0d116a... | Filename: 31_2024_QH15_523642.doc                  | SQLite global=1 | Mongo law_type=dat_dai | Chunks=259
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về c
+
+Doc ID: b6f571fe... | Filename: 45_2019_QH14_333670.doc                  | SQLite global=1 | Mongo law_type=lao_dong | Chunks=220
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Bộ luật Lao động quy đ
+
+Doc ID: d75884d7... | Filename: 59_2020_QH14_427301.doc                  | SQLite global=1 | Mongo law_type=doanh_nghiep | Chunks=218
+  Sample Content: Chương I › Điều 1. Phạm vi điều chỉnh  ## Điều 1. Phạm vi điều chỉnh  Điều 1. Phạm vi điều chỉnh  Luật này quy định về v
+
+Doc ID: 6374d9cf... | Filename: 8_2026_QH16_704810.doc                   | SQLite global=1 | Mongo law_type=lao_dong | Chunks=2
+  Sample Content: Điều 1. Sửa đổi, bổ sung một số điều của Luật Cơ quan đại diện nước Cộng hòa xã hội chủ nghĩa Việt Nam ở nước ngoài  ## 
+
+Doc ID: 9402ed41... | Filename: thong-tu-55-btc-PL1.pdf                  | SQLite global=1 | NOT found in MongoDB chunks_vec!
+
+Doc ID: 1bf9fb90... | Filename: 100_2019_ND-CP_426369.pdf                | SQLite global=0 | NOT found in MongoDB chunks_vec!
+
+Doc ID: d1732413... | Filename: 100_2019_ND-CP_426369.pdf                | SQLite global=1 | NOT found in MongoDB chunks_vec!
+
+Doc ID: 83a4e26e... | Filename: 52_2014_QH13_238640.doc                  | SQLite global=1 | NOT found in MongoDB chunks_vec!
+

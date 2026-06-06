@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-30T07:07:08.330823+00:00",
+  "generated_at": "2026-06-05T04:29:23.886884+00:00",
   "summary": {
     "total": 10,
     "passed": 10,
@@ -18,7 +18,7 @@
         "response has actionable content"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:06:51.164433+00:00"
+      "timestamp": "2026-06-05T04:29:09.100012+00:00"
     },
     {
       "test_id": "SM-02",
@@ -30,7 +30,7 @@
         "domain-relevant content present"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:00.345371+00:00"
+      "timestamp": "2026-06-05T04:29:14.688479+00:00"
     },
     {
       "test_id": "SM-03",
@@ -43,7 +43,7 @@
         "advice has no supplement contradiction"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:00.350479+00:00"
+      "timestamp": "2026-06-05T04:29:14.693621+00:00"
     },
     {
       "test_id": "SM-04",
@@ -55,7 +55,7 @@
         "all 1 results above threshold"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:00.371051+00:00"
+      "timestamp": "2026-06-05T04:29:14.720620+00:00"
     },
     {
       "test_id": "SM-05",
@@ -67,7 +67,7 @@
         "demo labelling and score threshold OK"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:00.388186+00:00"
+      "timestamp": "2026-06-05T04:29:14.739635+00:00"
     },
     {
       "test_id": "SM-06",
@@ -79,7 +79,7 @@
         "all 6 actions have valid structure, no P0 violations"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:00.391235+00:00"
+      "timestamp": "2026-06-05T04:29:14.742200+00:00"
     },
     {
       "test_id": "SM-07",
@@ -91,7 +91,7 @@
         "response not empty"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:04.444743+00:00"
+      "timestamp": "2026-06-05T04:29:20.640616+00:00"
     },
     {
       "test_id": "SM-08",
@@ -103,7 +103,7 @@
         "domain detection acceptable: 'dat_dai'"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:08.278681+00:00"
+      "timestamp": "2026-06-05T04:29:23.828787+00:00"
     },
     {
       "test_id": "SM-09",
@@ -115,7 +115,7 @@
         "version='2.0.0'"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:08.326769+00:00"
+      "timestamp": "2026-06-05T04:29:23.880464+00:00"
     },
     {
       "test_id": "SM-10",
@@ -125,7 +125,7 @@
         "HTTP 200 — handled short input gracefully"
       ],
       "bugs_found": [],
-      "timestamp": "2026-05-30T07:07:08.329803+00:00"
+      "timestamp": "2026-06-05T04:29:23.885553+00:00"
     }
   ]
 }

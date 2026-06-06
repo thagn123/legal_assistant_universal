@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+import json
+import logging
 
 from src.services.situation_classifier import SituationClassifier
 from src.services.evidence_gap_detector import EvidenceGapDetector
+from src.llm.client import chat_complete, is_available
+from src.llm.prompts import ACTION_PLAN_PROMPT
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -174,6 +180,53 @@ class ActionPlannerService:
                 important.append(item)
             else:
                 optional.append(item)
+
+        # Enhance with LLM if available
+        if is_available():
+            try:
+                messages = [
+                    {"role": "system", "content": "Bạn là luật sư phân tích và lập kế hoạch chiến lược xuất sắc."},
+                    {"role": "user", "content": ACTION_PLAN_PROMPT.format(
+                        situation=situation,
+                        domain=profile.domain,
+                        stage=profile.stage_label
+                    )}
+                ]
+                resp_text = chat_complete(
+                    messages=messages,
+                    response_format={"type": "json_object"}
+                )
+                if resp_text:
+                    parsed = json.loads(resp_text)
+                    
+                    def _parse_llm_actions(items, default_priority):
+                        res = []
+                        for item in items:
+                            if not item.get("step"):
+                                continue
+                            res.append(ActionItem(
+                                step=item.get("step", ""),
+                                priority=default_priority,
+                                reason=item.get("reason", ""),
+                                deadline=item.get("deadline", ""),
+                                category=item.get("category", "procedure")
+                            ))
+                        return res
+
+                    llm_immediate = _parse_llm_actions(parsed.get("immediate_actions", []), "immediate")
+                    llm_important = _parse_llm_actions(parsed.get("important_actions", []), "important")
+                    llm_optional = _parse_llm_actions(parsed.get("optional_actions", []), "optional")
+
+                    if llm_immediate or llm_important or llm_optional:
+                        # Keep the dynamically generated actions + local evidence items
+                        immediate_base = [a for a in immediate if a.step.startswith("Thu thập chứng cứ")]
+                        important_base = [a for a in important if a.step.startswith("Thu thập chứng cứ")]
+                        
+                        immediate = immediate_base + llm_immediate
+                        important = important_base + llm_important
+                        optional = llm_optional
+            except Exception as e:
+                logger.warning(f"Failed to generate dynamic action plan: {e}")
 
         # Derive urgency from risk_level
         urgency = _URGENCY_MAP.get(profile.risk_level, "medium")

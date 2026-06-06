@@ -496,7 +496,7 @@ def _build_goal_profile(ctx: RecommendationContext) -> GoalProfile:
     return GoalProfile(
         detected_goals=goals or ["clarify_legal_goal"],
         user_position=position,
-        next_questions=_next_questions(goals, position),
+        next_questions=_next_questions(goals, position, folded_situation=text),
         journey_steps=_journey_steps(goals, position),
     )
 
@@ -521,25 +521,48 @@ def _detect_user_position(text: str, goals: List[str]) -> str:
     return "general_user"
 
 
-def _next_questions(goals: List[str], position: str) -> List[str]:
+def _next_questions(goals: List[str], position: str, folded_situation: str = "") -> List[str]:
+    """Generate grounded follow-up questions.
+
+    Two principles ("hỏi/dùng thông tin hợp tình"):
+      1. Never presume facts the user did not state — e.g. ask "Bạn có mấy người con"
+         instead of asserting "Hai con". Presuming a quantity the user never gave erodes
+         trust (reported bug: user mentioned custody but never said two children).
+      2. Skip a question whose answer the user already provided in the conversation, so
+         the assistant does not re-ask what it was just told.
+    """
     questions: List[str] = []
 
-    def add(question: str) -> None:
+    def add(question: str, answered_if: Optional[List[str]] = None) -> None:
+        # Drop the question when the situation already answers it.
+        if answered_if and folded_situation and _contains_any(folded_situation, answered_if):
+            return
         if question not in questions:
             questions.append(question)
 
     if "child_custody" in goals:
-        add("Hai con hiện đang sống với ai và ai là người trực tiếp chăm sóc hằng ngày?")
-        add("Bạn có chứng cứ về thu nhập, nơi ở, thời gian chăm sóc và điều kiện học tập của con không?")
+        add(
+            "Bạn có mấy người con, độ tuổi bao nhiêu, và hiện các con đang sống với ai "
+            "(ai là người trực tiếp chăm sóc hằng ngày)?",
+            answered_if=["con dang song voi", "con o voi", "con song cung", "truc tiep cham soc",
+                         "con dang song", "cac con song"],
+        )
+        add(
+            "Bạn có chứng cứ về thu nhập, nơi ở, thời gian chăm sóc và điều kiện học tập của con không?",
+            answered_if=["bang luong", "hop dong lao dong", "so ho khau", "giay to thu nhap"],
+        )
     if "asset_division" in goals or "asset_protection" in goals:
-        add("Tài sản bạn muốn giữ là tài sản hình thành trước hay sau khi kết hôn?")
+        add("Tài sản bạn muốn giữ là tài sản hình thành trước hay sau khi kết hôn?",
+            answered_if=["truoc khi ket hon", "sau khi ket hon", "tai san rieng truoc"])
         add("Tài sản đang đứng tên ai và có giấy tờ chứng minh nguồn tiền/công sức đóng góp không?")
     if "divorce" in goals:
-        add("Hai bên có đồng ý ly hôn không, hay dự kiến sẽ ly hôn đơn phương?")
+        add("Hai bên có đồng ý ly hôn không, hay dự kiến sẽ ly hôn đơn phương?",
+            answered_if=["dong y ly hon", "thuan tinh ly hon", "ly hon don phuong", "chua ly hon"])
     if "employment_termination" in goals:
         add("Bạn nhận quyết định sa thải/nghỉ việc vào ngày nào và có văn bản hay tin nhắn làm chứng cứ không?")
     if "land_dispute" in goals:
-        add("Bạn đang có sổ đỏ, giấy viết tay, hợp đồng đặt cọc hay chứng từ thanh toán nào?")
+        add("Bạn đang có sổ đỏ, giấy viết tay, hợp đồng đặt cọc hay chứng từ thanh toán nào?",
+            answered_if=["co so do", "co giay viet tay", "co hop dong dat coc", "co chung tu thanh toan"])
         add("Tranh chấp đất bắt đầu từ thời điểm nào và hiện trạng sử dụng đất ra sao?")
     if "contract_enforcement" in goals:
         add("Hợp đồng/thỏa thuận có điều khoản phạt, bồi thường hoặc thời hạn thực hiện không?")

@@ -104,6 +104,18 @@ _FAMILY_PRIMARY_KEYWORDS: List[str] = [
     "phán quyết ly hôn",
 ]
 
+def _has_primary_action_keyword(query: str) -> bool:
+    """True if the query contains an explicit labor/family primary action keyword.
+
+    Used by multi-turn continuity to distinguish a genuine topic switch (e.g. a
+    short follow-up that introduces "sa thải" or "ly hôn") from a mere stray keyword.
+    """
+    q = query.lower()
+    return any(kw in q for kw in _LABOR_PRIMARY_KEYWORDS) or any(
+        kw in q for kw in _FAMILY_PRIMARY_KEYWORDS
+    )
+
+
 _DISPUTE_TYPE_PATTERNS: Dict[str, List[str]] = {
     "tranh_chap_ranh_gioi":    ["ranh giới", "lấn chiếm", "tranh chấp đất"],
     "thu_hoi_dat_boi_thuong":  ["thu hồi", "bồi thường", "giải phóng mặt bằng"],
@@ -190,14 +202,35 @@ class QueryPlanner:
         plan_id = f"qp_{uuid.uuid4().hex[:10]}"
 
         # 1. Domain detection
-        detected_domain, domain_confidence = self._detect_domain(query, law_type_hint)
+        detected_domain, domain_confidence, top_hits = self._detect_domain(query, law_type_hint)
 
-        # 2. Incorporate session continuity
+        # 2. Incorporate session continuity (multi-turn case context)
+        #    A follow-up turn ("tôi có sổ đỏ", "khoảng 500 triệu", "vâng đúng vậy")
+        #    must stay in the SAME legal domain as the established case — otherwise
+        #    retrieval drifts off-topic and the answer loses context. We inherit the
+        #    established domain for SHORT follow-ups, unless the follow-up shows a STRONG
+        #    signal of a genuine topic switch (≥2 keyword hits for the new domain, or an
+        #    explicit primary action keyword like "sa thải"/"ly hôn"). Long or clearly
+        #    new questions are never overridden.
         if session_context and hasattr(session_context, "law_type_preferences"):
-            prefs: List[str] = session_context.law_type_preferences
-            if detected_domain == "general" and prefs:
-                detected_domain = prefs[0]
-                domain_confidence = 0.55  # medium confidence from session history
+            prefs: List[str] = session_context.law_type_preferences or []
+            established = prefs[0] if prefs else None
+            if established:
+                is_short_followup = len(query.split()) <= 15
+                strong_switch = top_hits >= 2 or _has_primary_action_keyword(query)
+                if detected_domain == "general":
+                    # No domain signal at all → inherit the established case domain.
+                    detected_domain = established
+                    domain_confidence = max(domain_confidence, 0.55)
+                elif (
+                    is_short_followup
+                    and detected_domain != established
+                    and not strong_switch
+                ):
+                    # Short follow-up with only a weak/stray keyword pointing elsewhere →
+                    # keep the established domain for retrieval continuity.
+                    detected_domain = established
+                    domain_confidence = max(domain_confidence, 0.5)
 
         # 3. Entity extraction
         entities = self._extract_entities(query)
@@ -230,10 +263,11 @@ class QueryPlanner:
 
     def _detect_domain(
         self, query: str, hint: Optional[str]
-    ) -> Tuple[str, float]:
+    ) -> Tuple[str, float, int]:
+        """Returns (domain, confidence_ratio, top_keyword_hits)."""
         # Explicit hint wins
         if hint and hint in _DOMAIN_KEYWORDS:
-            return hint, 1.0
+            return hint, 1.0, 99
 
         query_lower = query.lower()
         scores: Dict[str, int] = {}
@@ -243,7 +277,7 @@ class QueryPlanner:
                 scores[domain] = hits
 
         if not scores:
-            return "general", 0.25
+            return "general", 0.25, 0
 
         total = sum(scores.values())
         top_domain = max(scores, key=scores.__getitem__)
@@ -267,7 +301,7 @@ class QueryPlanner:
                 top_domain = "gia_dinh"
                 confidence = round(scores["gia_dinh"] / max(total, 1), 3)
 
-        return top_domain, confidence
+        return top_domain, confidence, scores.get(top_domain, 0)
 
     def _extract_entities(self, query: str) -> Dict[str, List[str]]:
         entities: Dict[str, List[str]] = {

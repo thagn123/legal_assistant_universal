@@ -98,11 +98,11 @@ interface ChatInputProps {
   evidenceUploading: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFileAttach: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  text: string;
+  setText: (text: string) => void;
 }
 
-function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, handleFileAttach }: ChatInputProps) {
-  const [text, setText] = useState('');
-
+function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, handleFileAttach, text, setText }: ChatInputProps) {
   const handleSubmit = () => {
     if (!text.trim() || isAnalyzing) return;
     onAnalyze(text);
@@ -137,7 +137,7 @@ function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, ha
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isAnalyzing || !text.trim()}
+          disabled={isAnalyzing || text.trim().length < 10}
           className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
         >
           <Send size={20} />
@@ -154,27 +154,42 @@ function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, ha
   );
 }
 
+const SESSION_STORAGE_KEY = 'lexai_sessions';
+function loadStoredSessions() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+  } catch { return []; }
+}
+
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [userRole, setUserRole] = useState('nguyen_don');
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [history, setHistory] = useState<ChatTurn[]>([]);
+  
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    return sessionStorage.getItem('lexai_current_session_id') || null;
+  });
+  const [history, setHistory] = useState<ChatTurn[]>(() => {
+    const savedSessionId = sessionStorage.getItem('lexai_current_session_id');
+    if (savedSessionId) {
+      const stored = loadStoredSessions();
+      const existingSession = stored.find((s: any) => s.id === savedSessionId);
+      if (existingSession && existingSession.turns) {
+        return existingSession.turns;
+      }
+    }
+    return [];
+  });
+  const [chatInputText, setChatInputText] = useState('');
+  
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sessions persisted in localStorage
-  const SESSION_STORAGE_KEY = 'lexai_sessions';
-  function loadStoredSessions() {
-    try {
-      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
-    } catch { return []; }
-  }
   const [sessionHistory, setSessionHistory] = useState<Array<{
     id: string; title: string; domain: string; date: string; turns: ChatTurn[];
   }>>(loadStoredSessions);
@@ -187,8 +202,25 @@ export function Analyze() {
     }
   }, [history, isAnalyzing, activeTab, selectedSession]);
 
+  const handleSelectQuestion = (
+    q: string,
+    fromHistorySession?: typeof selectedSession,
+  ) => {
+    if (fromHistorySession) {
+      setSessionId(fromHistorySession.id);
+      sessionStorage.setItem('lexai_current_session_id', fromHistorySession.id);
+      setHistory(fromHistorySession.turns);
+      setActiveTab('chat');
+    }
+    setChatInputText(q);
+  };
+
   const handleAnalyze = async (text: string) => {
     if (!text.trim()) return;
+    if (text.trim().length < 10) {
+      setAnalyzeError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
 
     const currentSituation = text;
     const userMessage: ChatTurn = { role: 'user', content: currentSituation };
@@ -224,27 +256,34 @@ export function Analyze() {
       clearInterval(stageInterval);
       setCurrentStage(7);
       setSessionId(data.session_id);
+      sessionStorage.setItem('lexai_current_session_id', data.session_id);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
-      const newTurns: ChatTurn[] = [userMessage, { role: 'assistant', result: data }];
-      setHistory(prev => [...prev, { role: 'assistant', result: data }]);
+      setHistory(prev => {
+        const updatedHistory = [...prev, { role: 'assistant', result: data } as ChatTurn];
+        
+        // Persist session to localStorage
+        setSessionHistory(prevSessions => {
+          const existingSession = prevSessions.find(s => s.id === (data.session_id || sessionId));
+          const newSession = {
+            id: data.session_id || sessionId || `sess_${Date.now()}`,
+            title: existingSession?.title || (currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation),
+            domain: data.domain || existingSession?.domain || 'general',
+            date: new Date().toLocaleDateString('vi-VN'),
+            turns: updatedHistory,
+          };
+          const updated = [newSession, ...prevSessions.filter(s => s.id !== newSession.id)].slice(0, 20);
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+
+        return updatedHistory;
+      });
+
       setIsAnalyzing(false);
       setCurrentStage(0);
-
-      // Persist session to localStorage
-      const newSession = {
-        id: data.session_id || `sess_${Date.now()}`,
-        title: currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation,
-        domain: data.domain || 'general',
-        date: new Date().toLocaleDateString('vi-VN'),
-        turns: newTurns,
-      };
-      setSessionHistory(prev => {
-        const updated = [newSession, ...prev.filter(s => s.id !== newSession.id)].slice(0, 20);
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-        return updated;
-      });
     } catch (e: any) {
+      clearInterval(stageInterval);
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
       setIsAnalyzing(false);
       setCurrentStage(0);
@@ -275,7 +314,15 @@ export function Analyze() {
       {/* TABS */}
       <div className="flex bg-legal-navy/30 border-b border-legal-border px-8">
         <button 
-          onClick={() => setActiveTab('chat')}
+          onClick={() => {
+            setActiveTab('chat');
+            if (history.length > 0) {
+              setHistory([]);
+              setSessionId(null);
+              sessionStorage.removeItem('lexai_current_session_id');
+              setChatInputText('');
+            }
+          }}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
             activeTab === 'chat' ? "text-legal-gold" : "text-slate-500 hover:text-slate-300"
@@ -387,7 +434,7 @@ export function Analyze() {
                     ) : turn.result ? (
                       <AIResponseCard 
                         result={turn.result} 
-                        onSelectQuestion={handleAnalyze} 
+                        onSelectQuestion={(q) => handleSelectQuestion(q)} 
                         userSituation={idx > 0 ? history[idx - 1]?.content : ''} 
                       />
                     ) : turn.content ? (
@@ -430,7 +477,7 @@ export function Analyze() {
                       ) : turn.result ? (
                         <AIResponseCard 
                           result={turn.result} 
-                          onSelectQuestion={handleAnalyze} 
+                          onSelectQuestion={(q) => handleSelectQuestion(q, selectedSession)} 
                           userSituation={idx > 0 ? selectedSession.turns[idx - 1]?.content : ''} 
                         />
                       ) : turn.content ? (
@@ -497,6 +544,8 @@ export function Analyze() {
             evidenceUploading={evidenceUploading}
             fileInputRef={fileInputRef}
             handleFileAttach={handleFileAttach}
+            text={chatInputText}
+            setText={setChatInputText}
           />
         </div>
       </div>
@@ -868,7 +917,7 @@ function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: A
                       <button
                         onClick={() => {
                           logInteraction({ action_type: 'nba_click', context: { action_id: nba.action_id, target: routeInfo.path } });
-                          navigate(routeInfo.path, { state: { prefill: nba.prefill, situation: userSituation || result.position_reasoning || result.full_assessment || '' } });
+                          navigate(routeInfo.path, { state: { prefill: nba.prefill, situation: result.accumulated_situation || userSituation || result.position_reasoning || result.full_assessment || '' } });
                         }}
                         className="px-3 py-1.5 bg-legal-gold text-legal-navy text-xs font-bold rounded-lg hover:scale-105 active:scale-95 transition-all shadow-md flex items-center gap-1"
                       >

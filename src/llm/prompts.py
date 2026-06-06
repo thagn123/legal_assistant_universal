@@ -181,3 +181,36 @@ Hãy:
 3. Chiến lược nào đã thành công trong các vụ tương tự
 4. Cảnh báo nào từ các vụ thất bại\
 """
+
+# ── Action Plan Generation ──────────────────────────────────────────────────
+
+ACTION_PLAN_PROMPT = """\
+Hãy đóng vai một luật sư chuyên nghiệp và đưa ra một Kế hoạch hành động cụ thể cho khách hàng dựa trên tình huống pháp lý của họ.
+Kế hoạch cần thực tế, chi tiết và ĐƯỢC CÁ NHÂN HÓA theo tình tiết thực tế, KHÔNG đưa ra những lời khuyên chung chung. Ví dụ, nếu họ nói bị ép đi giao đồ ăn, hãy đề cập trực tiếp đến việc đó.
+
+TÌNH HUỐNG HIỆN TẠI: {situation}
+LĨNH VỰC PHÁP LÝ: {domain}
+GIAI ĐOẠN HIỆN TẠI: {stage}
+
+Hãy trả về JSON hợp lệ (không chứa markdown).
+Mỗi hành động cần có các trường:
+- "step": Tên hành động PHẢI cực kỳ CỤ THỂ và bám sát vào chi tiết tình tiết vụ việc (ví dụ: thay vì "Thu thập chứng cứ", hãy viết "Chụp lại màn hình tin nhắn Zalo với bên môi giới ngày 15/8" hoặc "Sao kê tài khoản ngân hàng khoản chuyển 500 triệu"). TUYỆT ĐỐI không dùng các câu chung chung.
+- "reason": Giải thích tại sao phải làm việc này, áp dụng trực tiếp vào tình huống cụ thể của họ (dài 1-2 câu).
+- "deadline": Thời hạn khuyến nghị (ví dụ: "Trong 3 ngày", "Ngay lập tức")
+- "category": Một trong các loại sau: "evidence" (chứng cứ), "legal" (pháp lý), "communication" (liên lạc), "procedure" (thủ tục), "prevention" (phòng ngừa)
+
+Cấu trúc JSON yêu cầu:
+{{
+  "immediate_actions": [
+    {{
+      "step": "string",
+      "reason": "string",
+      "deadline": "string",
+      "category": "string"
+    }}
+  ],
+  "important_actions": [],
+  "optional_actions": []
+}}
+"""
+
