@@ -95,15 +95,49 @@ function RiskSection({
 
 function AiRiskPanel() {
   const location = useLocation();
-  const [situation, setSituation] = useSyncedSituation(location.state);
+  const [situation, setSituation] = useState(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    return state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RiskAnalysisResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const { toasts, toast, dismiss } = useToast();
 
+  // Pre-fill and auto-run when navigated with context
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    const initialSituation = state?.situation || state?.prefill?.situation;
+    if (initialSituation) {
+      setSituation(initialSituation);
+      sessionStorage.setItem('lexai_current_situation', initialSituation);
+      
+      const runAuto = async () => {
+        setLoading(true);
+        setResult(null);
+        setError('');
+        setSaved(false);
+        try {
+          const r = await analyzeRisk(initialSituation.trim());
+          setResult(r);
+        } catch {
+          setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      runAuto();
+      window.history.replaceState({}, '');
+    }
+  }, [location.state]);
+
   async function handleAnalyze() {
-    if (!situation.trim()) return;
+    if (!situation.trim() || situation.trim().length < 10) {
+      setError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
+    sessionStorage.setItem('lexai_current_situation', situation.trim());
     setLoading(true);
     setResult(null);
     setError('');
@@ -135,7 +169,7 @@ function AiRiskPanel() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleAnalyze}
-            disabled={loading || !situation.trim()}
+            disabled={loading || situation.trim().length < 10}
             className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy font-bold rounded-xl disabled:opacity-40 hover:scale-105 active:scale-95 transition-all text-sm"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -250,6 +284,10 @@ function GenericRisksPanel() {
   const [severityFilter, setSeverityFilter] = useState<'all' | 'cao' | 'trung_binh' | 'thap'>('all');
 
   const fetchRisks = async (useHistory: boolean = false) => {
+    if (!useHistory && (!situation.trim() || situation.trim().length < 10)) {
+      alert('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
     setIsLoading(true);
     try {
       const data = await apiFetch<RiskAssessment[]>('/recommendations/risks', {

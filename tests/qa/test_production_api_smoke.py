@@ -608,9 +608,9 @@ def test_sm10_evidence_gap_minimal_input_no_500(client):
     bugs: List[str] = []
     checks: List[str] = []
 
-    # Short input is 3 chars — might fail min_length validation; 422 is acceptable
-    if resp.status_code == 422:
-        checks.append("422 Unprocessable Entity — correct for too-short input")
+    # Short input is 3 chars — might fail min_length validation; 400/422 is acceptable
+    if resp.status_code in (400, 422):
+        checks.append(f"{resp.status_code} — correct rejection of too-short input")
         status = "PASS"
     elif resp.status_code == 200:
         checks.append("HTTP 200 — handled short input gracefully")

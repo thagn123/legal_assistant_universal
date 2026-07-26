@@ -88,7 +88,7 @@ Thay vì chỉ nhận câu hỏi → trả lời, LexAI:
 flowchart TD
   User[Người dùng\ntình huống pháp lý tiếng Việt]
   FE[React 19 Frontend\nVite · Tailwind · TypeScript]
-  API[FastAPI Backend\nPort 8001]
+  API[FastAPI Backend\nPort 8000]
 
   Planner["Stage 1 — QueryPlanner\nDomain classifier · Entity extractor\n<10ms, no LLM"]
   Evidence["Evidence Extractor\nPRESENT / MISSING / UNKNOWN"]
@@ -413,15 +413,23 @@ Full report: [`qa/release_gate_report.md`](qa/release_gate_report.md)
 ### 1. Backend
 
 ```bash
+# Local MongoDB with $vectorSearch support (mongodb-atlas-local image)
+docker compose up -d mongodb
+
 pip install -r requirements.txt
+cp .env.example .env   # defaults already point at the local Docker Mongo above
 
-# Environment variables (.env)
-MONGO_URI="mongodb+srv://..."         # MongoDB Atlas connection string
-OPENAI_API_KEY="sk-..."               # Optional — falls back to deterministic
-ADMIN_API_KEY="lexai-admin-secret"    # Default value
-
-python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+`.env` variables (see `.env.example`):
+```bash
+MONGO_URI="mongodb://localhost:27017/?directConnection=true"   # or mongodb+srv://... for Atlas Cloud
+OPENAI_API_KEY="sk-..."               # Optional — falls back to deterministic reasoning
+ADMIN_API_KEY="lexai-admin-secret"    # Default value
+```
+
+On Windows you can also just run `start.bat` — it starts Docker MongoDB and the API for you.
 
 ### 2. Seed global knowledge base (một lần)
 
@@ -444,7 +452,7 @@ npm run dev
 ### 4. Quick API test
 
 ```bash
-curl -X POST http://localhost:8001/intelligence/analyze \
+curl -X POST http://localhost:8000/intelligence/analyze \
   -H "Content-Type: application/json" \
   -H "X-User-ID: demo_user" \
   -d '{

@@ -283,6 +283,7 @@ export function Documents() {
   const [cases, setCases] = useState<CaseRecommendation[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [detailDoc, setDetailDoc] = useState<DocRecommendation | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const fetchDocs = async () => {
     setIsSearching(true);
@@ -367,12 +368,28 @@ export function Documents() {
             Tài liệu đề xuất
           </h3>
           <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
-            <button className="p-1.5 text-legal-gold bg-white/5 rounded-md"><LayoutGrid size={16} /></button>
-            <button className="p-1.5 text-slate-500 hover:text-white"><List size={16} /></button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              aria-pressed={viewMode === 'grid'}
+              className={cn('p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'text-legal-gold bg-white/5' : 'text-slate-500 hover:text-white')}
+              title="Xem dạng lưới"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              className={cn('p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'text-legal-gold bg-white/5' : 'text-slate-500 hover:text-white')}
+              title="Xem dạng danh sách"
+            >
+              <List size={16} />
+            </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
           {isSearching ? (
             Array(6).fill(0).map((_, i) => <div key={i} className="glass-card aspect-[4/3] animate-skeleton" />)
           ) : docs.length === 0 ? (
@@ -381,7 +398,7 @@ export function Documents() {
               <p className="text-sm">Chưa có tài liệu nào. Hãy tìm kiếm hoặc tải lên tài liệu.</p>
             </div>
           ) : docs.map((doc) => (
-            <div key={doc.id} className="glass-card p-6 flex flex-col group hover:border-legal-gold/30 transition-all">
+            <div key={doc.id} className={cn('glass-card p-6 flex group hover:border-legal-gold/30 transition-all', viewMode === 'grid' ? 'flex-col' : 'flex-col md:flex-row md:items-start md:gap-6')}>
               <div className="flex items-center justify-between mb-4">
                 <LawTypeBadge type={doc.law_type} />
                 <ScoreBadge score={doc.final_score} />

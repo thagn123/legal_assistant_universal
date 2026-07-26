@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   BookOpen,
@@ -18,7 +18,6 @@ import {
   Check,
 } from 'lucide-react';
 import { searchLaws, LawArticle, LawSearchResult, saveAnalysis } from '../lib/api';
-import { useSyncedSituation } from '../lib/analysisContext';
 import { useToast } from '../lib/useToast';
 import { ToastContainer } from '../components/ui/ToastContainer';
 
@@ -109,7 +108,12 @@ const QUICK_QUERIES = [
 
 export function LawSearch() {
   const location = useLocation();
-  const [query, setQuery] = useSyncedSituation(location.state);
+  // Pre-fill from navigation state (e.g. an NBA "Tra cứu Luật" action) so the user
+  // doesn't lose context and have to re-type their situation. Bug-2 fix.
+  const [query, setQuery] = useState(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    return state?.situation || state?.prefill?.situation || '';
+  });
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<LawSearchResult | null>(null);
   const [error, setError] = useState('');
@@ -133,6 +137,17 @@ export function LawSearch() {
       setLoading(false);
     }
   }
+
+  // When navigated here with a prefilled situation, run the search automatically so
+  // results appear immediately instead of an empty box the user must re-fill.
+  useEffect(() => {
+    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
+    const initial = (state?.situation || state?.prefill?.situation || '').trim();
+    if (initial) {
+      handleSearch(initial);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">

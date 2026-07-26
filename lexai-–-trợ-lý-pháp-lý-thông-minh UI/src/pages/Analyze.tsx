@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
 import {
   Search,
   ChevronRight,
@@ -25,12 +24,25 @@ import {
   Paperclip,
   X as XIcon,
   BrainCircuit,
+  BookOpen,
+  FileSearch,
+  GitCompare,
+  ShieldAlert,
+  FileCheck,
+  Map,
+  ListChecks,
+  ClipboardList,
+  ThumbsUp,
+  ThumbsDown,
+  EyeOff,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace } from '../lib/api';
+import { useNavigate } from 'react-router-dom';
+import { apiFetch, AnalysisResponse, LAW_TYPE_LABELS, RecommendedAction, RiskWarning, uploadEvidence, logInteraction, getTrace, ReasoningTrace, NextBestAction, loadConversationSessions, saveConversationSession } from '../lib/api';
 import { LawTypeBadge, InteractionButtons } from '../components/ui/Shared';
 import { StagePipeline } from '../components/ui/StagePipeline';
 import { cn } from '../lib/api';
+import { useSyncedSituation } from '../lib/analysisContext';
 
 interface ChatTurn {
   role: 'user' | 'assistant';
@@ -44,40 +56,73 @@ interface ChatTurn {
 // ---------------------------------------------------------------------------
 
 const _CHITCHAT_STARTERS = [
-  'chào', 'hello', 'hi', 'xin chào', 'hey', 'alo',
-  'cảm ơn', 'cam on', 'thanks', 'thank you',
-  'bạn là ai', 'bạn là gì', 'mày là ai',
-  'ok', 'oke', 'okay', 'được rồi', 'tốt',
-  'xin lỗi', 'sorry',
+  'chao', 'xin chao', 'hello', 'hi', 'hey', 'alo',
+  'cam on', 'thanks', 'thank you',
+  'ban la ai', 'ban la gi', 'may la ai',
+  'ok', 'oke', 'okay', 'duoc roi', 'tot',
+  'xin loi', 'sorry',
 ];
 
 const _LEGAL_KW = [
-  'luật', 'điều', 'khoản', 'hợp đồng', 'đất', 'tòa', 'kiện',
-  'vi phạm', 'quyền', 'nghĩa vụ', 'tranh chấp', 'bồi thường',
-  'lao động', 'sa thải', 'nợ', 'tiền', 'thuê', 'mua', 'bán',
-  'thừa kế', 'di chúc', 'ly hôn', 'công ty', 'cổ đông',
+  'luat', 'dieu', 'khoan', 'hop dong', 'dat', 'toa', 'kien',
+  'vi pham', 'quyen', 'nghia vu', 'tranh chap', 'boi thuong',
+  'lao dong', 'sa thai', 'no', 'tien', 'thue', 'mua', 'ban',
+  'thua ke', 'di chuc', 'ly hon', 'con', 'nuoi con', 'tai san',
+  'cong ty', 'co dong', 'bao hiem', 'thue nha', 'lua dao', 'danh',
+  'khoi kien', 'khieu nai', 'to cao', 'dat coc', 'so do',
 ];
 
+function _foldText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ');
+}
+
+function _hasLegalSignal(text: string): boolean {
+  const t = _foldText(text);
+  return _LEGAL_KW.some(kw => t.includes(kw));
+}
+
 function _isChitchat(text: string): boolean {
-  const t = text.trim().toLowerCase();
+  const t = _foldText(text);
   if (t.length > 80) return false;
-  if (_LEGAL_KW.some(kw => t.includes(kw))) return false;
+  if (_hasLegalSignal(t)) return false;
   return _CHITCHAT_STARTERS.some(p => t === p || t.startsWith(p + ' ') || t.startsWith(p + '!') || t.startsWith(p + ','));
 }
 
+function _isLowSignalInput(text: string): boolean {
+  const t = _foldText(text);
+  if (!t) return true;
+  if (_hasLegalSignal(t)) return false;
+  const compact = t.replace(/[^a-z0-9]/g, '');
+  const words = t.split(' ').filter(Boolean);
+  if (compact.length < 4) return true;
+  if (/^[a-z]+$/.test(compact) && compact.length <= 12 && words.length <= 2) return true;
+  if (words.length <= 2 && compact.length <= 8) return true;
+  return false;
+}
+
 function _chitchatReply(text: string): string {
-  const t = text.trim().toLowerCase();
-  if (_LEGAL_KW.some(kw => t.includes(kw))) return '';
-  if (t.includes('cảm ơn') || t.includes('cam on') || t.includes('thanks')) {
+  const t = _foldText(text);
+  if (_hasLegalSignal(t)) return '';
+  if (t.includes('cam on') || t.includes('thanks')) {
     return 'Không có gì! Nếu bạn có câu hỏi pháp lý, tôi luôn sẵn sàng hỗ trợ.';
   }
-  if (t.includes('là ai') || t.includes('là gì') || t.includes('mày là')) {
-    return 'Tôi là LexAI — trợ lý pháp lý AI chuyên về luật Việt Nam. Tôi có thể giúp phân tích tình huống, trích dẫn điều luật và đề xuất hành động trong các lĩnh vực: đất đai, hợp đồng, lao động, doanh nghiệp, dân sự, hình sự và hành chính.';
+  if (t.includes('la ai') || t.includes('la gi')) {
+    return 'Tôi là LexAI, trợ lý pháp lý AI cho luật Việt Nam. Bạn có thể mô tả tình huống pháp lý, tôi sẽ phân tích quyền lợi, rủi ro, căn cứ và bước nên làm tiếp.';
   }
-  if (t.includes('xin lỗi') || t.includes('sorry')) {
-    return 'Không sao! Bạn cần tôi giúp gì về pháp lý không?';
+  if (t.includes('xin loi') || t.includes('sorry')) {
+    return 'Không sao. Bạn cần tôi hỗ trợ tình huống pháp lý nào?';
   }
-  return 'Xin chào! Tôi là LexAI, trợ lý pháp lý AI. Bạn hãy mô tả tình huống pháp lý — tôi sẽ phân tích quyền lợi, trích dẫn điều luật và đề xuất các bước thực hiện cụ thể.';
+  return 'Xin chào! Bạn hãy mô tả tình huống pháp lý cụ thể, tôi sẽ giúp phân tích căn cứ, rủi ro và đề xuất bước tiếp theo.';
+}
+
+function _lowSignalReply(): string {
+  return 'Tôi chưa thấy đủ thông tin pháp lý để phân tích. Bạn hãy mô tả rõ hơn: sự việc xảy ra khi nào, các bên là ai, bạn muốn đạt mục tiêu gì, và hiện có giấy tờ/chứng cứ nào.';
 }
 
 // ---------------------------------------------------------------------------
@@ -92,98 +137,34 @@ const stages_list = [
   { id: 7, name: 'Persist' },
 ];
 
-interface ChatInputProps {
-  onAnalyze: (text: string) => void;
-  isAnalyzing: boolean;
-  evidenceUploading: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  handleFileAttach: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  text: string;
-  setText: (text: string) => void;
-}
-
-function ChatInput({ onAnalyze, isAnalyzing, evidenceUploading, fileInputRef, handleFileAttach, text, setText }: ChatInputProps) {
-  const handleSubmit = () => {
-    if (!text.trim() || isAnalyzing) return;
-    onAnalyze(text);
-    setText('');
-  };
-
-  return (
-    <div className="relative group">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit();
-          }
-        }}
-        placeholder="Nhập câu hỏi hoặc tình huống pháp lý..."
-        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-28 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
-        rows={2}
-      />
-      <div className="absolute right-4 bottom-4 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isAnalyzing || evidenceUploading}
-          title="Đính kèm tài liệu bổ sung"
-          className="w-9 h-9 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all"
-        >
-          {evidenceUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
-        </button>
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isAnalyzing || text.trim().length < 10}
-          className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
-        >
-          <Send size={20} />
-        </button>
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.docx,.doc,.txt"
-        className="hidden"
-        onChange={handleFileAttach}
-      />
-    </div>
-  );
-}
-
-const SESSION_STORAGE_KEY = 'lexai_sessions';
-function loadStoredSessions() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
-  } catch { return []; }
-}
-
 export function Analyze() {
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [situation, setSituation] = useSyncedSituation(null);
   const [userRole, setUserRole] = useState('nguyen_don');
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
-  
-  const [sessionId, setSessionId] = useState<string | null>(() => {
-    return sessionStorage.getItem('lexai_current_session_id') || null;
-  });
+  // Sessions persisted in localStorage
+  const SESSION_STORAGE_KEY = 'lexai_sessions';
+  const CURRENT_SESSION_ID_KEY = 'lexai_current_session_id';
+  function loadStoredSessions() {
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+    } catch { return []; }
+  }
+
+  // Restore the in-progress conversation on page refresh instead of starting empty.
+  const [sessionId, setSessionId] = useState<string | null>(() => (
+    sessionStorage.getItem(CURRENT_SESSION_ID_KEY) || null
+  ));
+  const sessionIdRef = useRef<string | null>(sessionId);
   const [history, setHistory] = useState<ChatTurn[]>(() => {
-    const savedSessionId = sessionStorage.getItem('lexai_current_session_id');
-    if (savedSessionId) {
-      const stored = loadStoredSessions();
-      const existingSession = stored.find((s: any) => s.id === savedSessionId);
-      if (existingSession && existingSession.turns) {
-        return existingSession.turns;
-      }
-    }
-    return [];
+    const savedSessionId = sessionStorage.getItem(CURRENT_SESSION_ID_KEY);
+    if (!savedSessionId) return [];
+    const existing = loadStoredSessions().find((s: any) => s.id === savedSessionId);
+    return existing?.turns || [];
   });
-  const [chatInputText, setChatInputText] = useState('');
-  
+  const historyRef = useRef<ChatTurn[]>(history);
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
@@ -196,40 +177,110 @@ export function Analyze() {
 
   const [selectedSession, setSelectedSession] = useState<typeof sessionHistory[0] | null>(null);
 
+  const titleFromText = (text: string) => (
+    text.length > 64 ? `${text.slice(0, 64)}...` : text
+  );
+
+  const writeHistory = (turns: ChatTurn[]) => {
+    historyRef.current = turns;
+    setHistory(turns);
+  };
+
+  const startNewConversation = () => {
+    sessionIdRef.current = null;
+    setSessionId(null);
+    sessionStorage.removeItem(CURRENT_SESSION_ID_KEY);
+    writeHistory([]);
+    setSelectedSession(null);
+    setAnalyzeError('');
+    setEvidenceChip(null);
+    setActiveTab('chat');
+  };
+
+  const persistConversation = (
+    id: string,
+    title: string,
+    domain: string,
+    turns: ChatTurn[],
+    metadata: Record<string, any>,
+  ) => {
+    const date = new Date().toLocaleDateString('vi-VN');
+    const item = { id, title, domain, date, turns };
+    saveConversationSession({ id, title, domain, turns, metadata });
+    setSessionHistory(prevSessions => {
+      const updated = [item, ...prevSessions.filter(s => s.id !== id)].slice(0, 20);
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setSelectedSession(prev => prev?.id === id ? item : prev);
+  };
+
+  useEffect(() => {
+    loadConversationSessions()
+      .then(items => {
+        if (!items.length) return;
+        setSessionHistory(items.map(item => ({
+          id: item.id,
+          title: item.title,
+          domain: item.domain || 'general',
+          date: item.lastActive ? new Date(item.lastActive).toLocaleDateString('vi-VN') : '',
+          turns: item.turns as ChatTurn[],
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [history, isAnalyzing, activeTab, selectedSession]);
 
-  const handleSelectQuestion = (
-    q: string,
-    fromHistorySession?: typeof selectedSession,
-  ) => {
-    if (fromHistorySession) {
-      setSessionId(fromHistorySession.id);
-      sessionStorage.setItem('lexai_current_session_id', fromHistorySession.id);
-      setHistory(fromHistorySession.turns);
-      setActiveTab('chat');
-    }
-    setChatInputText(q);
-  };
-
-  const handleAnalyze = async (text: string) => {
-    if (!text.trim()) return;
-    if (text.trim().length < 10) {
+  const handleAnalyze = async () => {
+    if (!situation.trim()) return;
+    if (situation.trim().length < 10) {
       setAnalyzeError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
       return;
     }
 
-    const currentSituation = text;
+    const currentSituation = situation;
     const userMessage: ChatTurn = { role: 'user', content: currentSituation };
-    setHistory(prev => [...prev, userMessage]);
+    const activeSessionId = sessionIdRef.current || sessionId || `chat_${Date.now()}`;
+    sessionIdRef.current = activeSessionId;
+    setSessionId(activeSessionId);
+    sessionStorage.setItem(CURRENT_SESSION_ID_KEY, activeSessionId);
+    const historyWithUser = [...historyRef.current, userMessage];
+    writeHistory(historyWithUser);
+    setSituation('');
 
     // Greetings / small-talk — respond locally without calling the API
     if (_isChitchat(currentSituation)) {
       const reply = _chitchatReply(currentSituation);
-      setHistory(prev => [...prev, { role: 'assistant', content: reply }]);
+      const assistantTurn: ChatTurn = { role: 'assistant', content: reply };
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(activeSessionId, titleFromText(firstUserTurn), 'general', fullHistory, {
+        source: 'chitchat',
+      });
+      return;
+    }
+
+    if (_isLowSignalInput(currentSituation)) {
+      const assistantTurn: ChatTurn = { role: 'assistant', content: _lowSignalReply() };
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(activeSessionId, titleFromText(firstUserTurn), 'general', fullHistory, {
+        source: 'input_guard',
+      });
+      logInteraction({
+        action_type: 'low_signal_input',
+        context: {
+          session_id: activeSessionId,
+          input_snippet: currentSituation.slice(0, 80),
+        },
+      });
       return;
     }
 
@@ -249,41 +300,31 @@ export function Analyze() {
           situation: currentSituation, 
           user_role: userRole, 
           law_type: lawType === 'all' ? null : lawType,
-          session_id: sessionId,
+          session_id: activeSessionId,
           top_k: 8
         })
       });
       clearInterval(stageInterval);
       setCurrentStage(7);
-      setSessionId(data.session_id);
-      sessionStorage.setItem('lexai_current_session_id', data.session_id);
+      const conversationId = activeSessionId || data.session_id || `chat_${Date.now()}`;
+      sessionIdRef.current = conversationId;
+      setSessionId(conversationId);
+      sessionStorage.setItem(CURRENT_SESSION_ID_KEY, conversationId);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
-      setHistory(prev => {
-        const updatedHistory = [...prev, { role: 'assistant', result: data } as ChatTurn];
-        
-        // Persist session to localStorage
-        setSessionHistory(prevSessions => {
-          const existingSession = prevSessions.find(s => s.id === (data.session_id || sessionId));
-          const newSession = {
-            id: data.session_id || sessionId || `sess_${Date.now()}`,
-            title: existingSession?.title || (currentSituation.length > 50 ? currentSituation.slice(0, 50) + '…' : currentSituation),
-            domain: data.domain || existingSession?.domain || 'general',
-            date: new Date().toLocaleDateString('vi-VN'),
-            turns: updatedHistory,
-          };
-          const updated = [newSession, ...prevSessions.filter(s => s.id !== newSession.id)].slice(0, 20);
-          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-          return updated;
-        });
-
-        return updatedHistory;
-      });
-
+      const assistantTurn: ChatTurn = { role: 'assistant', result: data };
       setIsAnalyzing(false);
       setCurrentStage(0);
+
+      const fullHistory = [...historyWithUser, assistantTurn];
+      writeHistory(fullHistory);
+      const firstUserTurn = fullHistory.find(turn => turn.role === 'user' && turn.content)?.content || currentSituation;
+      persistConversation(conversationId, titleFromText(firstUserTurn), data.domain || 'general', fullHistory, {
+        source: 'analyze',
+        traceId: data.trace_id,
+        backendSessionId: data.session_id,
+      });
     } catch (e: any) {
-      clearInterval(stageInterval);
       setAnalyzeError(e.message || 'Phân tích thất bại. Vui lòng thử lại.');
       setIsAnalyzing(false);
       setCurrentStage(0);
@@ -314,15 +355,7 @@ export function Analyze() {
       {/* TABS */}
       <div className="flex bg-legal-navy/30 border-b border-legal-border px-8">
         <button 
-          onClick={() => {
-            setActiveTab('chat');
-            if (history.length > 0) {
-              setHistory([]);
-              setSessionId(null);
-              sessionStorage.removeItem('lexai_current_session_id');
-              setChatInputText('');
-            }
-          }}
+          onClick={startNewConversation}
           className={cn(
             "pb-3 pt-4 px-4 text-xs font-bold uppercase tracking-widest transition-all relative",
             activeTab === 'chat' ? "text-legal-gold" : "text-slate-500 hover:text-slate-300"
@@ -432,11 +465,7 @@ export function Analyze() {
                         {turn.content}
                       </div>
                     ) : turn.result ? (
-                      <AIResponseCard 
-                        result={turn.result} 
-                        onSelectQuestion={(q) => handleSelectQuestion(q)} 
-                        userSituation={idx > 0 ? history[idx - 1]?.content : ''} 
-                      />
+                      <AIResponseCard result={turn.result} />
                     ) : turn.content ? (
                       <AssistantBubble content={turn.content} />
                     ) : null}
@@ -475,11 +504,7 @@ export function Analyze() {
                           {turn.content}
                         </div>
                       ) : turn.result ? (
-                        <AIResponseCard 
-                          result={turn.result} 
-                          onSelectQuestion={(q) => handleSelectQuestion(q, selectedSession)} 
-                          userSituation={idx > 0 ? selectedSession.turns[idx - 1]?.content : ''} 
-                        />
+                        <AIResponseCard result={turn.result} />
                       ) : turn.content ? (
                         <AssistantBubble content={turn.content} />
                       ) : null}
@@ -538,15 +563,45 @@ export function Analyze() {
             </div>
           )}
 
-          <ChatInput
-            onAnalyze={handleAnalyze}
-            isAnalyzing={isAnalyzing}
-            evidenceUploading={evidenceUploading}
-            fileInputRef={fileInputRef}
-            handleFileAttach={handleFileAttach}
-            text={chatInputText}
-            setText={setChatInputText}
-          />
+          <div className="relative group">
+            <textarea
+              value={situation}
+              onChange={(e) => setSituation(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAnalyze();
+                }
+              }}
+              placeholder="Nhập câu hỏi hoặc tình huống pháp lý..."
+              className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pr-28 text-sm text-white placeholder-slate-500 outline-none focus:border-legal-gold/50 focus:bg-white/[0.08] transition-all resize-none min-h-[60px]"
+              rows={2}
+            />
+            <div className="absolute right-4 bottom-4 flex items-center gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isAnalyzing || evidenceUploading}
+                title="Đính kèm tài liệu bổ sung"
+                className="w-9 h-9 text-slate-500 hover:text-legal-gold hover:bg-white/5 rounded-xl flex items-center justify-center disabled:opacity-40 transition-all"
+              >
+                {evidenceUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+              </button>
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzing || situation.trim().length < 10}
+                className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
+              >
+                <Send size={20} />
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.doc,.txt"
+              className="hidden"
+              onChange={handleFileAttach}
+            />
+          </div>
         </div>
       </div>
           )}
@@ -629,37 +684,9 @@ function AssistantBubble({ content }: { content: string }) {
   );
 }
 
-function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: AnalysisResponse; onSelectQuestion?: (text: string) => void; userSituation?: string }) {
-  const navigate = useNavigate();
+function AIResponseCard({ result }: { result: AnalysisResponse }) {
   const [expandedAction, setExpandedAction] = useState<number | null>(null);
   const totalMs = result.stage_timings.reduce((a, b) => a + b.duration_ms, 0);
-
-  const MODULE_ROUTE_MAP: Record<string, { path: string; name: string }> = {
-    evidence_gap: { path: '/evidence-gap', name: 'Phát hiện thiếu chứng cứ' },
-    evidence: { path: '/evidence-gap', name: 'Phát hiện thiếu chứng cứ' },
-    timeline: { path: '/timeline', name: 'Tiến độ & Thời hiệu' },
-    contract: { path: '/contract', name: 'Rà soát hợp đồng' },
-    risks: { path: '/risks', name: 'Phân tích rủi ro' },
-    compliance: { path: '/compliance-radar', name: 'Compliance Radar' },
-    journey: { path: '/journey', name: 'Hành trình vụ việc' },
-    templates: { path: '/templates', name: 'Mẫu văn bản pháp lý' },
-    similar_cases: { path: '/similar-cases', name: 'Vụ việc tương tự' },
-    cases: { path: '/similar-cases', name: 'Vụ việc tương tự' },
-    law_search: { path: '/law-search', name: 'Tra cứu Luật' },
-    laws: { path: '/law-search', name: 'Tra cứu Luật' },
-    checklists: { path: '/checklists', name: 'Liên kết tuân thủ' },
-    checklist: { path: '/checklists', name: 'Liên kết tuân thủ' },
-    actions: { path: '/actions', name: 'Hành động khuyến nghị' },
-    action_plan: { path: '/actions', name: 'Hành động khuyến nghị' },
-  };
-
-  const nbas = result.next_best_actions || [];
-  const firstAction = nbas.find(n => (n.journey_steps && n.journey_steps.length > 0) || (n.next_questions && n.next_questions.length > 0));
-  
-  const journeySteps = firstAction?.journey_steps || [];
-  const nextQuestions = firstAction?.next_questions || [];
-  const detectedGoals = firstAction?.detected_goals || [];
-  const userPosition = firstAction?.user_position || '';
 
   return (
     <div className="w-full max-w-4xl glass-card overflow-hidden border-l-4 border-l-legal-gold shadow-2xl animate-in fade-in slide-in-from-left-4 duration-500">
@@ -741,6 +768,8 @@ function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: A
           <StagePipeline timings={result.stage_timings} />
         </div>
 
+        <DynamicRelatedModuleGrid result={result} />
+
         {/* Laws Accordion */}
         {result.laws.length > 0 && (
           <details className="group border border-white/10 rounded-2xl overflow-hidden bg-white/[0.02]">
@@ -812,126 +841,6 @@ function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: A
           </div>
         )}
 
-        {/* Dynamic Case Journey Timeline / Personalized Roadmap (Phase 2/3) */}
-        {journeySteps.length > 0 && (
-          <div className="space-y-4 bg-white/[0.02] border border-white/10 rounded-2xl p-5 shadow-inner">
-            <div className="flex items-center gap-2">
-              <Clock className="text-legal-gold" size={16} />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Hành trình giải quyết vụ việc (Lộ trình đề xuất)</span>
-            </div>
-            
-            {detectedGoals.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="text-[10px] text-slate-400 font-medium">Mục tiêu nhận diện:</span>
-                {detectedGoals.map((g, i) => (
-                  <span key={i} className="text-[9px] font-bold bg-legal-gold/20 text-legal-gold border border-legal-gold/30 px-2 py-0.5 rounded-full uppercase">
-                    {g}
-                  </span>
-                ))}
-                {userPosition && (
-                  <>
-                    <span className="text-[10px] text-slate-500">|</span>
-                    <span className="text-[9px] font-bold bg-white/10 text-slate-300 border border-white/20 px-2 py-0.5 rounded-full uppercase">
-                      {userPosition}
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-
-            <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/10">
-              {journeySteps.map((step, idx) => (
-                <div key={idx} className="relative group">
-                  {/* Stepper Dot */}
-                  <div className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full bg-slate-900 border-2 border-slate-700 group-hover:border-legal-gold group-hover:bg-legal-gold/20 transition-all flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-legal-gold" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-[9px] font-mono text-slate-500 font-bold">BƯỚC {idx + 1}</span>
-                    <p className="text-xs text-slate-300 group-hover:text-white transition-colors">{step}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Next Best Actions Dynamic Recommendations Grid (Phase 2/3) */}
-        {nbas.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Zap className="text-legal-gold" size={16} fill="currentColor" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Hành động Phù hợp Tiếp theo (Next Best Actions)</span>
-              <span className="text-[10px] text-slate-500">(LexAI đề xuất dựa trên vụ việc)</span>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {nbas.map((nba) => {
-                const rawPath = nba.action_url || '';
-                let path = rawPath;
-                if (rawPath === '/laws') path = '/law-search';
-                if (rawPath === '/checklist') path = '/checklists';
-
-                const routeInfo = MODULE_ROUTE_MAP[nba.module] || { path: path || '#', name: nba.title };
-                return (
-                  <div 
-                    key={nba.action_id}
-                    className="p-5 bg-white/5 border border-white/10 rounded-2xl flex flex-col justify-between hover:border-legal-gold/40 hover:bg-white/[0.08] transition-all relative overflow-hidden group"
-                  >
-                    {/* Top border color matching priority */}
-                    <div className={cn(
-                      "absolute top-0 left-0 right-0 h-1",
-                      nba.priority === 'urgent' ? 'bg-red-500' :
-                      nba.priority === 'high' ? 'bg-orange-500' :
-                      nba.priority === 'medium' ? 'bg-yellow-500' : 'bg-slate-500'
-                    )} />
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={cn(
-                          "text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider",
-                          nba.priority === 'urgent' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                          nba.priority === 'high' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
-                          nba.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                          'bg-white/10 text-slate-400'
-                        )}>
-                          {nba.priority === 'urgent' ? 'Khẩn cấp' : nba.priority === 'high' ? 'Ưu tiên cao' : nba.priority === 'medium' ? 'Ưu tiên vừa' : 'Khuyến nghị'}
-                        </span>
-                        
-                        <span className="text-[10px] font-mono font-bold text-legal-gold uppercase tracking-wider">{routeInfo.name}</span>
-                      </div>
-
-                      <h4 className="text-sm font-bold text-white leading-snug group-hover:text-legal-gold transition-colors">{nba.title}</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">{nba.description}</p>
-                      
-                      {nba.reason && (
-                        <p className="text-[11px] text-slate-500 italic bg-white/[0.02] border border-white/5 p-2 rounded-lg leading-relaxed mt-2">
-                          <span className="font-bold text-legal-gold not-italic mr-1">Lý do đề xuất:</span>
-                          {nba.reason}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                      <span className="text-[9px] text-slate-500 uppercase tracking-widest font-mono">Độ tự tin: {(nba.score * 100).toFixed(0)}%</span>
-                      <button
-                        onClick={() => {
-                          logInteraction({ action_type: 'nba_click', context: { action_id: nba.action_id, target: routeInfo.path } });
-                          navigate(routeInfo.path, { state: { prefill: nba.prefill, situation: result.accumulated_situation || userSituation || result.position_reasoning || result.full_assessment || '' } });
-                        }}
-                        className="px-3 py-1.5 bg-legal-gold text-legal-navy text-xs font-bold rounded-lg hover:scale-105 active:scale-95 transition-all shadow-md flex items-center gap-1"
-                      >
-                        Bắt đầu
-                        <ChevronRight size={12} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Warnings */}
         {result.warnings.length > 0 && (
           <div className="space-y-2">
@@ -965,31 +874,440 @@ function AIResponseCard({ result, onSelectQuestion, userSituation }: { result: A
           </details>
         )}
 
-        {/* Proactive Prompts Chips */}
-        {nextQuestions.length > 0 && onSelectQuestion && (
-          <div className="space-y-2 pt-4 border-t border-white/10">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-              <Zap size={10} className="text-legal-gold" />
-              Bạn có thể muốn hỏi tiếp theo (Proactive Prompts):
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {nextQuestions.map((q, i) => (
-                <button
-                  key={i}
-                  onClick={() => onSelectQuestion(q)}
-                  className="text-xs px-3.5 py-2 bg-white/5 hover:bg-legal-gold/10 border border-white/10 hover:border-legal-gold/30 rounded-full text-slate-300 hover:text-white transition-all text-left flex items-center gap-2 group animate-in fade-in duration-200"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-legal-gold opacity-60 group-hover:scale-125 transition-all" />
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Reasoning trace */}
         {result.trace_id && <TracePanel traceId={result.trace_id} />}
       </div>
     </div>
   );
+}
+
+function RelatedModuleGrid({ result }: { result: AnalysisResponse }) {
+  const navigate = useNavigate();
+  const context = {
+    domain: result.domain,
+    sessionId: result.session_id,
+    traceId: result.trace_id,
+    summary: result.accumulated_situation || result.position_reasoning || result.full_assessment,
+    citations: result.citations,
+  };
+
+  const modules = [
+    {
+      path: '/evidence-gap',
+      title: 'Kiểm tra chứng cứ',
+      description: 'Xác định giấy tờ còn thiếu và mức độ bao phủ.',
+      icon: FileSearch,
+      group: 'Chứng cứ',
+    },
+    {
+      path: '/law-search',
+      title: 'Tra cứu điều luật',
+      description: 'Tìm căn cứ pháp lý sát với nhận định.',
+      icon: BookOpen,
+      group: 'Dẫn chứng',
+    },
+    {
+      path: '/similar-cases',
+      title: 'Vụ việc tương tự',
+      description: 'So sánh với tình huống đã có kết quả.',
+      icon: GitCompare,
+      group: 'Dẫn chứng',
+    },
+    {
+      path: '/risks',
+      title: 'Đánh giá rủi ro',
+      description: 'Rà các điểm yếu, thời hiệu và nguy cơ thủ tục.',
+      icon: ShieldAlert,
+      group: 'Đánh giá',
+    },
+    {
+      path: '/actions',
+      title: 'Kế hoạch hành động',
+      description: 'Chuyển kết quả thành các bước cần làm.',
+      icon: ListChecks,
+      group: 'Gợi ý',
+    },
+    {
+      path: '/timeline',
+      title: 'Tiến trình pháp lý',
+      description: 'Ước lượng giai đoạn, mốc thời gian và hạn cần lưu ý.',
+      icon: Clock,
+      group: 'Gợi ý',
+    },
+    {
+      path: '/contract',
+      title: 'Rà soát hợp đồng',
+      description: 'Dùng khi tình huống có hợp đồng hoặc điều khoản.',
+      icon: FileCheck,
+      group: 'Hợp đồng',
+    },
+    {
+      path: '/checklists',
+      title: 'Checklist tuân thủ',
+      description: 'Theo dõi việc cần hoàn thành sau phân tích.',
+      icon: ClipboardList,
+      group: 'Thực thi',
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+        <div>
+          <p className="text-xs font-bold text-white uppercase tracking-wider">Dùng tiếp với module liên quan</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Kết quả phân tích là trung tâm. Mở công cụ chuyên sâu khi cần chứng cứ, rủi ro, điều luật hoặc kế hoạch.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/journey', { state: context })}
+          className="flex items-center gap-2 self-start md:self-auto px-3 py-2 rounded-xl bg-legal-gold/10 text-legal-gold border border-legal-gold/20 text-[11px] font-bold hover:bg-legal-gold/20 transition-all"
+        >
+          <Map size={14} />
+          Mở hành trình
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+        {modules.map(item => (
+          <button
+            key={item.path}
+            onClick={() => navigate(item.path, { state: context })}
+            className="group text-left rounded-xl border border-white/10 bg-white/5 p-3 hover:border-legal-gold/30 hover:bg-white/10 transition-all"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
+                <item.icon size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.group}</span>
+                </div>
+                <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
+                <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
+  const navigate = useNavigate();
+  const [feedback, setFeedback] = useState<Record<string, 'useful' | 'not_useful'>>({});
+  const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+  const context = {
+    domain: result.domain,
+    sessionId: result.session_id,
+    traceId: result.trace_id,
+    summary: result.accumulated_situation || result.position_reasoning || result.full_assessment,
+    citations: result.citations,
+  };
+
+  const fallbackModules: NextBestAction[] = [
+    {
+      action_id: 'evidence_gap',
+      action_url: '/evidence-gap',
+      module: 'evidence_gap',
+      title: 'Kiểm tra chứng cứ',
+      description: 'Xác định giấy tờ còn thiếu và mức độ bao phủ.',
+      category: 'evidence',
+      priority: 'medium',
+      score: 0.6,
+      reason: 'Chứng cứ là đầu vào của mọi bước pháp lý tiếp theo.',
+      evidence: result.citations,
+      prefill: context,
+      blocking_gaps: [],
+    },
+    {
+      action_id: 'action_plan',
+      action_url: '/actions',
+      module: 'actions',
+      title: 'Kế hoạch hành động',
+      description: 'Chuyển kết quả thành các bước cần làm.',
+      category: 'execution',
+      priority: 'medium',
+      score: 0.55,
+      reason: 'Kết quả phân tích cần được chuyển thành việc làm cụ thể.',
+      evidence: result.citations,
+      prefill: context,
+      blocking_gaps: [],
+    },
+  ];
+  const recommendations = result.next_best_actions?.length ? result.next_best_actions : fallbackModules;
+  const visibleRecommendations = recommendations.filter(item => !dismissed[item.action_id]);
+  const goalMeta = recommendations.find(item => item.detected_goals?.length || item.next_questions?.length || item.journey_steps?.length);
+  const impressionKey = `${result.session_id}:${recommendations.map(item => item.action_id).join('|')}`;
+
+  useEffect(() => {
+    recommendations.forEach(item => {
+      logInteraction({
+        action_type: 'recommendation_impression',
+        doc_id: item.action_id,
+        context: {
+          action_id: item.action_id,
+          module: item.module,
+          law_type: result.domain,
+          score: item.score,
+          priority: item.priority,
+          session_id: result.session_id,
+        },
+      });
+    });
+  }, [impressionKey, result.domain, result.session_id]);
+
+  const sendFeedback = (item: NextBestAction, value: 'useful' | 'not_useful') => {
+    setFeedback(prev => ({ ...prev, [item.action_id]: value }));
+    logInteraction({
+      action_type: value === 'useful' ? 'recommendation_useful' : 'recommendation_not_useful',
+      doc_id: item.action_id,
+      context: {
+        action_id: item.action_id,
+        module: item.module,
+        law_type: result.domain,
+        feedback: value,
+        score: item.score,
+        priority: item.priority,
+        session_id: result.session_id,
+      },
+    });
+  };
+
+  const dismissRecommendation = (item: NextBestAction) => {
+    setDismissed(prev => ({ ...prev, [item.action_id]: true }));
+    logInteraction({
+      action_type: 'recommendation_dismiss',
+      doc_id: item.action_id,
+      context: {
+        action_id: item.action_id,
+        module: item.module,
+        law_type: result.domain,
+        score: item.score,
+        priority: item.priority,
+        session_id: result.session_id,
+      },
+    });
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+        <div>
+          <p className="text-xs font-bold text-white uppercase tracking-wider">Recommendation engine: bước nên làm tiếp</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Các gợi ý được xếp hạng theo điểm vị thế, cảnh báo, domain và mức độ dẫn chứng.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/journey', { state: context })}
+          className="flex items-center gap-2 self-start md:self-auto px-3 py-2 rounded-xl bg-legal-gold/10 text-legal-gold border border-legal-gold/20 text-[11px] font-bold hover:bg-legal-gold/20 transition-all"
+        >
+          <Map size={14} />
+          Mở hành trình
+        </button>
+      </div>
+
+      {goalMeta && (
+        <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr]">
+          <div className="rounded-xl border border-legal-gold/20 bg-legal-gold/5 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-legal-gold mb-2">
+              Hiểu nhu cầu của bạn
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(goalMeta.detected_goals || []).map(goal => (
+                <span key={goal} className="rounded-lg border border-legal-gold/20 bg-legal-gold/10 px-2 py-1 text-[10px] font-semibold text-legal-gold">
+                  {goalLabel(goal)}
+                </span>
+              ))}
+              {goalMeta.user_position && (
+                <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-slate-300">
+                  {positionLabel(goalMeta.user_position)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Câu hỏi nên bổ sung
+            </p>
+            <ul className="space-y-1.5">
+              {(goalMeta.next_questions || []).slice(0, 3).map((question, idx) => (
+                <li key={idx} className="flex gap-2 text-[11px] leading-relaxed text-slate-300">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-legal-gold/10 text-[9px] font-bold text-legal-gold">
+                    {idx + 1}
+                  </span>
+                  <span>{question}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {goalMeta?.journey_steps?.length ? (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Lộ trình đề xuất
+          </p>
+          <div className="grid gap-2 md:grid-cols-4">
+            {goalMeta.journey_steps.slice(0, 4).map((step, idx) => (
+              <div key={idx} className="rounded-lg border border-white/8 bg-white/5 p-2">
+                <span className="text-[9px] font-bold text-legal-gold">Bước {idx + 1}</span>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-300">{step}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+        {visibleRecommendations.map(item => {
+          const Icon = moduleIcon(item.module);
+          const navState = {
+            ...context,
+            summary: item.prefill?.summary || context.summary,
+            domain: item.prefill?.domain || context.domain,
+            citations: item.prefill?.citations || context.citations,
+          };
+          return (
+            <div
+              key={item.action_id}
+              className="group rounded-xl border border-white/10 bg-white/5 hover:border-legal-gold/30 hover:bg-white/10 transition-all overflow-hidden"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  logInteraction({
+                    action_type: 'recommendation_click',
+                    doc_id: item.action_id,
+                    context: {
+                      action_id: item.action_id,
+                      module: item.module,
+                      law_type: result.domain,
+                      score: item.score,
+                      priority: item.priority,
+                      session_id: result.session_id,
+                    },
+                  });
+                  navigate(item.action_url, { state: navState });
+                }}
+                className="w-full text-left p-3"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-legal-gold/10 text-legal-gold flex items-center justify-center shrink-0">
+                    <Icon size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{item.category}</span>
+                      <span className={cn(
+                        'text-[9px] font-bold px-1.5 py-0.5 rounded border',
+                        item.priority === 'high' ? 'text-red-300 border-red-500/30 bg-red-500/10' :
+                        item.priority === 'medium' ? 'text-yellow-300 border-yellow-500/30 bg-yellow-500/10' :
+                        'text-slate-400 border-white/10 bg-white/5',
+                      )}>
+                        {Math.round(item.score * 100)}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-100 group-hover:text-legal-gold transition-colors">{item.title}</p>
+                    <p className="text-[11px] text-slate-500 leading-snug mt-1">{item.description}</p>
+                    {item.reason && <p className="text-[10px] text-slate-600 leading-snug mt-2">{item.reason}</p>}
+                  </div>
+                </div>
+              </button>
+              <div className="flex items-center justify-between gap-2 border-t border-white/8 px-3 py-2 bg-legal-navy/20">
+                <span className="text-[10px] text-slate-600">Phản hồi để cá nhân hoá</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Gợi ý hữu ích"
+                    onClick={() => sendFeedback(item, 'useful')}
+                    className={cn(
+                      'p-1.5 rounded-lg border transition-all',
+                      feedback[item.action_id] === 'useful'
+                        ? 'text-green-300 border-green-500/40 bg-green-500/10'
+                        : 'text-slate-500 border-white/10 hover:text-green-300 hover:border-green-500/30',
+                    )}
+                  >
+                    <ThumbsUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Gợi ý chưa phù hợp"
+                    onClick={() => sendFeedback(item, 'not_useful')}
+                    className={cn(
+                      'p-1.5 rounded-lg border transition-all',
+                      feedback[item.action_id] === 'not_useful'
+                        ? 'text-red-300 border-red-500/40 bg-red-500/10'
+                        : 'text-slate-500 border-white/10 hover:text-red-300 hover:border-red-500/30',
+                    )}
+                  >
+                    <ThumbsDown size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Ẩn gợi ý này"
+                    onClick={() => dismissRecommendation(item)}
+                    className="p-1.5 rounded-lg border border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20 transition-all"
+                  >
+                    <EyeOff size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function moduleIcon(module: string) {
+  const icons = {
+    evidence_gap: FileSearch,
+    law_search: BookOpen,
+    similar_cases: GitCompare,
+    risks: ShieldAlert,
+    actions: ListChecks,
+    timeline: Clock,
+    contract: FileCheck,
+    checklists: ClipboardList,
+    journey: Map,
+  } as const;
+  return icons[module as keyof typeof icons] || ListChecks;
+}
+
+function goalLabel(goal: string) {
+  const labels: Record<string, string> = {
+    divorce: 'Ly hôn',
+    child_custody: 'Quyền nuôi con',
+    asset_division: 'Chia tài sản',
+    asset_protection: 'Bảo vệ tài sản',
+    debt_recovery: 'Đòi nợ',
+    employment_termination: 'Chấm dứt lao động',
+    land_dispute: 'Tranh chấp đất',
+    contract_enforcement: 'Thực hiện hợp đồng',
+    complaint_or_lawsuit: 'Khiếu nại/khởi kiện',
+    risk_avoidance: 'Giảm rủi ro',
+    clarify_legal_goal: 'Làm rõ mục tiêu',
+  };
+  return labels[goal] || goal.replace(/_/g, ' ');
+}
+
+function positionLabel(position: string) {
+  const labels: Record<string, string> = {
+    parent_seeking_custody: 'Vị thế: cha/mẹ muốn nuôi con',
+    employer_or_company: 'Vị thế: doanh nghiệp/người sử dụng lao động',
+    employee: 'Vị thế: người lao động',
+    buyer: 'Vị thế: bên mua',
+    seller: 'Vị thế: bên bán',
+    creditor_or_claimant: 'Vị thế: người yêu cầu quyền lợi',
+    respondent: 'Vị thế: bên bị yêu cầu',
+    claimant_or_complainant: 'Vị thế: người khiếu nại/khởi kiện',
+    general_user: 'Vị thế: người cần tư vấn',
+  };
+  return labels[position] || position.replace(/_/g, ' ');
 }

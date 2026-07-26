@@ -25,6 +25,7 @@ import {
   BookOpen,
   Map,
   FileText,
+  Download,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -48,7 +49,7 @@ const TYPE_CONFIG: Record<AnalysisType, { label: string; icon: React.ReactNode; 
   action_plan:      { label: 'Kế hoạch hành động', icon: <ListChecks size={14} />, color: 'text-red-400 bg-red-500/10 border-red-500/25',          path: '/actions' },
   compliance_radar: { label: 'Compliance Radar',    icon: <Radar size={14} />,      color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/25',       path: '/compliance-radar' },
   risk_analysis:    { label: 'Phân tích rủi ro',   icon: <TrendingUp size={14} />, color: 'text-pink-400 bg-pink-500/10 border-pink-500/25',       path: '/risks' },
-  law_search:       { label: 'Tra cứu điều luật',  icon: <BookOpen size={14} />,   color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25', path: '/law-search' },
+  law_search:       { label: 'Tra cứu điều luật',  icon: <BookOpen size={14} />,   color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/25', path: '/laws' },
   journey:          { label: 'Hành trình pháp lý', icon: <Map size={14} />,        color: 'text-teal-400 bg-teal-500/10 border-teal-500/25',       path: '/journey' },
   contract_analysis:{ label: 'Rà soát hợp đồng',  icon: <FileText size={14} />,   color: 'text-violet-400 bg-violet-500/10 border-violet-500/25', path: '/contract' },
 };
@@ -255,6 +256,34 @@ function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
         </div>
       );
 
+    case 'risk_analysis':
+      return (
+        <div className="space-y-2 text-[11px]">
+          <p className="text-slate-300">
+            <span className="text-slate-500 font-semibold">Điểm rủi ro:</span>{' '}
+            <span className={d.risk_score >= 70 ? 'text-red-400' : d.risk_score >= 40 ? 'text-yellow-400' : 'text-green-400'}>
+              {d.risk_score ?? 0}/100
+            </span>
+            {' '}·{' '}
+            <span className="capitalize text-slate-400">{d.risk_level ?? '—'}</span>
+          </p>
+          <p className="text-slate-400">{d.stage_label ?? '—'}</p>
+          {d.weaknesses?.length > 0 && (
+            <div>
+              <p className="text-slate-500 font-semibold mb-1">Điểm yếu:</p>
+              <ul className="space-y-0.5 pl-3">
+                {d.weaknesses.slice(0, 3).map((w: string, i: number) => (
+                  <li key={i} className="text-red-300 list-disc line-clamp-1">{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {d.recommended_actions?.length > 0 && (
+            <p className="text-legal-gold">{d.recommended_actions.length} hành động khuyến nghị</p>
+          )}
+        </div>
+      );
+
     case 'contract_analysis':
       return (
         <div className="space-y-2 text-[11px]">
@@ -284,6 +313,18 @@ function FormattedPreview({ item }: { item: AnalysisHistoryItem }) {
         </pre>
       );
   }
+}
+
+// ── Download helper ───────────────────────────────────────────────────────────
+
+function downloadItem(item: AnalysisHistoryItem) {
+  const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${item.type}_${item.title.slice(0, 40).replace(/[^a-z0-9\s\-_]/gi, '').trim().replace(/\s+/g, '_')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── History card ──────────────────────────────────────────────────────────────
@@ -334,6 +375,13 @@ function HistoryCard({
             <RotateCcw size={14} />
           </button>
           <button
+            onClick={() => downloadItem(item)}
+            title="Tải xuống JSON"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+          >
+            <Download size={14} />
+          </button>
+          <button
             onClick={() => setExpanded(v => !v)}
             title="Xem chi tiết"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
@@ -364,24 +412,29 @@ function HistoryCard({
 export function AnalysisHistory() {
   const navigate = useNavigate();
   const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AnalysisType | 'all'>('all');
   const [searchText, setSearchText] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
-    setItems(loadHistory());
+    setLoading(true);
+    loadHistory().then(data => {
+      setItems(data);
+      setLoading(false);
+    });
   }, []);
 
   function handleDelete(id: string) {
-    deleteHistoryItem(id);
     setItems(prev => prev.filter(i => i.id !== id));
+    deleteHistoryItem(id);
   }
 
   function handleClear() {
     if (!confirmClear) { setConfirmClear(true); return; }
-    clearHistory();
     setItems([]);
     setConfirmClear(false);
+    clearHistory();
   }
 
   function handleReopen(item: AnalysisHistoryItem) {
@@ -430,8 +483,23 @@ export function AnalysisHistory() {
         )}
       </div>
 
+      {/* Skeleton loader */}
+      {loading && (
+        <div className="space-y-3">
+          {[1, 2, 3].map(n => (
+            <div key={n} className="glass-card p-4 flex items-start gap-3 animate-pulse">
+              <div className="h-7 w-36 rounded-lg bg-white/8 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-3/4 rounded bg-white/8" />
+                <div className="h-3 w-full rounded bg-white/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Search box */}
-      {items.length > 0 && (
+      {!loading && items.length > 0 && (
         <div className="relative">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -453,41 +521,43 @@ export function AnalysisHistory() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => setFilter('all')}
-          className={cn(
-            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-            filter === 'all'
-              ? 'bg-legal-gold text-legal-navy border-legal-gold'
-              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-          )}
-        >
-          Tất cả ({items.length})
-        </button>
-        {ALL_TYPES.filter(t => items.some(i => i.type === t)).map(t => {
-          const count = items.filter(i => i.type === t).length;
-          const cfg = TYPE_CONFIG[t];
-          return (
-            <button
-              key={t}
-              onClick={() => setFilter(t)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
-                filter === t
-                  ? 'bg-legal-gold text-legal-navy border-legal-gold'
-                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-              )}
-            >
-              {cfg.icon}
-              {cfg.label} ({count})
-            </button>
-          );
-        })}
-      </div>
+      {!loading && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilter('all')}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+              filter === 'all'
+                ? 'bg-legal-gold text-legal-navy border-legal-gold'
+                : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+            )}
+          >
+            Tất cả ({items.length})
+          </button>
+          {ALL_TYPES.filter(t => items.some(i => i.type === t)).map(t => {
+            const count = items.filter(i => i.type === t).length;
+            const cfg = TYPE_CONFIG[t];
+            return (
+              <button
+                key={t}
+                onClick={() => setFilter(t)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+                  filter === t
+                    ? 'bg-legal-gold text-legal-navy border-legal-gold'
+                    : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                )}
+              >
+                {cfg.icon}
+                {cfg.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* List */}
-      {filtered.length === 0 ? (
+      {!loading && (filtered.length === 0 ? (
         <div className="py-20 flex flex-col items-center text-center space-y-3 opacity-30">
           {items.length === 0 ? (
             <>
@@ -510,13 +580,13 @@ export function AnalysisHistory() {
             <HistoryCard key={item.id} item={item} onDelete={handleDelete} onReopen={handleReopen} />
           ))}
         </div>
-      )}
+      ))}
 
-      {/* Tips */}
-      {items.length > 0 && (
+      {/* Info: now backend-persisted */}
+      {!loading && items.length > 0 && (
         <div className="flex items-start gap-2 p-3 rounded-xl bg-white/3 border border-white/8 text-xs text-slate-500">
-          <AlertTriangle size={12} className="text-slate-600 mt-0.5 shrink-0" />
-          Lịch sử được lưu trong trình duyệt này. Xóa cache trình duyệt sẽ mất dữ liệu.
+          <CheckCircle2 size={12} className="text-green-500 mt-0.5 shrink-0" />
+          Lịch sử được đồng bộ lên máy chủ — an toàn khi xóa cache trình duyệt.
         </div>
       )}
     </div>

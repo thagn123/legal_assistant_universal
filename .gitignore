@@ -165,6 +165,9 @@ raw_data/VNLegalText-main/
 # Output files
 outputs/
 
+# Graphify code-graph tool output (generated locally, not source)
+graphify-out/
+
 # Planning & generation scripts (not part of submission)
 scripts/generate_pptx.py
 scripts/generate_presentation_doc.py

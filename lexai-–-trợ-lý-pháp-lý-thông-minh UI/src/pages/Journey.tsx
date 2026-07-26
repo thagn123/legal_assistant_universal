@@ -21,6 +21,9 @@ import {
   Check,
 } from 'lucide-react';
 import { buildJourney, JourneyResult, JourneyMilestone, saveAnalysis } from '../lib/api';
+import { getAnalysisContext, getContextSummary, useSyncedSituation } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -120,24 +123,22 @@ function LawRefItem({ title, score }: { title: string; score: number }) {
 
 export function Journey() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => {
-    const state = location.state as { situation?: string; domain?: string } | null;
-    return state?.situation || sessionStorage.getItem('lexai_current_situation') || '';
-  });
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [result, setResult] = useState<JourneyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleAnalyze(overrideSituation?: string) {
+    const context = getAnalysisContext(location.state);
     const trimmed = (overrideSituation ?? situation).trim();
     if (!trimmed) return;
-    sessionStorage.setItem('lexai_current_situation', trimmed);
     setLoading(true);
     setError('');
     setSaved(false);
     try {
-      const data = await buildJourney(trimmed, '', [], undefined);
+      const data = await buildJourney(trimmed, context.sessionId || '', [], context.domain);
       setResult(data);
     } catch (err: any) {
       setError(err?.message || 'Không thể kết nối đến máy chủ. Vui lòng thử lại.');
@@ -148,11 +149,12 @@ export function Journey() {
 
   // Pre-fill and auto-analyze when navigated from Dashboard quick-classify
   useEffect(() => {
-    const state = location.state as { situation?: string; domain?: string } | null;
-    if (state?.situation) {
-      setSituation(state.situation);
-      sessionStorage.setItem('lexai_current_situation', state.situation);
-      handleAnalyze(state.situation);
+    const state = location.state as { situation?: string } | null;
+    const context = getAnalysisContext(location.state);
+    const initialSituation = state?.situation || getContextSummary(location.state);
+    if (initialSituation) {
+      setSituation(initialSituation);
+      handleAnalyze(initialSituation);
       // Clear state so navigating back + forward doesn't re-trigger
       window.history.replaceState({}, '');
     }
@@ -162,6 +164,7 @@ export function Journey() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -220,7 +223,7 @@ export function Journey() {
                 )}
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    saveAnalysis({ type: 'journey', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

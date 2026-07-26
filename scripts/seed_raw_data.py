@@ -13,7 +13,7 @@ Step 2 — Raw documents (background jobs): POST /admin/documents/upload
 
 Usage:
     python scripts/seed_raw_data.py
-    python scripts/seed_raw_data.py --api-url http://localhost:8001 --admin-key lexai-admin-secret
+    python scripts/seed_raw_data.py --api-url http://localhost:8000 --admin-key lexai-admin-secret
     python scripts/seed_raw_data.py --dry-run          # list files only, no upload
     python scripts/seed_raw_data.py --no-wait          # upload files and exit immediately
     python scripts/seed_raw_data.py --force            # re-upload files already in DB
@@ -36,7 +36,7 @@ except ImportError:
     print("ERROR: 'requests' is not installed.  Run:  pip install requests")
     sys.exit(1)
 
-_DEFAULT_API_URL   = os.environ.get("API_URL", "http://localhost:8001")
+_DEFAULT_API_URL   = os.environ.get("API_URL", "http://localhost:8000")
 _DEFAULT_ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "lexai-admin-secret")
 _RAW_DATA_DIR      = Path(__file__).parent.parent / "raw_data"
 _POLL_INTERVAL_S   = 5

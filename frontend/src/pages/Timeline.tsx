@@ -114,7 +114,10 @@ export function Timeline() {
   const { toasts, toast, dismiss } = useToast();
 
   async function handleTrack() {
-    if (!situation.trim()) return;
+    if (!situation.trim() || situation.trim().length < 10) {
+      setError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
     setLoading(true);
     setResult(null);
     setError('');
@@ -206,7 +209,7 @@ export function Timeline() {
 
         <button
           onClick={handleTrack}
-          disabled={loading || !situation.trim()}
+          disabled={loading || situation.trim().length < 10}
           className="flex items-center gap-2 px-6 py-2.5 bg-legal-gold text-legal-navy font-bold rounded-xl disabled:opacity-40 hover:scale-105 active:scale-95 transition-all text-sm"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}

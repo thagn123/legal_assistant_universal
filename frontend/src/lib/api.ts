@@ -12,7 +12,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const API_BASE: string =
-  import.meta.env.VITE_API_URL || "http://localhost:8001";
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const USER_ID_KEY = 'lexai_user_id';
 const DEFAULT_USER_ID = 'demo_user_001';
@@ -94,6 +94,7 @@ export interface AnalysisResponse {
   status: 'manh' | 'trung_binh' | 'yeu';
   position_score: number;
   position_reasoning: string;
+  accumulated_situation?: string;
   domain: string;
   domain_confidence: number;
   laws: LawChunk[];
@@ -293,6 +294,7 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
     status,
     position_score,
     position_reasoning: raw.position_reasoning || raw.situation_summary || '',
+    accumulated_situation: raw.accumulated_situation || undefined,
     domain: raw.detected_domain || raw.domain || 'general',
     domain_confidence: raw.domain_confidence ?? 0.5,
     laws,

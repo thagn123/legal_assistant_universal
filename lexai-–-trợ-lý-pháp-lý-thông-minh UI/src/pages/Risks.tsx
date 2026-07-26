@@ -24,6 +24,9 @@ import {
   Check,
 } from 'lucide-react';
 import { apiFetch, RiskAssessment, logInteraction, analyzeRisk, RiskAnalysisResult, saveAnalysis } from '../lib/api';
+import { useSyncedSituation } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Risk score gauge ──────────────────────────────────────────────────────────
 
@@ -100,6 +103,7 @@ function AiRiskPanel() {
   const [result, setResult] = useState<RiskAnalysisResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   // Pre-fill and auto-run when navigated with context
   useEffect(() => {
@@ -150,6 +154,7 @@ function AiRiskPanel() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Input */}
       <div className="glass-card p-6 space-y-4">
         <label className="text-sm font-semibold text-white">Mô tả tình huống cần đánh giá rủi ro</label>
@@ -186,7 +191,7 @@ function AiRiskPanel() {
                 <p className="text-xs text-slate-400 italic flex-1">{result.summary}</p>
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'risk_analysis', title: situation.slice(0, 80), summary: result.summary, data: result });
+                    saveAnalysis({ type: 'risk_analysis', title: situation.slice(0, 80), summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}
@@ -271,8 +276,9 @@ function AiRiskPanel() {
 // ── Generic risk recommendations (existing) ───────────────────────────────────
 
 function GenericRisksPanel() {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'situation' | 'history'>('situation');
-  const [situation, setSituation] = useState('');
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [risks, setRisks] = useState<RiskAssessment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [severityFilter, setSeverityFilter] = useState<'all' | 'cao' | 'trung_binh' | 'thap'>('all');
@@ -336,9 +342,10 @@ function GenericRisksPanel() {
           />
           <button
             onClick={() => fetchRisks(false)}
-            className="px-8 bg-legal-gold text-legal-navy rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-legal-gold/20"
+            disabled={isLoading || !situation.trim()}
+            className="px-8 bg-legal-gold text-legal-navy rounded-xl font-bold hover:scale-105 transition-all shadow-lg shadow-legal-gold/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            Đánh giá
+            {isLoading ? 'Đang đánh giá...' : 'Đánh giá'}
           </button>
         </div>
       )}

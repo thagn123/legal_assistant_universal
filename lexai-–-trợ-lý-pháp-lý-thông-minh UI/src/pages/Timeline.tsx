@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Clock,
   Loader2,
@@ -17,6 +18,9 @@ import {
 } from 'lucide-react';
 import { getTimeline, TimelineResult, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
+import { getContextDomain, useSyncedSituation } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -99,13 +103,15 @@ function DeadlineCard({ label, days, unit, note }: { label: string; days: number
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Timeline() {
-  const [situation, setSituation] = useState('');
-  const [domain, setDomain]       = useState('general');
+  const location = useLocation();
+  const [situation, setSituation] = useSyncedSituation(location.state);
+  const [domain, setDomain]       = useState(() => getContextDomain(location.state));
   const [factsText, setFactsText] = useState('');
   const [loading, setLoading]     = useState(false);
   const [result, setResult]       = useState<TimelineResult | null>(null);
   const [error, setError]         = useState('');
   const [saved, setSaved]         = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleTrack() {
     if (!situation.trim() || situation.trim().length < 10) {
@@ -136,6 +142,7 @@ export function Timeline() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -235,7 +242,7 @@ export function Timeline() {
               </div>
               <button
                 onClick={() => {
-                  saveAnalysis({ type: 'timeline', title: situation.slice(0, 80), domain, summary: result.summary, data: result });
+                  saveAnalysis({ type: 'timeline', title: situation.slice(0, 80), domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                   setSaved(true);
                 }}
                 disabled={saved}

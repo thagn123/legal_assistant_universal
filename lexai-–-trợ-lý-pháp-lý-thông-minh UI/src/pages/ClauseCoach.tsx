@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Gavel,
   Loader2,
@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { analyzeClause, ClauseCoachResult, ClauseRisk, SaferVersion, MissingClause, saveAnalysis } from '../lib/api';
 import { cn } from '../lib/api';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -166,33 +168,6 @@ const SAMPLE_CLAUSES = [
   'Mọi quyền sở hữu trí tuệ phát sinh trong quá trình thực hiện hợp đồng thuộc về Bên A, Bên B không bảo lưu bất kỳ quyền nào.',
 ];
 
-interface IsolatedTextAreaProps {
-  value: string;
-  onChange: (val: string) => void;
-  placeholder?: string;
-  rows?: number;
-  className?: string;
-}
-
-function IsolatedTextArea({ value, onChange, placeholder, rows = 3, className }: IsolatedTextAreaProps) {
-  const [text, setText] = useState(value);
-
-  useEffect(() => {
-    setText(value);
-  }, [value]);
-
-  return (
-    <textarea
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => onChange(text)}
-      placeholder={placeholder}
-      rows={rows}
-      className={className}
-    />
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ClauseCoach() {
@@ -202,6 +177,7 @@ export function ClauseCoach() {
   const [result, setResult] = useState<ClauseCoachResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handleAnalyze() {
     if (!clauseText.trim()) return;
@@ -221,6 +197,7 @@ export function ClauseCoach() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -238,9 +215,9 @@ export function ClauseCoach() {
           <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
             Điều khoản cần phân tích
           </label>
-          <IsolatedTextArea
+          <textarea
             value={clauseText}
-            onChange={setClauseText}
+            onChange={e => setClauseText(e.target.value)}
             placeholder="Dán điều khoản hợp đồng vào đây..."
             rows={5}
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 resize-none focus:outline-none focus:border-legal-gold/50 transition-colors"
@@ -311,7 +288,7 @@ export function ClauseCoach() {
                 <span className="text-slate-400">{result.missing_clauses.length} Điều khoản thiếu</span>
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'clause_coach', title: clauseText.slice(0, 80), summary: result.summary, data: result });
+                    saveAnalysis({ type: 'clause_coach', title: clauseText.slice(0, 80), summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

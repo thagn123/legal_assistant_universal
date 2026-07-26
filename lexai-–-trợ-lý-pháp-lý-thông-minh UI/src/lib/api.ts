@@ -73,16 +73,20 @@ export interface NextBestAction {
   module: string;
   action_url: string;
   category: string;
-  priority: string;
+  priority: 'high' | 'medium' | 'low';
   score: number;
   reason: string;
   evidence: string[];
-  prefill: Record<string, any>;
+  prefill: {
+    summary?: string;
+    domain?: string;
+    citations?: string[];
+  };
   blocking_gaps: string[];
-  detected_goals: string[];
-  user_position: string;
-  next_questions: string[];
-  journey_steps: string[];
+  detected_goals?: string[];
+  user_position?: string;
+  next_questions?: string[];
+  journey_steps?: string[];
 }
 
 export interface AnalysisResponse {
@@ -98,6 +102,7 @@ export interface AnalysisResponse {
   warnings: RiskWarning[];
   full_assessment: string;
   citations: string[];
+  next_best_actions: NextBestAction[];
   stage_timings: StageTiming[];
   used_llm: boolean;
   is_chitchat?: boolean;
@@ -106,7 +111,6 @@ export interface AnalysisResponse {
     tool: string;
     description: string;
   }>;
-  next_best_actions?: NextBestAction[];
 }
 
 export interface ContractAnalysisResult {
@@ -212,13 +216,41 @@ export interface DigestResponse {
   total_interactions: number;
   days_active: number;
   last_active_date: string;
+  law_type_weights?: Record<string, number>;
+  active_hours?: number[];
+  source?: string;
+  activity_last_7_days?: {
+    total: number;
+    by_action: Record<string, number>;
+  };
   recommendations: Array<{
     id: string;
+    type?: string;
+    law_type?: string | null;
     title: string;
     reason: string;
-    score: number;
+    description?: string;
     action_hint?: string;
+    score: number;
   }>;
+}
+
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content?: string;
+  result?: AnalysisResponse;
+  situation?: string;
+}
+
+export interface ConversationSession {
+  id: string;
+  title: string;
+  domain?: string;
+  turns: ConversationTurn[];
+  createdAt?: string;
+  lastActive?: string;
+  turnCount?: number;
+  metadata?: Record<string, any>;
 }
 
 // RESPONSE TRANSFORMERS
@@ -257,30 +289,12 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
   const rawScore = raw.position_score ?? 0;
   const position_score = rawScore <= 1 ? Math.round(rawScore * 100) : Math.round(rawScore);
 
-  const next_best_actions: NextBestAction[] = (raw.next_best_actions || []).map((n: any) => ({
-    action_id: n.action_id || '',
-    title: n.title || '',
-    description: n.description || '',
-    module: n.module || '',
-    action_url: n.action_url || '',
-    category: n.category || '',
-    priority: n.priority || 'low',
-    score: n.score ?? 0,
-    reason: n.reason || '',
-    evidence: n.evidence || [],
-    prefill: n.prefill || {},
-    blocking_gaps: n.blocking_gaps || [],
-    detected_goals: n.detected_goals || [],
-    user_position: n.user_position || 'general_user',
-    next_questions: n.next_questions || [],
-    journey_steps: n.journey_steps || [],
-  }));
-
   return {
     session_id: raw.session_id || '',
     status,
     position_score,
     position_reasoning: raw.position_reasoning || raw.situation_summary || '',
+    accumulated_situation: raw.accumulated_situation || undefined,
     domain: raw.detected_domain || raw.domain || 'general',
     domain_confidence: raw.domain_confidence ?? 0.5,
     laws,
@@ -288,6 +302,7 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
     warnings,
     full_assessment: raw.full_assessment || '',
     citations: raw.citations || [],
+    next_best_actions: raw.next_best_actions || [],
     stage_timings,
     used_llm: raw.used_llm ?? false,
     is_chitchat: raw.is_chitchat ?? false,
@@ -296,7 +311,6 @@ function transformIntelligenceAnalyze(raw: any): AnalysisResponse {
       tool: typeof t === 'string' ? t : t.tool || t.name || '',
       description: t.description || '',
     })),
-    next_best_actions,
   };
 }
 
@@ -402,7 +416,7 @@ function transformProfile(raw: any): UserProfile {
 }
 
 function transformDigest(raw: any): DigestResponse {
-  const profile = raw.profile || raw;
+  const profile = raw.profile_summary || raw.profile || raw;
   let lastActive = 'N/A';
   const isoStr = profile.last_active_iso || profile.last_active || raw.last_active_date;
   if (isoStr) {
@@ -417,12 +431,19 @@ function transformDigest(raw: any): DigestResponse {
     total_interactions: profile.total_interactions ?? raw.total_interactions ?? 0,
     days_active: profile.days_active ?? raw.days_active ?? 0,
     last_active_date: lastActive,
+    law_type_weights: profile.law_type_weights || raw.law_type_weights || {},
+    active_hours: profile.active_hours || raw.active_hours || [],
+    source: raw.source || (raw.profile_summary ? 'behavior' : undefined),
+    activity_last_7_days: raw.activity_last_7_days,
     recommendations: (raw.recommendations || []).slice(0, 6).map((r: any, i: number) => ({
       id: r.rec_id || r.id || `rec-${i}`,
+      type: r.rec_type || r.type,
+      law_type: r.law_type ?? null,
       title: r.title || '',
       reason: r.reason || '',
+      description: r.description || '',
+      action_hint: r.action_hint || '',
       score: r.score ?? 0,
-      action_hint: r.action_hint || r.action_url || '',
     })),
   };
 }
@@ -484,15 +505,25 @@ function applyTransform(path: string, method: string, raw: any): any {
 }
 
 // REAL API INTERFACE
+export function friendlyApiError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return 'Khong the ket noi may chu. Vui long kiem tra API va thu lai.';
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-ID': getUserId(),
-      ...(options.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-ID': getUserId(),
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error('Khong the ket noi backend LexAI. Neu ban dang test tren Vercel, hay kiem tra VITE_API_URL va trang thai API.');
+  }
 
   if (!res.ok) {
     let detail = res.statusText;
@@ -547,14 +578,19 @@ export interface AdminStats {
 
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const adminKey = getAdminKey() || '';
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'X-Admin-Key': adminKey,
-      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(options.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'X-Admin-Key': adminKey,
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw new Error('Khong the ket noi backend LexAI. Kiem tra VITE_API_URL hoac API dang chay.');
+  }
 
   if (!res.ok) {
     let detail = res.statusText;
@@ -609,14 +645,25 @@ export async function adminGetStats(): Promise<AdminStats> {
 
 export interface EvidenceItem {
   item: string;
+  title?: string;
   priority: 'high' | 'medium' | 'low';
   category: string;
+  category_label?: string;
+  evidence_id?: string;
+  status?: 'present' | 'missing' | 'uncertain' | 'contradicted';
+  matched_text?: string;
+  matched_alias?: string;
+  confidence?: number;
+  reason?: string;
 }
 
 export interface EvidenceGapResult {
   request_id: string;
   domain: string;
+  present_evidence: EvidenceItem[];
   missing_evidence: EvidenceItem[];
+  uncertain_evidence: EvidenceItem[];
+  contradictions: EvidenceItem[];
   strong_evidence: string[];
   weak_evidence: string[];
   coverage_score: number;
@@ -625,6 +672,11 @@ export interface EvidenceGapResult {
   summary: string;
   confidence: number;
   warnings: string[];
+  recommendations: string[];
+  debug?: {
+    normalized_facts?: unknown[];
+    matched_aliases?: unknown[];
+  };
 }
 
 export async function getEvidenceGap(
@@ -707,10 +759,15 @@ export interface JourneyResult {
   warnings: string[];
 }
 
-export async function buildJourney(situation: string, domain: string, facts: string[], stageHint?: string): Promise<JourneyResult> {
+export async function buildJourney(
+  situation: string,
+  sessionId = '',
+  facts: string[] = [],
+  domain?: string,
+): Promise<JourneyResult> {
   return apiFetch<JourneyResult>('/journey/build', {
     method: 'POST',
-    body: JSON.stringify({ situation, facts, domain_hint: domain, stage_hint: stageHint }),
+    body: JSON.stringify({ situation, session_id: sessionId, facts, domain }),
   });
 }
 
@@ -752,6 +809,53 @@ export async function classifySituation(
   return apiFetch<ClassifyResult>('/analysis/classify', {
     method: 'POST',
     body: JSON.stringify({ situation, facts, domain_hint: domainHint }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Next Best Actions — POST /recommendations/next-best-actions
+//
+// IMPORTANT — two distinct usage patterns:
+//
+// 1. Dashboard quick-classify (current usage):
+//    Call with { situation, domain, limit } only. No session_id, no
+//    recommended_actions. The backend generates fresh recommendations
+//    without any prior evidence context. No contradiction filtering needed.
+//
+// 2. Session-aware call (future / defense-in-depth):
+//    If you have an existing analyze session (e.g., user re-opens a
+//    saved conversation), pass { session_id: backendSessionId,
+//    recommended_actions: [...] }. The backend will load the session's
+//    evidence_snapshot and strip recommendations that contradict PRESENT
+//    evidence (e.g., "Thu thập sổ đỏ" when land_certificate=PRESENT).
+//    session_id must be the MongoDB session ID from data.session_id in
+//    the /intelligence/analyze response, not the client-generated chat ID.
+//
+// NOTE: Analyze page NBA sidebar does NOT call this endpoint.
+//    It uses result.next_best_actions embedded in the /intelligence/analyze
+//    response, already filtered by the orchestrator before the response
+//    is built. Never route Analyze page NBA through this endpoint.
+// ---------------------------------------------------------------------------
+
+export interface NextBestActionRequest {
+  situation: string;
+  domain?: string;
+  position_score?: number;
+  domain_confidence?: number;
+  citations?: string[];
+  warnings?: string[];
+  recommended_actions?: string[];
+  risk_assessment?: Record<string, unknown>;
+  limit?: number;
+  session_id?: string;
+}
+
+export async function getNextBestActions(
+  req: NextBestActionRequest,
+): Promise<NextBestAction[]> {
+  return apiFetch<NextBestAction[]>('/recommendations/next-best-actions', {
+    method: 'POST',
+    body: JSON.stringify(req),
   });
 }
 
@@ -996,8 +1100,33 @@ export interface SimilarCaseItem {
   key_laws: string[];
   similarity_score: number;
   similarity_label: string;
+  is_demo?: boolean;
   stage: string;
   stage_label: string;
+  // Phase 23
+  source_type?: string;
+  personalization_reason?: string;
+  ranking_signals?: Record<string, number>;
+}
+
+export interface CommunityCaseItem {
+  pattern_id: string;
+  summary: string;
+  resolution_summary: string;
+  recommended_steps: string[];
+  legal_domain: string;
+  domain_label: string;
+  tags: string[];
+  citations: string[];
+  similarity_score: number;
+  similarity_label: string;
+  popularity: {
+    impressions?: number;
+    clicks?: number;
+    saves?: number;
+    useful?: number;
+    not_useful?: number;
+  };
 }
 
 export interface SimilarCasesResult {
@@ -1008,9 +1137,17 @@ export interface SimilarCasesResult {
   query_stage: string;
   query_stage_label: string;
   similar_cases: SimilarCaseItem[];
+  official_cases: SimilarCaseItem[];
+  community_cases: CommunityCaseItem[];
   total: number;
   search_mode: string;
   summary: string;
+  // Phase 23
+  query_language?: string;
+  expanded_aliases?: string[];
+  cross_language_used?: boolean;
+  personalization_note?: string;
+  fallback_used?: boolean;
 }
 
 export async function getSimilarCases(
@@ -1018,11 +1155,38 @@ export async function getSimilarCases(
   facts: string[] = [],
   domainHint?: string,
   limit = 6,
+  includeCommunity = true,
 ): Promise<SimilarCasesResult> {
   return apiFetch<SimilarCasesResult>('/retrieval/similar-cases', {
     method: 'POST',
-    body: JSON.stringify({ situation, facts, domain_hint: domainHint, limit }),
+    body: JSON.stringify({
+      situation,
+      facts,
+      domain_hint: domainHint,
+      limit,
+      include_community: includeCommunity,
+      persist_anonymized: true,
+    }),
   });
+}
+
+// Phase 23 — log community case feedback signal
+export async function logCommunityCaseSignal(
+  patternId: string,
+  signal: 'clicks' | 'saves' | 'useful' | 'not_useful',
+): Promise<void> {
+  try {
+    await apiFetch<void>('/interactions/log', {
+      method: 'POST',
+      body: JSON.stringify({
+        doc_id: patternId,
+        action_type: `community_case_${signal}`,
+        context: { pattern_id: patternId, signal },
+      }),
+    });
+  } catch {
+    // non-blocking
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1222,7 +1386,76 @@ export async function getBehaviorProfile(): Promise<BehaviorProfile> {
   return apiFetch<BehaviorProfile>('/recommendations/behavior/profile');
 }
 
-// ── Analysis History (localStorage) ─────────────────────────────────────────
+// ── Conversation History (backend-persisted + localStorage cache) ────────────
+
+const CONVERSATION_KEY = 'lexai_sessions';
+const MAX_CONVERSATIONS = 20;
+
+function _loadLocalConversations(): ConversationSession[] {
+  try {
+    return JSON.parse(localStorage.getItem(CONVERSATION_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function _conversationTime(session: ConversationSession): number {
+  const value = session.lastActive || session.createdAt || '';
+  const parsed = value ? Date.parse(value) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function _mergeConversations(
+  primary: ConversationSession[],
+  fallback: ConversationSession[],
+): ConversationSession[] {
+  const byId = new Map<string, ConversationSession>();
+  [...fallback, ...primary].forEach(session => {
+    const current = byId.get(session.id);
+    if (!current) {
+      byId.set(session.id, session);
+      return;
+    }
+    const sessionTurns = session.turns?.length || 0;
+    const currentTurns = current.turns?.length || 0;
+    const useSession = sessionTurns > currentTurns
+      || (sessionTurns === currentTurns && _conversationTime(session) >= _conversationTime(current));
+    byId.set(session.id, useSession ? { ...current, ...session } : { ...session, ...current });
+  });
+  return [...byId.values()]
+    .sort((a, b) => _conversationTime(b) - _conversationTime(a))
+    .slice(0, MAX_CONVERSATIONS);
+}
+
+export async function saveConversationSession(session: ConversationSession): Promise<void> {
+  const cached = _loadLocalConversations();
+  localStorage.setItem(
+    CONVERSATION_KEY,
+    JSON.stringify(_mergeConversations([session], cached)),
+  );
+  try {
+    await apiFetch<ConversationSession>('/conversations', {
+      method: 'POST',
+      body: JSON.stringify(session),
+    });
+  } catch {
+    // localStorage copy already written; backend unavailable is non-fatal
+  }
+}
+
+export async function loadConversationSessions(): Promise<ConversationSession[]> {
+  const local = _loadLocalConversations();
+  try {
+    const res = await apiFetch<{ items: ConversationSession[]; total: number }>('/conversations?limit=50');
+    const merged = _mergeConversations(res.items, local);
+    localStorage.setItem(CONVERSATION_KEY, JSON.stringify(merged));
+    return merged;
+  } catch {
+    return local;
+  }
+}
+
+// ── Analysis History (backend-persisted + localStorage cache) ────────────────
 
 export type AnalysisType =
   | 'timeline'
@@ -1250,30 +1483,62 @@ export interface AnalysisHistoryItem {
 const HISTORY_KEY = 'lexai_analysis_history';
 const MAX_HISTORY = 30;
 
-export function saveAnalysis(item: Omit<AnalysisHistoryItem, 'id' | 'savedAt'>): void {
-  const history = loadHistory();
-  const entry: AnalysisHistoryItem = {
-    ...item,
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    savedAt: new Date().toISOString(),
-  };
-  const updated = [entry, ...history].slice(0, MAX_HISTORY);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-}
-
-export function loadHistory(): AnalysisHistoryItem[] {
+function _loadLocalHistory(type?: AnalysisType): AnalysisHistoryItem[] {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    const all: AnalysisHistoryItem[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return type ? all.filter(h => h.type === type) : all;
   } catch {
     return [];
   }
 }
 
-export function deleteHistoryItem(id: string): void {
-  const updated = loadHistory().filter(h => h.id !== id);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+export async function saveAnalysis(item: Omit<AnalysisHistoryItem, 'id' | 'savedAt'>): Promise<void> {
+  const entry: AnalysisHistoryItem = {
+    ...item,
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    savedAt: new Date().toISOString(),
+  };
+  // Mirror to localStorage immediately (fast cache / offline fallback)
+  const cached = _loadLocalHistory();
+  localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...cached].slice(0, MAX_HISTORY)));
+  // Best-effort backend persist — never throws so callers stay simple
+  try {
+    await apiFetch<AnalysisHistoryItem>('/history', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    });
+  } catch {
+    // localStorage copy already written; backend unavailable is non-fatal
+  }
 }
 
-export function clearHistory(): void {
+export async function loadHistory(type?: AnalysisType): Promise<AnalysisHistoryItem[]> {
+  try {
+    const path = type ? `/history?type=${type}&limit=100` : '/history?limit=100';
+    const res = await apiFetch<{ items: AnalysisHistoryItem[]; total: number }>(path);
+    // Refresh localStorage cache with authoritative server data
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(res.items.slice(0, MAX_HISTORY)));
+    return res.items;
+  } catch {
+    return _loadLocalHistory(type);
+  }
+}
+
+export async function deleteHistoryItem(id: string): Promise<void> {
+  const updated = _loadLocalHistory().filter(h => h.id !== id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  try {
+    await apiFetch(`/history/${id}`, { method: 'DELETE' });
+  } catch {
+    // localStorage already updated
+  }
+}
+
+export async function clearHistory(): Promise<void> {
   localStorage.removeItem(HISTORY_KEY);
+  try {
+    await apiFetch('/history', { method: 'DELETE' });
+  } catch {
+    // localStorage already cleared
+  }
 }

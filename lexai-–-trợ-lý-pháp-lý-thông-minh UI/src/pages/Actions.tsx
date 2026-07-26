@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   ListChecks,
@@ -20,8 +20,13 @@ import {
   Clock,
   Bookmark,
   Check,
+  CheckCircle2,
+  ChevronDown,
 } from 'lucide-react';
 import { getActionPlan, ActionPlanResult, ActionItem, saveAnalysis } from '../lib/api';
+import { useSyncedSituation } from '../lib/analysisContext';
+import { useToast } from '../lib/useToast';
+import { ToastContainer } from '../components/ui/ToastContainer';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -42,33 +47,126 @@ const URGENCY_CONFIG = {
 
 // ── Action card ───────────────────────────────────────────────────────────────
 
+function actionDetails(item: ActionItem): { label: string; items: string[] }[] {
+  const categorySteps: Record<ActionItem['category'], string[]> = {
+    evidence: [
+      'Liệt kê tài liệu/chứng cứ đang có và đánh dấu phần còn thiếu.',
+      'Chụp, scan hoặc xuất file gốc kèm ngày giờ, người gửi/người nhận nếu có.',
+      'Sắp xếp chứng cứ theo mốc thời gian để dùng cho bước tư vấn hoặc nộp hồ sơ.',
+    ],
+    legal: [
+      'Xác định điều luật, quyền/nghĩa vụ và căn cứ áp dụng trực tiếp.',
+      'Đối chiếu căn cứ pháp lý với dữ kiện thực tế của vụ việc.',
+      'Ghi lại điểm mạnh, điểm yếu và câu hỏi cần xác minh thêm.',
+    ],
+    communication: [
+      'Soạn nội dung trao đổi bằng văn bản, giữ giọng trung lập và có thời hạn phản hồi.',
+      'Gửi qua kênh có bằng chứng lưu vết như email, tin nhắn, bưu điện hoặc biên bản.',
+      'Lưu lại toàn bộ phản hồi để bổ sung vào hồ sơ vụ việc.',
+    ],
+    procedure: [
+      'Xác định cơ quan/người tiếp nhận và mẫu biểu cần dùng.',
+      'Chuẩn bị hồ sơ theo danh mục, kiểm tra bản sao/chứng thực nếu cần.',
+      'Theo dõi hạn xử lý và lưu biên nhận sau khi nộp.',
+    ],
+    prevention: [
+      'Dừng các hành động có thể làm mất chứng cứ hoặc phát sinh rủi ro mới.',
+      'Thiết lập nguyên tắc trao đổi, thanh toán hoặc bàn giao bằng văn bản.',
+      'Rà soát lại hồ sơ sau mỗi mốc quan trọng.',
+    ],
+  };
+
+  const priorityStep = item.priority === 'immediate'
+    ? 'Thực hiện trước các việc khác và ghi nhận thời điểm hoàn thành.'
+    : item.priority === 'important'
+      ? 'Đưa vào kế hoạch trong tuần này và phân công người phụ trách.'
+      : 'Thực hiện khi các bước khẩn cấp và quan trọng đã ổn định.';
+
+  return [
+    { label: 'Các bước cần làm', items: [item.step, priorityStep, ...categorySteps[item.category]] },
+    {
+      label: 'Cần chuẩn bị',
+      items: [
+        item.deadline ? `Mốc thời gian: ${item.deadline}.` : 'Mốc thời gian hoặc hạn pháp lý liên quan.',
+        item.reason,
+      ],
+    },
+    {
+      label: 'Kết quả mong muốn',
+      items: [
+        'Có bằng chứng hoặc quyết định rõ ràng để chuyển sang bước tiếp theo.',
+        'Giảm rủi ro bỏ sót thời hạn, thiếu chứng cứ hoặc trao đổi không có căn cứ.',
+      ],
+    },
+  ];
+}
+
 function ActionCard({ item, index }: { item: ActionItem; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const details = actionDetails(item);
+
   return (
-    <div className="flex gap-3 p-4 bg-white/5 border border-white/8 rounded-xl hover:bg-white/8 transition-all">
-      <div className="flex-none flex flex-col items-center gap-2 pt-0.5">
-        <span className="w-6 h-6 rounded-full bg-legal-gold/15 text-legal-gold text-[10px] font-bold flex items-center justify-center border border-legal-gold/20">
-          {index + 1}
-        </span>
-      </div>
-      <div className="flex-1 min-w-0 space-y-1.5">
-        <p className="text-sm font-semibold text-white leading-snug">{item.step}</p>
-        <p className="text-xs text-slate-400 italic">{item.reason}</p>
-        <div className="flex items-center gap-3 flex-wrap">
-          {CATEGORY_ICON[item.category]}
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">
-            {item.category === 'evidence' ? 'Chứng cứ' :
-             item.category === 'legal' ? 'Pháp lý' :
-             item.category === 'communication' ? 'Liên lạc' :
-             item.category === 'procedure' ? 'Thủ tục' : 'Phòng ngừa'}
+    <div className="bg-white/5 border border-white/8 rounded-xl hover:bg-white/8 transition-all overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(value => !value)}
+        aria-expanded={expanded}
+        className="w-full flex gap-3 p-4 text-left"
+      >
+        <div className="flex-none flex flex-col items-center gap-2 pt-0.5">
+          <span className="w-6 h-6 rounded-full bg-legal-gold/15 text-legal-gold text-[10px] font-bold flex items-center justify-center border border-legal-gold/20">
+            {index + 1}
           </span>
-          {item.deadline && (
-            <span className="flex items-center gap-1 text-[10px] text-slate-500">
-              <Clock size={10} />
-              {item.deadline}
-            </span>
-          )}
         </div>
-      </div>
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <p className="text-sm font-semibold text-white leading-snug">{item.step}</p>
+          <p className="text-xs text-slate-400 italic">{item.reason}</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {CATEGORY_ICON[item.category]}
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">
+              {item.category === 'evidence' ? 'Chứng cứ' :
+               item.category === 'legal' ? 'Pháp lý' :
+               item.category === 'communication' ? 'Liên lạc' :
+               item.category === 'procedure' ? 'Thủ tục' : 'Phòng ngừa'}
+            </span>
+            {item.deadline && (
+              <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                <Clock size={10} />
+                {item.deadline}
+              </span>
+            )}
+            <span className="text-[10px] text-legal-gold/80 font-semibold uppercase tracking-wider">
+              {expanded ? 'Ẩn chi tiết' : 'Xem các bước'}
+            </span>
+          </div>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`mt-1 text-slate-500 transition-transform ${expanded ? 'rotate-180 text-legal-gold' : ''}`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="border-t border-white/8 px-4 pb-4 pt-3 bg-legal-navy/20">
+          <div className="grid gap-3 md:grid-cols-3">
+            {details.map(section => (
+              <div key={section.label} className="space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-legal-gold">
+                  {section.label}
+                </p>
+                <ul className="space-y-1.5">
+                  {section.items.map((detail, detailIndex) => (
+                    <li key={detailIndex} className="flex gap-2 text-xs leading-relaxed text-slate-300">
+                      <CheckCircle2 size={12} className="mt-0.5 shrink-0 text-green-400" />
+                      <span>{detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -105,45 +203,15 @@ function PrioritySection({
 
 export function Actions() {
   const location = useLocation();
-  const [situation, setSituation] = useState(() => {
-    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
-    return state?.situation || state?.prefill?.situation || sessionStorage.getItem('lexai_current_situation') || '';
-  });
+  const [situation, setSituation] = useSyncedSituation(location.state);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ActionPlanResult | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
-
-  // Pre-fill and auto-run when navigated with context
-  useEffect(() => {
-    const state = location.state as { situation?: string; prefill?: { situation?: string } } | null;
-    const initialSituation = state?.situation || state?.prefill?.situation;
-    if (initialSituation) {
-      setSituation(initialSituation);
-      sessionStorage.setItem('lexai_current_situation', initialSituation);
-      
-      const runAuto = async () => {
-        setLoading(true);
-        setResult(null);
-        setError('');
-        setSaved(false);
-        try {
-          const r = await getActionPlan(initialSituation.trim());
-          setResult(r);
-        } catch {
-          setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
-        } finally {
-          setLoading(false);
-        }
-      };
-      runAuto();
-      window.history.replaceState({}, '');
-    }
-  }, [location.state]);
+  const { toasts, toast, dismiss } = useToast();
 
   async function handlePlan() {
     if (!situation.trim()) return;
-    sessionStorage.setItem('lexai_current_situation', situation.trim());
     setLoading(true);
     setResult(null);
     setError('');
@@ -162,6 +230,7 @@ export function Actions() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <ToastContainer toasts={toasts} dismiss={dismiss} />
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-legal-gold/10 border border-legal-gold/20 rounded-xl flex items-center justify-center">
@@ -219,7 +288,7 @@ export function Actions() {
                 </span>
                 <button
                   onClick={() => {
-                    saveAnalysis({ type: 'action_plan', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result });
+                    saveAnalysis({ type: 'action_plan', title: situation.slice(0, 80), domain: result.domain, summary: result.summary, data: result }).then(() => toast('Đã lưu vào lịch sử'));
                     setSaved(true);
                   }}
                   disabled={saved}

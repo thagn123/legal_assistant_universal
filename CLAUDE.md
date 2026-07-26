@@ -142,7 +142,7 @@ lexai-–-trợ-lý-pháp-lý-thông-minh UI/src/     # React frontend
 │   │                                 #   getUserMemory() / updateUserMemory()
 │   │                                 #   ★ Phase 14: BehaviorProfile type + getBehaviorProfile()
 │   │                                 #   ★ Phase 14: AnalysisHistoryItem + saveAnalysis/loadHistory/deleteHistoryItem/clearHistory
-│   │                                 #   API_BASE default: http://localhost:8001
+│   │                                 #   API_BASE default: http://localhost:8000
 │   ├── adminAuth.ts                  # getAdminKey/setAdminKey/isAdminAuthenticated
 │   └── (vite-env.d.ts)               # ★ Phase 14 fix — /// <reference types="vite/client" />
 │
@@ -536,11 +536,14 @@ CREATE TABLE jobs (
 ## Running Locally
 
 ```bash
+# Local MongoDB with $vectorSearch support (mongodb-atlas-local image)
+docker compose up -d mongodb
+
 # Install deps
 pip install -r requirements.txt
 
 # Run backend API (use python -m uvicorn — Windows Anaconda env)
-python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
+python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 # Seed ALL built-in knowledge (run once after backend starts; idempotent — safe to re-run)
 python scripts/seed_raw_data.py
@@ -557,7 +560,7 @@ npm run dev
 # → http://localhost:3000
 # → http://localhost:3000/admin/login  (key: lexai-admin-secret)
 # → http://localhost:3000/history      (saved analysis history)
-# API_BASE default: http://localhost:8001 (override with VITE_API_URL env var)
+# API_BASE default: http://localhost:8000 (override with VITE_API_URL env var)
 ```
 
 Environment variables (`.env`):

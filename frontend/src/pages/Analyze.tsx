@@ -144,23 +144,33 @@ export function Analyze() {
   const [lawType, setLawType] = useState('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentStage, setCurrentStage] = useState(0);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const [history, setHistory] = useState<ChatTurn[]>([]);
-  const historyRef = useRef<ChatTurn[]>([]);
+  // Sessions persisted in localStorage
+  const SESSION_STORAGE_KEY = 'lexai_sessions';
+  const CURRENT_SESSION_ID_KEY = 'lexai_current_session_id';
+  function loadStoredSessions() {
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
+    } catch { return []; }
+  }
+
+  // Restore the in-progress conversation on page refresh instead of starting empty.
+  const [sessionId, setSessionId] = useState<string | null>(() => (
+    sessionStorage.getItem(CURRENT_SESSION_ID_KEY) || null
+  ));
+  const sessionIdRef = useRef<string | null>(sessionId);
+  const [history, setHistory] = useState<ChatTurn[]>(() => {
+    const savedSessionId = sessionStorage.getItem(CURRENT_SESSION_ID_KEY);
+    if (!savedSessionId) return [];
+    const existing = loadStoredSessions().find((s: any) => s.id === savedSessionId);
+    return existing?.turns || [];
+  });
+  const historyRef = useRef<ChatTurn[]>(history);
   const [analyzeError, setAnalyzeError] = useState('');
   const [evidenceChip, setEvidenceChip] = useState<{ filename: string; evidenceId: string } | null>(null);
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sessions persisted in localStorage
-  const SESSION_STORAGE_KEY = 'lexai_sessions';
-  function loadStoredSessions() {
-    try {
-      return JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '[]');
-    } catch { return []; }
-  }
   const [sessionHistory, setSessionHistory] = useState<Array<{
     id: string; title: string; domain: string; date: string; turns: ChatTurn[];
   }>>(loadStoredSessions);
@@ -179,6 +189,7 @@ export function Analyze() {
   const startNewConversation = () => {
     sessionIdRef.current = null;
     setSessionId(null);
+    sessionStorage.removeItem(CURRENT_SESSION_ID_KEY);
     writeHistory([]);
     setSelectedSession(null);
     setAnalyzeError('');
@@ -227,12 +238,17 @@ export function Analyze() {
 
   const handleAnalyze = async () => {
     if (!situation.trim()) return;
+    if (situation.trim().length < 10) {
+      setAnalyzeError('Mô tả tình huống quá ngắn. Vui lòng cung cấp thêm chi tiết (ít nhất 10 ký tự).');
+      return;
+    }
 
     const currentSituation = situation;
     const userMessage: ChatTurn = { role: 'user', content: currentSituation };
     const activeSessionId = sessionIdRef.current || sessionId || `chat_${Date.now()}`;
     sessionIdRef.current = activeSessionId;
     setSessionId(activeSessionId);
+    sessionStorage.setItem(CURRENT_SESSION_ID_KEY, activeSessionId);
     const historyWithUser = [...historyRef.current, userMessage];
     writeHistory(historyWithUser);
     setSituation('');
@@ -293,6 +309,7 @@ export function Analyze() {
       const conversationId = activeSessionId || data.session_id || `chat_${Date.now()}`;
       sessionIdRef.current = conversationId;
       setSessionId(conversationId);
+      sessionStorage.setItem(CURRENT_SESSION_ID_KEY, conversationId);
       logInteraction({ action_type: 'situation_analysis', context: { law_type: data.domain, situation_snippet: currentSituation.slice(0, 200) } });
 
       const assistantTurn: ChatTurn = { role: 'assistant', result: data };
@@ -571,7 +588,7 @@ export function Analyze() {
               </button>
               <button
                 onClick={handleAnalyze}
-                disabled={isAnalyzing || !situation.trim()}
+                disabled={isAnalyzing || situation.trim().length < 10}
                 className="w-10 h-10 bg-legal-gold text-legal-navy rounded-xl flex items-center justify-center shadow-lg shadow-legal-gold/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:grayscale transition-all"
               >
                 <Send size={20} />
@@ -870,7 +887,7 @@ function RelatedModuleGrid({ result }: { result: AnalysisResponse }) {
     domain: result.domain,
     sessionId: result.session_id,
     traceId: result.trace_id,
-    summary: result.position_reasoning || result.full_assessment,
+    summary: result.accumulated_situation || result.position_reasoning || result.full_assessment,
     citations: result.citations,
   };
 
@@ -985,7 +1002,7 @@ function DynamicRelatedModuleGrid({ result }: { result: AnalysisResponse }) {
     domain: result.domain,
     sessionId: result.session_id,
     traceId: result.trace_id,
-    summary: result.position_reasoning || result.full_assessment,
+    summary: result.accumulated_situation || result.position_reasoning || result.full_assessment,
     citations: result.citations,
   };
 
